@@ -4,7 +4,7 @@ PYTHONPATH := backend:collector:packages/energy-core/src
 .PHONY: install migrate seed backend-dev collector-dev frontend-dev test test-integration docker-build docker-up docker-down docker-logs docker-test
 
 install:
-	$(UV) sync
+	$(UV) sync --all-packages
 	cd frontend && npm ci
 
 migrate:

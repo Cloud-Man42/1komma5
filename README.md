@@ -106,7 +106,7 @@ make test-integration
 
 ```powershell
 $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-uv sync
+uv sync --all-packages
 cd frontend; npm ci; cd ..
 uv run alembic upgrade head
 uv run python scripts/seed.py
