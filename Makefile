@@ -1,5 +1,11 @@
 UV ?= uv
-PYTHONPATH := backend:collector:packages/energy-core/src
+
+# Module resolution for the workspace packages (energy_core, app.main, app.collector)
+# comes from the editable installs that `make install` (`uv sync --all-packages`) writes
+# into .venv as .pth files -- not from PYTHONPATH. Do not re-add a PYTHONPATH assignment
+# here: GNU Make forwards a variable into a recipe's subshell only if it came from the
+# environment, was set on the command line, or was marked `export`, so a plain assignment
+# silently does nothing while looking like it configures every recipe (GH-12).
 
 .PHONY: install migrate seed backend-dev collector-dev frontend-dev test test-integration docker-build docker-up docker-down docker-logs docker-test
 
