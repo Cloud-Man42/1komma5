@@ -1,0 +1,13 @@
+---
+description: Frontend Vitest/RTL conventions for EMIC
+globs: frontend/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend tests (EMIC)
+
+- Co-locate tests: `Component.tsx` → `Component.test.tsx`.
+- Shared setup: `frontend/src/test/setup.ts` (jest-dom), fixtures in `frontend/src/test/fixtures.ts`.
+- Test `api.ts` with `vi.stubGlobal("fetch")`; include JSON `detail`, empty body, and HTTP status fallbacks.
+- Mock `@/lib/api` at component boundaries; use `@testing-library/user-event` for form interactions.
+- Mock `next/link`, `next/image`, `next/navigation` in page tests.

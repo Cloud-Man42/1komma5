@@ -1,0 +1,1 @@
+"""Arctic Spa integration package."""

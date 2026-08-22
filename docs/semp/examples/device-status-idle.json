@@ -1,0 +1,14 @@
+{
+  "deviceId": "emic-evse-1",
+  "emSignalsAccepted": "No",
+  "powerConsumption": {
+    "powerInfo": [
+      {
+        "averagePower": 0,
+        "timestamp": "2026-08-21T10:30:00Z"
+      }
+    ]
+  },
+  "status": "Idle",
+  "timestamp": "2026-08-21T10:30:00Z"
+}

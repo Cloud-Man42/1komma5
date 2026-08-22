@@ -1,0 +1,13 @@
+---
+description: Python/pytest conventions for EMIC
+globs: **/*.py
+alwaysApply: false
+---
+
+# Python tests (EMIC)
+
+- Use pytest with `asyncio_mode=auto` for async code.
+- API route tests: shared `client` fixture in `backend/tests/conftest.py`; helpers in `backend/tests/helpers.py`.
+- Mock external HTTP at provider boundaries (`OpenMeteoWeatherProvider`, `create_heartbeat_client`, `ChargeAmpsMeterAdapter.build`).
+- Pure logic in `packages/energy-core`: fast unit tests, no production DB or network.
+- Mark PostgreSQL-only tests with `@pytest.mark.integration`.

@@ -1,0 +1,21 @@
+# Optional database-only helper for developers who WANT Docker for TimescaleDB.
+# NOT required for normal development — use SQLite instead.
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: energy
+      POSTGRES_PASSWORD: energy
+      POSTGRES_DB: energy
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U energy -d energy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dev_postgres_data:

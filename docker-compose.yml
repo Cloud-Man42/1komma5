@@ -1,0 +1,106 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
+      HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
+      HEARTBEAT_POLL_INTERVAL: ${HEARTBEAT_POLL_INTERVAL:-60}
+      HEARTBEAT_API_URL: ${HEARTBEAT_API_URL:-}
+      HEARTBEAT_API_KEY: ${HEARTBEAT_API_KEY:-}
+      CHARGEAMPS_PROVIDER: ${CHARGEAMPS_PROVIDER:-}
+      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-true}
+      CHARGEAMPS_API_KEY: ${CHARGEAMPS_API_KEY:-}
+      CHARGEAMPS_EMAIL: ${CHARGEAMPS_EMAIL:-}
+      CHARGEAMPS_PASSWORD: ${CHARGEAMPS_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_TIMESCALEDB: "true"
+      ARCTIC_SPA_ENABLED: ${ARCTIC_SPA_ENABLED:-false}
+      ARCTIC_SPA_API_BASE_URL: ${ARCTIC_SPA_API_BASE_URL:-https://api.myarcticspa.com}
+      ARCTIC_SPA_API_KEY: ${ARCTIC_SPA_API_KEY:-}
+      ARCTIC_SPA_POLL_INTERVAL_SECONDS: ${ARCTIC_SPA_POLL_INTERVAL_SECONDS:-60}
+      SPA_ENERGY_COLLECTION_ENABLED: ${SPA_ENERGY_COLLECTION_ENABLED:-true}
+      SPA_COST_CALCULATION_ENABLED: ${SPA_COST_CALCULATION_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: .
+      dockerfile: docker/collector.Dockerfile
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
+      HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
+      HEARTBEAT_POLL_INTERVAL: ${HEARTBEAT_POLL_INTERVAL:-60}
+      HEARTBEAT_API_URL: ${HEARTBEAT_API_URL:-}
+      HEARTBEAT_API_KEY: ${HEARTBEAT_API_KEY:-}
+      CHARGEAMPS_PROVIDER: ${CHARGEAMPS_PROVIDER:-}
+      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-true}
+      CHARGEAMPS_API_KEY: ${CHARGEAMPS_API_KEY:-}
+      CHARGEAMPS_EMAIL: ${CHARGEAMPS_EMAIL:-}
+      CHARGEAMPS_PASSWORD: ${CHARGEAMPS_PASSWORD:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_TIMESCALEDB: "true"
+      ARCTIC_SPA_ENABLED: ${ARCTIC_SPA_ENABLED:-false}
+      ARCTIC_SPA_API_BASE_URL: ${ARCTIC_SPA_API_BASE_URL:-https://api.myarcticspa.com}
+      ARCTIC_SPA_API_KEY: ${ARCTIC_SPA_API_KEY:-}
+      ARCTIC_SPA_POLL_INTERVAL_SECONDS: ${ARCTIC_SPA_POLL_INTERVAL_SECONDS:-60}
+      SPA_ENERGY_COLLECTION_ENABLED: ${SPA_ENERGY_COLLECTION_ENABLED:-true}
+      SPA_COST_CALCULATION_ENABLED: ${SPA_COST_CALCULATION_ENABLED:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-energy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-energy}
+      POSTGRES_DB: ${POSTGRES_DB:-energy}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-energy} -d ${POSTGRES_DB:-energy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

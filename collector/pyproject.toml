@@ -1,0 +1,18 @@
+[project]
+name = "energy-collector"
+version = "0.1.0"
+description = "Heartbeat data collector for energy monitoring"
+requires-python = ">=3.12"
+dependencies = [
+    "energy-core",
+]
+
+[tool.uv.sources]
+energy-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

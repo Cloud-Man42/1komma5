@@ -1,0 +1,63 @@
+"""EV Charger Integration Framework — vendor-neutral adapter layer."""
+
+from energy_core.chargers.framework.catalog import (
+    get_catalog,
+    get_integration_method,
+    get_manufacturer,
+    get_model,
+    list_integration_methods,
+    list_manufacturers,
+    list_models,
+)
+from energy_core.chargers.framework.factory import ChargerAdapterFactory
+from energy_core.chargers.framework.meter_factory import MeterReaderFactory
+from energy_core.chargers.framework.models import (
+    ChargerAdapter,
+    ChargerCapabilities,
+    ChargerConfiguration,
+    ChargerErrorCode,
+    ChargerProtocol,
+    ChargerState,
+    ChargerStatus,
+    ChargingSession,
+    ConnectionFieldDefinition,
+    ConnectionTestResult,
+    ConnectionTestStatus,
+    CredentialFieldDefinition,
+    DetectedDevice,
+    IntegrationSupportLevel,
+    MeterReader,
+    MeterValues,
+    NormalizedChargerStatus,
+    SupportLevel,
+)
+
+__all__ = [
+    "ChargerAdapter",
+    "ChargerAdapterFactory",
+    "ChargerCapabilities",
+    "ChargerConfiguration",
+    "ChargerErrorCode",
+    "ChargerProtocol",
+    "ChargerState",
+    "ChargerStatus",
+    "ChargingSession",
+    "ConnectionFieldDefinition",
+    "ConnectionTestResult",
+    "ConnectionTestStatus",
+    "CredentialFieldDefinition",
+    "DetectedDevice",
+    "IntegrationSupportLevel",
+    "MeterReader",
+    "MeterReaderFactory",
+    "MeterValues",
+    "NormalizedChargerStatus",
+    "SupportLevel",
+    "get_catalog",
+    "get_integration_method",
+    "get_manufacturer",
+    "get_model",
+    "list_integration_methods",
+    "list_manufacturers",
+    "list_models",
+]

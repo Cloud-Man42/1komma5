@@ -1,0 +1,13 @@
+---
+description: EMIC testing requirements for all functional changes
+alwaysApply: true
+---
+
+# EMIC Testing Requirement
+
+- Add or update unit tests for every functional change (backend + frontend).
+- Include positive AND negative cases (validation, 404/422/503, empty state, API errors).
+- Backend: pytest; API routes via httpx ASGITransport + SQLite tmp DB; mock external services.
+- Frontend: Vitest + React Testing Library; co-located `*.test.tsx`; mock fetch for `api.ts`.
+- Run `.\test-windows.ps1` before finishing; do not mark work complete if tests fail.
+- Do not skip tests unless the user explicitly requests it.
