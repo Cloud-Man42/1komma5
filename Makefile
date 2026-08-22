@@ -23,7 +23,7 @@ backend-dev:
 	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
 
 collector-dev:
-	$(UV) run python -m app --directory collector
+	$(UV) run --directory collector python -m app
 
 frontend-dev:
 	cd frontend && npm run dev
