@@ -1361,3 +1361,138 @@ def test_frontend_job_strategy_has_fail_fast_disabled() -> None:
         "expected the 'frontend' job's strategy.fail-fast to be the boolean False, found "
         f"{strategy['fail-fast']!r}"
     )
+
+
+# =============================================================================
+# GH-49 / issue #49, AC6: `vite`, a *transitive* dependency (pulled in only by
+# `vitest`, never declared directly in `frontend/package.json`'s own
+# `dependencies` or `devDependencies`), is the package whose own
+# `engines.node` actually gates what CI's `frontend` job can run once
+# `vitest` is bumped to a major version that itself depends on a `vite`
+# major requiring Node `^20.19.0 || >=22.12.0` (measured against
+# `vite@8.2.2`'s own `engines` field at authoring time, via `npm view
+# vite@8.2.2 engines`).
+#
+# `_CONSTRAINED_DEPENDENCY_ENGINES` above is built only from
+# `_direct_dependency_names(_FRONTEND_PACKAGE_JSON_DATA)` (see that
+# dict's own definition), so
+# `test_frontend_engines_node_is_compatible_with_dependency`'s
+# parametrization never includes `vite` and never will, no matter how
+# narrow or wide `engines.node` becomes: that parametrized guard checks
+# *declared*, direct dependencies only, by design (see AC1's own section
+# above). `vite` needs its own, separate guard because it is the one
+# package in this dependency graph that is both (a) actually installed by
+# `npm ci` and executed by `npm test` in CI (as `vitest`'s own
+# bundler/dev-server dependency) and (b) invisible to every existing
+# `engines.node` check in this module, since none of them ever look past
+# `package.json`'s direct dependency names. That gap between "runs in CI"
+# and "declared anywhere checked" is the same shape of gap GH-16 and GH-17
+# each closed for a different artifact (a hard-coded CI node-version with
+# nothing tying it to `engines.node`; a single-leg CI matrix with nothing
+# tying it to a transitively-required bundler's own floor) -- this closes
+# it for a transitive dependency specifically.
+#
+# Reuses `_dependency_engines_node`, `parse_node_engines_range`, and
+# `_is_subset_of_union` unchanged: `_dependency_engines_node` already reads
+# any `packages['node_modules/<name>']` entry from `package-lock.json`
+# (including `vite`'s, which is present in the real lockfile regardless of
+# `vite` never being a *direct* dependency), so this AC needs no new
+# parsing machinery, only a new call site naming `vite` explicitly.
+# =============================================================================
+
+
+def test_frontend_engines_node_is_compatible_with_transitive_vite_dependency() -> None:
+    """Given `frontend/package.json`'s declared `engines.node` and `vite`'s
+    own `engines.node` (read from `package-lock.json`'s
+    `packages['node_modules/vite']`, even though `vite` is never a *direct*
+    dependency), when the declared range is compared against `vite`'s, then
+    the declared range must not claim support for any Node version `vite`'s
+    own `engines.node` excludes -- issue #49, AC6.
+
+    `vite` is checked here, separately from
+    `test_frontend_engines_node_is_compatible_with_dependency` above,
+    because it is a transitive dependency (pulled in only via `vitest`,
+    never listed in `frontend/package.json`'s own
+    `dependencies`/`devDependencies`), so `_CONSTRAINED_DEPENDENCY_ENGINES`'s
+    parametrization -- built only from `_direct_dependency_names` -- never
+    includes it (see the "GH-49 / issue #49, AC6" section above this test).
+    `npm ci` still installs, and `npm test` still runs, `vite` (as `vitest`'s
+    own bundler/dev-server dependency) regardless of it never being declared
+    directly, so a mismatch here is exactly as real a CI failure risk as a
+    mismatch against a direct dependency would be.
+
+    Does not cover: any other transitive dependency besides `vite` -- this
+    is a targeted guard for the one transitive package issue #49's own
+    investigation identified as `engines.node`-constraining, not a general
+    "check every transitive dependency" guard."""
+    package_json = _read_frontend_package_json()
+    package_lock = _read_frontend_package_lock()
+    own_spec = package_json.get("engines", {}).get("node")
+    assert own_spec, (
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} has no 'engines.node', so it cannot "
+        "be checked for compatibility with vite's own engines.node."
+    )
+    vite_spec = _dependency_engines_node(package_lock, "vite")
+    assert vite_spec, (
+        f"{FRONTEND_PACKAGE_LOCK.relative_to(REPO_ROOT)} has no "
+        "packages['node_modules/vite'].engines.node; expected vite to declare one "
+        "(present for both vite@5.4.21 and vite@8.2.2, measured at authoring time)."
+    )
+
+    try:
+        own_intervals = parse_node_engines_range(own_spec)
+        vite_intervals = parse_node_engines_range(vite_spec)
+    except ValueError as exc:
+        pytest.fail(f"could not parse an engines.node range while checking vite: {exc}")
+
+    uncovered = [
+        interval for interval in own_intervals if not _is_subset_of_union(interval, vite_intervals)
+    ]
+    assert not uncovered, (
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} declares engines.node={own_spec!r}, "
+        f"which claims support for Node versions vite's own engines.node ({vite_spec!r}) "
+        "excludes. vite is a transitive dependency (via vitest), never listed in "
+        "package.json's own dependencies/devDependencies, which is why this check exists "
+        "separately from the parametrized direct-dependency guard above."
+    )
+
+
+# --- Synthetic self-test: the transitive-vite guard's own reasoning --------
+
+
+def test_synthetic_transitive_dependency_engines_pipeline_detects_an_incompatible_declaration() -> (
+    None
+):
+    """Given a synthetic package-lock.json entry shaped like `vite`'s (a
+    package present under `packages['node_modules/vite']` but absent from
+    `package.json`'s own `dependencies`/`devDependencies`, so it would never
+    appear in `_CONSTRAINED_DEPENDENCY_ENGINES`), when a declared
+    `engines.node` that claims support for a Node version this synthetic
+    transitive dependency's own `engines.node` excludes is checked against
+    it directly (the same `_dependency_engines_node` +
+    `parse_node_engines_range` + `_is_subset_of_union` steps
+    `test_frontend_engines_node_is_compatible_with_transitive_vite_dependency`
+    performs), then the incompatibility must be reported -- proving this
+    combination of helpers detects a transitive-dependency mismatch on
+    synthetic input, independent of whatever this repository's real `vite`
+    entry currently says."""
+    package_json = {"dependencies": {}, "devDependencies": {"some-tool": "^1.0.0"}}
+    package_lock = {
+        "packages": {
+            "node_modules/vite": {"engines": {"node": "^20.19.0 || >=22.12.0"}},
+        }
+    }
+    # Confirm the synthetic setup actually matches the real shape this test
+    # exists to guard: `vite` absent from direct dependency names, but
+    # present (with its own engines.node) in the lockfile.
+    assert "vite" not in _direct_dependency_names(package_json)
+    vite_spec = _dependency_engines_node(package_lock, "vite")
+    assert vite_spec is not None
+
+    own_spec = ">=20.9.0"  # claims support for 20.9.0-20.18.x, which vite excludes
+    own_intervals = parse_node_engines_range(own_spec)
+    vite_intervals = parse_node_engines_range(vite_spec)
+    uncovered = [
+        interval for interval in own_intervals if not _is_subset_of_union(interval, vite_intervals)
+    ]
+    assert uncovered != []

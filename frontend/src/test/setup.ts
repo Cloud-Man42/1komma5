@@ -55,7 +55,7 @@ if (!jsdomWindow) {
       "environment (assigned by `global.jsdom = dom` in vitest's jsdom " +
       "env setup), not a public API, so the likely cause is a vitest " +
       "upgrade that renamed or removed it. `frontend/package.json` " +
-      "declares `\"vitest\": \"^2.1.8\"`, so a routine lockfile refresh " +
+      "declares `\"vitest\": \"^4.1.11\"`, so a routine lockfile refresh " +
       "can pull in such a change without a major version bump. To fix: " +
       "find where the installed vitest attaches the real jsdom window to " +
       "the global and re-point `jsdomWindow` in " +

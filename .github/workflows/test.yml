@@ -25,9 +25,10 @@ jobs:
       fail-fast: false
       matrix:
         # Derived, not chosen: the floor is the lowest lower bound of
-        # frontend/package.json's engines.node union (^20.9.0 || >=21.1.0),
-        # and the ceiling is the version .nvmrc names.
-        node-version: ["20.9.0", "26.4.0"]
+        # frontend/package.json's engines.node union
+        # (^20.19.0 || ^22.12.0 || >=24.0.0), and the ceiling is the version
+        # .nvmrc names.
+        node-version: ["20.19.0", "26.4.0"]
     defaults:
       run:
         working-directory: frontend
