@@ -126,7 +126,6 @@ export function SitesManager() {
         min_change_interval_seconds: charger.min_change_interval_seconds,
         current_hysteresis_a: charger.current_hysteresis_a,
         stale_timeout_seconds: charger.stale_timeout_seconds,
-        required_energy_kwh: charger.required_energy_kwh,
         deadline_at: charger.deadline_at,
         clear_deadline_at: !charger.deadline_at,
         solar_start_threshold_w: charger.solar_start_threshold_w,
@@ -680,27 +679,6 @@ export function SitesManager() {
                           [site.slug]: current[site.slug].map((c) =>
                             c.id === charger.id
                               ? { ...c, solar_stop_threshold_w: Number(e.target.value) }
-                              : c,
-                          ),
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="form-field">
-                    <span>Energibehov (kWh)</span>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={charger.required_energy_kwh ?? ""}
-                      onChange={(e) =>
-                        setChargersBySite((current) => ({
-                          ...current,
-                          [site.slug]: current[site.slug].map((c) =>
-                            c.id === charger.id
-                              ? {
-                                  ...c,
-                                  required_energy_kwh: e.target.value ? Number(e.target.value) : null,
-                                }
                               : c,
                           ),
                         }))

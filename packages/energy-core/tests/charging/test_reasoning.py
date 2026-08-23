@@ -126,24 +126,44 @@ def test_parse_active_optimizations_filters_by_window():
     assert active == ("EV_CHARGE_FROM_GRID",)
 
 
-def test_solar_plan_included_in_steps():
-    plan = SolarChargingPlan(
+def _plan(*, solar_first: bool) -> SolarChargingPlan:
+    return SolarChargingPlan(
         expected_usable_solar_kwh=8.0,
         planning_solar_kwh=8.0,
-        reserved_solar_kwh=0.0,
-        planned_grid_kwh=4.0,
         quality="HIGH",
         confidence=0.9,
         expected_solar_window_start=None,
         expected_solar_window_end=None,
         cheapest_grid_window=None,
         explanation_sv="Test",
-        reason_code="solar_forecast_partial_grid",
+        reason_code="solar_forecast_wait" if solar_first else "solar_forecast_grid_required",
+        solar_first=solar_first,
     )
+
+
+def test_solar_plan_included_in_steps():
     snapshot = build_energy_reasoning(
         charger=_charger(),
         site=_site(),
-        solar_plan=plan,
+        solar_plan=_plan(solar_first=True),
     )
     assert snapshot.solar_plan_available is True
-    assert any("Solplan" in step for step in snapshot.reasoning_steps)
+    assert snapshot.solar_first is True
+    assert any("solel prioriteras" in step for step in snapshot.reasoning_steps)
+
+
+def test_solar_plan_without_enough_solar_explains_grid_charging():
+    snapshot = build_energy_reasoning(
+        charger=_charger(),
+        site=_site(),
+        solar_plan=_plan(solar_first=False),
+    )
+    assert snapshot.solar_first is False
+    assert any("för lite solel" in step.lower() for step in snapshot.reasoning_steps)
+
+
+def test_reasoning_reports_no_solar_plan_without_deadline():
+    snapshot = build_energy_reasoning(charger=_charger(), site=_site())
+    assert snapshot.solar_plan_available is False
+    assert snapshot.solar_first is False
+    assert not any("Solplan" in step for step in snapshot.reasoning_steps)

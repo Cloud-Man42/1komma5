@@ -47,7 +47,7 @@ const reasoning = {
   halo_connected: true,
   solar_plan_available: false,
   solar_plan_reason: null,
-  solar_planned_grid_kwh: null,
+  solar_first: false,
   active_optimizations: ["EV_CHARGE_FROM_GRID"],
   energy_flow_line: "PV 5.0kW → Load 2.1kW | EV 0.0kW",
   energy_balance_status: "OK",

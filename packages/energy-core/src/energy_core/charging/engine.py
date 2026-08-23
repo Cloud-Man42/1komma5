@@ -537,7 +537,6 @@ def _charging_config(charger: EvChargerModel, site: SiteModel) -> ChargingConfig
         solar_start_delay_seconds=float(charger.solar_start_delay_seconds),
         solar_stop_delay_seconds=float(charger.solar_stop_delay_seconds),
         timezone=site.timezone or "Europe/Stockholm",
-        required_energy_kwh=charger.required_energy_kwh,
         deadline_at=charger.deadline_at,
         departure_time=charger.departure_time,
         start_delay_seconds=float(charger.start_delay_seconds),
@@ -565,7 +564,6 @@ def _apply_local_prefs(charger: EvChargerModel, energy: EnergyState) -> EnergySt
         departure_time=charger.departure_time or energy.departure_time,
         deadline_at=charger.deadline_at or energy.deadline_at,
         target_soc=target_soc,
-        required_energy_kwh=charger.required_energy_kwh or energy.required_energy_kwh,
         heartbeat_smart_charge_active=smart_active or energy.heartbeat_smart_charge_active,
     )
 

@@ -141,17 +141,6 @@ function ChargerControlForm({
             />
           </label>
 
-          <label className="form-field">
-            <span>Energibehov (kWh)</span>
-            <input
-              type="number"
-              name="required_energy_kwh"
-              min={0}
-              step="0.1"
-              defaultValue={charger.required_energy_kwh ?? ""}
-            />
-          </label>
-
           <label className="form-field form-field-wide">
             <span>Klar senast</span>
             <DeadlineInput value={charger.deadline_at} idPrefix={`deadline-${charger.id}`} />
@@ -162,11 +151,10 @@ function ChargerControlForm({
       <div className="form-field form-field-wide">
         <p className="muted">
           {priceOnly
-            ? "Billigast pris laddar när elpriset är som lägst. Avfärd, energibehov och klar senast används inte."
-            : selectedMode === "SMART_CHARGE" &&
-                (charger.departure_time == null || charger.required_energy_kwh == null)
-              ? "Smart laddning laddar vid normalt eller billigt elpris även utan avresa. För bäst balans mellan kostnad och leverans, ange avresa och energibehov (kWh)."
-              : "Smart laddning använder elprisprognos från Heartbeat. Klar senast prioriteras när energibehov och deadline är satta."}
+            ? "Billigast pris laddar när elpriset är som lägst. Avfärd och klar senast används inte."
+            : selectedMode === "SMART_CHARGE" && charger.departure_time == null
+              ? "Smart laddning laddar vid normalt eller billigt elpris även utan avresa. Ange avresa eller klar senast för att styra när bilen ska vara klar."
+              : "Smart laddning använder elprisprognos från Heartbeat och prioriterar solel. När avresa eller klar senast närmar sig laddas det från nätet oavsett pris. Bilen stoppar själv vid mål-SoC."}
         </p>
 
         <button type="submit" className="btn-primary">
@@ -573,12 +561,8 @@ function BridgeStatusPanel({
           {solarPlan.available ? (
             <dl className="price-summary">
               <div>
-                <dt>Reserverad solel</dt>
-                <dd>{solarPlan.reserved_solar_kwh?.toFixed(1) ?? "—"} kWh</dd>
-              </div>
-              <div>
-                <dt>Planerad nätenergi</dt>
-                <dd>{solarPlan.planned_grid_kwh?.toFixed(1) ?? "—"} kWh</dd>
+                <dt>Prioritet</dt>
+                <dd>{solarPlan.solar_first ? "Solel först" : "Nät vid billiga timmar"}</dd>
               </div>
               <div>
                 <dt>Förväntat solfönster</dt>
@@ -608,7 +592,7 @@ function BridgeStatusPanel({
           ) : (
             <p className="muted">
               {solarPlan.explanation_sv ??
-                "Ange önskad energi och deadline för solbaserad planering."}
+                "Ange avresa eller klar senast för solbaserad planering."}
             </p>
           )}
         </div>
@@ -673,8 +657,6 @@ export function EvChargerPanel({ siteSlug }: { siteSlug: string }) {
       target_soc_pct?: number;
 
       departure_time?: string;
-
-      required_energy_kwh?: number | null;
 
       deadline_at?: string | null;
 
@@ -785,9 +767,6 @@ export function EvChargerPanel({ siteSlug }: { siteSlug: string }) {
         ? {}
         : {
             departure_time: String(form.get("departure_time") || "") || undefined,
-            required_energy_kwh: form.get("required_energy_kwh")
-              ? Number(form.get("required_energy_kwh"))
-              : null,
             deadline_at: deadlineIso,
             clear_deadline_at: !deadlineIso,
           }),
@@ -849,16 +828,6 @@ export function EvChargerPanel({ siteSlug }: { siteSlug: string }) {
             <p>
 
               Läge: <strong>{MODE_LABELS[charger.charging_mode] ?? charger.charging_mode}</strong>
-
-            </p>
-
-          )}
-
-          {charger.required_energy_kwh != null && !isPriceOnlyMode(charger.charging_mode) && (
-
-            <p>
-
-              Energibehov: <strong>{charger.required_energy_kwh.toFixed(1)} kWh</strong>
 
             </p>
 

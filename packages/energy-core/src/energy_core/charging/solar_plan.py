@@ -16,6 +16,10 @@ from energy_core.solar_forecast.constants import PLANNING_FACTORS
 from energy_core.solar_forecast.types import ForecastQuality, SolarChargingPlan, SolarForecast
 
 
+# Planned solar below this is too small to be worth deferring grid charging for.
+MIN_USEFUL_SOLAR_KWH = 1.5
+
+
 @dataclass(frozen=True, slots=True)
 class SolarPlannerConfig:
     high_factor: float = PLANNING_FACTORS["HIGH"]
@@ -72,7 +76,6 @@ def solar_window(
 def build_solar_charging_plan(
     *,
     forecast: SolarForecast | None,
-    ev_required_kwh: float,
     deadline: datetime,
     now: datetime,
     timezone: str,
@@ -85,28 +88,26 @@ def build_solar_charging_plan(
 ) -> SolarChargingPlan:
     cfg = config or SolarPlannerConfig()
 
-    if forecast is None or ev_required_kwh <= 0:
+    if forecast is None:
         return SolarChargingPlan(
             expected_usable_solar_kwh=0.0,
             planning_solar_kwh=0.0,
-            reserved_solar_kwh=0.0,
-            planned_grid_kwh=ev_required_kwh,
             quality="INSUFFICIENT_DATA",
             confidence=0.0,
             expected_solar_window_start=None,
             expected_solar_window_end=None,
             cheapest_grid_window=None,
-            explanation_sv="Ingen solprognos tillgänglig — planerar nätenergi.",
+            explanation_sv="Ingen solprognos tillgänglig — nätladdning planeras efter elpris.",
             reason_code="solar_forecast_unavailable",
+            solar_first=False,
         )
 
     expected = expected_solar_before_deadline(forecast, now=now, deadline=deadline)
     factor = planning_factor(forecast.quality, cfg)
     planning = expected * factor
-    reserved = min(ev_required_kwh, planning)
-    grid_needed = max(0.0, ev_required_kwh - reserved)
 
     win_start, win_end = solar_window(forecast, now=now, deadline=deadline)
+    solar_first = planning >= MIN_USEFUL_SOLAR_KWH and win_start is not None
 
     charge, price_reason = should_charge_smart(
         now,
@@ -119,46 +120,36 @@ def build_solar_charging_plan(
     )
 
     cheapest_window: str | None = None
-    if grid_needed > 0 and price_forecast:
+    if price_forecast:
         tz = ZoneInfo(timezone)
         cheap_hours = sorted(price_forecast, key=lambda x: x[1])[:charge_hours]
         if cheap_hours:
             times = [h[0].astimezone(tz).strftime("%H:%M") for h in cheap_hours]
             cheapest_window = f"{min(times)}–{max(times)}"
 
-    if grid_needed <= 0.01:
+    if solar_first:
+        window = _format_window(win_start, win_end, timezone)
         explanation = (
-            f"Bilen behöver {ev_required_kwh:.1f} kWh. "
-            f"EMIC prognostiserar {expected:.1f} kWh användbart solöverskott "
-            f"innan deadline (confidence {forecast.confidence * 100:.0f}%). "
-            f"Väntar med nätladdning och reserverar solel till EV."
+            f"Solöverskott väntas {window} innan deadline "
+            f"(träffsäkerhet {forecast.confidence * 100:.0f} %). "
+            f"Solel prioriteras och nätladdning väntar tills deadline närmar sig."
         )
         reason = "solar_forecast_wait"
-    elif reserved > 0:
+    else:
         explanation = (
-            f"Bilen behöver {ev_required_kwh:.1f} kWh. "
-            f"Förväntad solel: {expected:.1f} kWh (planeringsvärde {planning:.1f} kWh). "
-            f"Reserverad solel: {reserved:.1f} kWh. "
-            f"Planerad nätenergi: {grid_needed:.1f} kWh."
+            "För lite solöverskott väntas innan deadline — "
+            "nätladdning planeras vid billiga timmar."
         )
         if cheapest_window:
             explanation += f" Billigaste nät-fönster: {cheapest_window}."
-        reason = "solar_forecast_partial_grid"
-    else:
-        explanation = (
-            f"Förväntad solel otillräcklig ({expected:.1f} kWh). "
-            f"Planerar {grid_needed:.1f} kWh från nätet."
-        )
         reason = "solar_forecast_grid_required"
 
-    if not charge and grid_needed > 0 and price_reason == "smart_wait_cheaper":
+    if not charge and not solar_first and price_reason == "smart_wait_cheaper":
         explanation += " Väntar på billigare timmar för planerad nätladdning."
 
     return SolarChargingPlan(
         expected_usable_solar_kwh=expected,
         planning_solar_kwh=planning,
-        reserved_solar_kwh=reserved,
-        planned_grid_kwh=grid_needed,
         quality=forecast.quality,
         confidence=forecast.confidence,
         expected_solar_window_start=win_start,
@@ -166,7 +157,18 @@ def build_solar_charging_plan(
         cheapest_grid_window=cheapest_window,
         explanation_sv=explanation,
         reason_code=reason,
+        solar_first=solar_first,
     )
+
+
+def _format_window(start: datetime | None, end: datetime | None, timezone: str) -> str:
+    if start is None:
+        return "senare idag"
+    tz = ZoneInfo(timezone)
+    start_label = start.astimezone(tz).strftime("%H:%M")
+    if end is None or end <= start:
+        return f"från {start_label}"
+    return f"{start_label}–{end.astimezone(tz).strftime('%H:%M')}"
 
 
 def charging_config_from_models(charger: EvChargerModel, site: SiteModel) -> ChargingConfig:
@@ -184,7 +186,6 @@ def charging_config_from_models(charger: EvChargerModel, site: SiteModel) -> Cha
         solar_start_delay_seconds=float(charger.solar_start_delay_seconds),
         solar_stop_delay_seconds=float(charger.solar_stop_delay_seconds),
         timezone=site.timezone or "Europe/Stockholm",
-        required_energy_kwh=charger.required_energy_kwh,
         deadline_at=charger.deadline_at,
         departure_time=charger.departure_time,
         start_delay_seconds=float(charger.start_delay_seconds),
@@ -213,9 +214,6 @@ async def load_solar_charging_plan_for_charger(
     from energy_core.charging.optimizer import _deadline_from_departure
 
     config = charging_config_from_models(charger, site)
-    if config.required_energy_kwh is None or config.required_energy_kwh <= 0:
-        return None
-
     now = now or datetime.now(UTC)
     deadline = config.deadline_at or _deadline_from_departure(
         now, config.departure_time, config.timezone
@@ -227,7 +225,6 @@ async def load_solar_charging_plan_for_charger(
     forecast = await forecast_repo.get_latest(site.id)
     return build_solar_charging_plan(
         forecast=forecast,
-        ev_required_kwh=config.required_energy_kwh,
         deadline=deadline,
         now=now,
         timezone=config.timezone,

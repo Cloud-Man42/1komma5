@@ -42,7 +42,6 @@ class EvChargerRecord:
     charging_mode: str | None = None
     departure_time: str | None = None
     target_soc_pct: float | None = None
-    required_energy_kwh: float | None = None
     deadline_at: datetime | None = None
     solar_start_threshold_w: float = 1000.0
     solar_stop_threshold_w: float = 600.0
@@ -129,7 +128,6 @@ class EvChargerRepository:
         charging_mode: str | None = None,
         departure_time: str | None = None,
         target_soc_pct: float | None = None,
-        required_energy_kwh: float | None = None,
         deadline_at: datetime | None = None,
         solar_start_threshold_w: float = 1000.0,
         solar_stop_threshold_w: float = 600.0,
@@ -177,7 +175,6 @@ class EvChargerRepository:
             charging_mode=charging_mode,
             departure_time=departure_time.strip() if departure_time else None,
             target_soc_pct=target_soc_pct,
-            required_energy_kwh=required_energy_kwh,
             deadline_at=deadline_at,
             solar_start_threshold_w=solar_start_threshold_w,
             solar_stop_threshold_w=solar_stop_threshold_w,
@@ -238,7 +235,6 @@ class EvChargerRepository:
         departure_time: str | None = None,
         clear_departure_time: bool = False,
         target_soc_pct: float | None = None,
-        required_energy_kwh: float | None = None,
         deadline_at: datetime | None = None,
         clear_deadline_at: bool = False,
         solar_start_threshold_w: float | None = None,
@@ -332,8 +328,6 @@ class EvChargerRepository:
             charger.departure_time = None
         if target_soc_pct is not None:
             charger.target_soc_pct = target_soc_pct
-        if required_energy_kwh is not None:
-            charger.required_energy_kwh = required_energy_kwh
         if deadline_at is not None:
             charger.deadline_at = deadline_at
         elif clear_deadline_at:
@@ -457,7 +451,6 @@ class EvChargerRepository:
             charging_mode=charger.charging_mode,
             departure_time=charger.departure_time,
             target_soc_pct=charger.target_soc_pct,
-            required_energy_kwh=charger.required_energy_kwh,
             deadline_at=charger.deadline_at,
             solar_start_threshold_w=charger.solar_start_threshold_w,
             solar_stop_threshold_w=charger.solar_stop_threshold_w,

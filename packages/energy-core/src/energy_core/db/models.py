@@ -81,7 +81,6 @@ class EvChargerModel(Base):
     charging_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     departure_time: Mapped[str | None] = mapped_column(String(8), nullable=True)
     target_soc_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
-    required_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     solar_start_threshold_w: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
     solar_stop_threshold_w: Mapped[float] = mapped_column(Float, nullable=False, default=600.0)

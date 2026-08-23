@@ -97,7 +97,6 @@ describe("EvChargerPanel", () => {
       makeEvCharger({
         bridge_enabled: true,
         charging_mode: "SMART_CHARGE",
-        required_energy_kwh: 20,
         deadline_at: "2026-08-23T07:00:00",
       }),
     ]);
@@ -110,12 +109,41 @@ describe("EvChargerPanel", () => {
       target: { value: "PRICE_CHARGE" },
     });
 
-    expect(screen.queryByLabelText(/Avfärd/i)).toBeNull();
-    expect(screen.queryByLabelText(/Energibehov/i)).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Avfärd/i)).toBeNull();
+    });
     expect(screen.queryByText(/^Klar senast$/i)).toBeNull();
-    expect(
-      screen.getByText(/Avfärd, energibehov och klar senast används inte/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/Avfärd och klar senast används inte/i)).toBeTruthy();
+  });
+
+  it("no longer asks for an energy need in any mode", async () => {
+    mockFetchEvChargers.mockResolvedValue([
+      makeEvCharger({ bridge_enabled: true, charging_mode: "SMART_CHARGE" }),
+    ]);
+    render(<EvChargerPanel siteSlug="akarp" />);
+
+    expect(await screen.findByLabelText(/Avfärd/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/Energibehov/i)).toBeNull();
+    expect(screen.queryByText(/Energibehov/i)).toBeNull();
+  });
+
+  it("describes the solar plan without kWh figures", async () => {
+    mockFetchEvChargers.mockResolvedValue([makeEvCharger({ bridge_enabled: true })]);
+    mockFetchEvSolarChargingPlan.mockResolvedValue({
+      available: true,
+      solar_first: true,
+      explanation_sv: "Solöverskott väntas 10:00–15:00 innan deadline.",
+      expected_solar_window_start: "2026-08-23T08:00:00Z",
+      expected_solar_window_end: "2026-08-23T13:00:00Z",
+      quality: "HIGH",
+      confidence: 0.9,
+    });
+
+    render(<EvChargerPanel siteSlug="akarp" />);
+
+    expect(await screen.findByText("Solel först")).toBeTruthy();
+    expect(screen.queryByText(/Reserverad solel/i)).toBeNull();
+    expect(screen.queryByText(/Planerad nätenergi/i)).toBeNull();
   });
 
   it("does not show solar plan for price-only bridge status", async () => {
@@ -127,8 +155,7 @@ describe("EvChargerPanel", () => {
     mockFetchEvSolarChargingPlan.mockResolvedValue({
       available: true,
       explanation_sv: "Solplan ska inte visas",
-      reserved_solar_kwh: 5,
-      planned_grid_kwh: 10,
+      solar_first: true,
     });
 
     render(<EvChargerPanel siteSlug="akarp" />);

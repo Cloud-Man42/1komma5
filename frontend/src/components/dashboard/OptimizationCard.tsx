@@ -1,5 +1,5 @@
 import { DashboardOptimizationSection } from "@/lib/api";
-import { formatEnergy, formatPercent } from "@/lib/format";
+import { formatPercent } from "@/lib/format";
 import { DashboardSection } from "@/components/dashboard";
 
 export function OptimizationCard({
@@ -31,22 +31,10 @@ export function OptimizationCard({
           </div>
         )}
         <dl className="metrics" style={{ marginTop: "var(--space-4)" }}>
-          {optimization.reserved_solar_kwh != null && (
+          {optimization.solar_first != null && (
             <div>
-              <dt>Reserverad solel</dt>
-              <dd>{formatEnergy(optimization.reserved_solar_kwh)}</dd>
-            </div>
-          )}
-          {optimization.planned_grid_kwh != null && (
-            <div>
-              <dt>Planerad nätenergi</dt>
-              <dd>{formatEnergy(optimization.planned_grid_kwh)}</dd>
-            </div>
-          )}
-          {optimization.ev_need_kwh != null && (
-            <div>
-              <dt>EV-behov</dt>
-              <dd>{formatEnergy(optimization.ev_need_kwh)}</dd>
+              <dt>Energikälla</dt>
+              <dd>{optimization.solar_first ? "Solel först" : "Nät vid billiga timmar"}</dd>
             </div>
           )}
           {optimization.battery_soc_pct != null && (

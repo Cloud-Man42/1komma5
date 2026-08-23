@@ -42,30 +42,48 @@ def _forecast(*, remaining_kwh: float = 15.0, quality: str = "HIGH") -> SolarFor
     )
 
 
-def test_scenario_a_wait_for_solar() -> None:
+def test_meaningful_solar_ahead_prioritises_solar() -> None:
     now = datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
     plan = build_solar_charging_plan(
         forecast=_forecast(remaining_kwh=15.0),
-        ev_required_kwh=10.0,
         deadline=now + timedelta(hours=10),
         now=now,
         timezone="Europe/Stockholm",
     )
-    assert plan.planned_grid_kwh <= 0.01
+    assert plan.solar_first is True
     assert plan.reason_code == "solar_forecast_wait"
+    assert "kWh" not in plan.explanation_sv
 
 
-def test_scenario_b_partial_grid() -> None:
+def test_too_little_solar_plans_grid_charging() -> None:
     now = datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
     plan = build_solar_charging_plan(
-        forecast=_forecast(remaining_kwh=8.0),
-        ev_required_kwh=20.0,
+        forecast=_forecast(remaining_kwh=0.8),
         deadline=now + timedelta(hours=10),
         now=now,
         timezone="Europe/Stockholm",
     )
-    assert plan.planned_grid_kwh > 10.0
-    assert plan.reason_code == "solar_forecast_partial_grid"
+    assert plan.solar_first is False
+    assert plan.reason_code == "solar_forecast_grid_required"
+
+
+def test_solar_after_the_deadline_does_not_count() -> None:
+    now = datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
+    forecast = _forecast(remaining_kwh=8.0)
+    full_window = build_solar_charging_plan(
+        forecast=forecast,
+        deadline=now + timedelta(hours=10),
+        now=now,
+        timezone="Europe/Stockholm",
+    )
+    short_window = build_solar_charging_plan(
+        forecast=forecast,
+        deadline=now + timedelta(minutes=30),
+        now=now,
+        timezone="Europe/Stockholm",
+    )
+    assert full_window.solar_first is True
+    assert short_window.solar_first is False
 
 
 def test_confidence_adjustment() -> None:
@@ -74,7 +92,7 @@ def test_confidence_adjustment() -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_solar_charging_plan_returns_none_without_required_energy():
+async def test_load_solar_charging_plan_returns_none_without_deadline():
     from energy_core.config import Settings
     from energy_core.db.models import Base
     from energy_core.db.repositories import SiteRepository
@@ -127,7 +145,6 @@ async def test_load_solar_charging_plan_without_forecast():
             manufacturer="ChargeAmps",
             model="Halo",
             control_source="chargeamp",
-            required_energy_kwh=10.0,
             departure_time="07:00",
         )
         await session.commit()
@@ -136,5 +153,5 @@ async def test_load_solar_charging_plan_without_forecast():
         plan = await load_solar_charging_plan_for_charger(session, site, charger, now=now)
         assert plan is not None
         assert plan.reason_code == "solar_forecast_unavailable"
-        assert plan.planned_grid_kwh == 10.0
+        assert plan.solar_first is False
     await engine.dispose()

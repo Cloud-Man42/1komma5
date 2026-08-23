@@ -203,7 +203,7 @@ export default function EnergyReasoningPanel({
       {data.solar_plan_available && (
         <p>
           <strong>Solplan:</strong> {data.solar_plan_reason ?? "—"}
-          {data.solar_planned_grid_kwh != null && ` (${data.solar_planned_grid_kwh.toFixed(1)} kWh nät)`}
+          {data.solar_first ? " (solel först)" : " (nät vid billiga timmar)"}
         </p>
       )}
 

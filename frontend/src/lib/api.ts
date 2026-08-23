@@ -87,9 +87,7 @@ export interface DashboardOptimizationSection extends DashboardSectionMeta {
   strategy_sv: string | null;
   explanation_sv: string | null;
   reasoning_steps: string[];
-  reserved_solar_kwh: number | null;
-  planned_grid_kwh: number | null;
-  ev_need_kwh: number | null;
+  solar_first: boolean | null;
   battery_soc_pct: number | null;
 }
 
@@ -152,7 +150,6 @@ export interface EvCharger {
   departure_time: string | null;
   power_w: number | null;
   available_modes: string[];
-  required_energy_kwh?: number | null;
   deadline_at?: string | null;
   solar_start_threshold_w?: number;
   solar_stop_threshold_w?: number;
@@ -360,7 +357,7 @@ export interface EnergyReasoning {
   halo_connected: boolean | null;
   solar_plan_available: boolean;
   solar_plan_reason: string | null;
-  solar_planned_grid_kwh: number | null;
+  solar_first: boolean;
   active_optimizations: string[];
   energy_flow_line: string | null;
   energy_balance_status: string | null;
@@ -371,8 +368,7 @@ export interface EvSolarChargingPlan {
   available: boolean;
   expected_usable_solar_kwh: number | null;
   planning_solar_kwh: number | null;
-  reserved_solar_kwh: number | null;
-  planned_grid_kwh: number | null;
+  solar_first: boolean;
   quality: string | null;
   confidence: number | null;
   expected_solar_window_start: string | null;
@@ -847,7 +843,6 @@ export async function createEvCharger(
     min_change_interval_seconds?: number;
     current_hysteresis_a?: number;
     stale_timeout_seconds?: number;
-    required_energy_kwh?: number | null;
     solar_start_threshold_w?: number;
     solar_stop_threshold_w?: number;
     solar_start_delay_seconds?: number;
@@ -979,7 +974,6 @@ export async function controlEvCharger(
     target_soc_pct?: number;
     manual_soc_pct?: number;
     departure_time?: string;
-    required_energy_kwh?: number | null;
     deadline_at?: string | null;
     clear_deadline_at?: boolean;
   },

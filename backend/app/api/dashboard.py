@@ -385,8 +385,6 @@ async def _compute_optimization(
 
     strategy = status_record.display_status_sv or "Smart laddning aktiv"
     explanation = plan.explanation_sv if plan is not None else None
-    reserved_solar = plan.reserved_solar_kwh if plan is not None else None
-    planned_grid = plan.planned_grid_kwh if plan is not None else None
     steps = list(reasoning.reasoning_steps)
     if explanation is None and steps:
         explanation = " ".join(steps[:2])
@@ -395,9 +393,7 @@ async def _compute_optimization(
         strategy_sv=strategy,
         explanation_sv=explanation,
         reasoning_steps=steps,
-        reserved_solar_kwh=reserved_solar,
-        planned_grid_kwh=planned_grid,
-        ev_need_kwh=bridge_charger.required_energy_kwh,
+        solar_first=plan.solar_first if plan is not None else None,
         battery_soc_pct=live.battery_soc_pct if live else None,
     )
     _cache_set(site.slug, "optimization", section)

@@ -292,8 +292,6 @@ class SolarChargingPlan:
 
     expected_usable_solar_kwh: float
     planning_solar_kwh: float
-    reserved_solar_kwh: float
-    planned_grid_kwh: float
     quality: ForecastQuality
     confidence: float
     expected_solar_window_start: datetime | None
@@ -301,3 +299,5 @@ class SolarChargingPlan:
     cheapest_grid_window: str | None
     explanation_sv: str
     reason_code: str
+    # True when enough solar is expected before the deadline to hold off the grid.
+    solar_first: bool = False

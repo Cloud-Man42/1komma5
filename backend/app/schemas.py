@@ -109,7 +109,6 @@ class EvChargerResponse(BaseModel):
     departure_time: str | None = None
     power_w: float | None = None
     available_modes: list[str] = Field(default_factory=list)
-    required_energy_kwh: float | None = None
     deadline_at: datetime | None = None
     solar_start_threshold_w: float = 1500.0
     solar_stop_threshold_w: float = 800.0
@@ -172,7 +171,6 @@ class EvChargerCreateRequest(BaseModel):
     charging_mode: str | None = None
     departure_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     target_soc_pct: float | None = Field(default=None, ge=0, le=100)
-    required_energy_kwh: float | None = Field(default=None, ge=0, le=200)
     deadline_at: datetime | None = None
     solar_start_threshold_w: float | None = Field(default=None, ge=0)
     solar_stop_threshold_w: float | None = Field(default=None, ge=0)
@@ -221,7 +219,6 @@ class EvChargerUpdateRequest(BaseModel):
     departure_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     clear_departure_time: bool = False
     target_soc_pct: float | None = Field(default=None, ge=0, le=100)
-    required_energy_kwh: float | None = Field(default=None, ge=0, le=200)
     deadline_at: datetime | None = None
     clear_deadline_at: bool = False
     solar_start_threshold_w: float | None = Field(default=None, ge=0)
@@ -373,7 +370,7 @@ class EnergyReasoningResponse(BaseModel):
     halo_connected: bool | None = None
     solar_plan_available: bool = False
     solar_plan_reason: str | None = None
-    solar_planned_grid_kwh: float | None = None
+    solar_first: bool = False
     active_optimizations: list[str] = Field(default_factory=list)
     energy_flow_line: str | None = None
     energy_balance_status: str | None = None
@@ -384,8 +381,7 @@ class SolarChargingPlanResponse(BaseModel):
     available: bool
     expected_usable_solar_kwh: float | None = None
     planning_solar_kwh: float | None = None
-    reserved_solar_kwh: float | None = None
-    planned_grid_kwh: float | None = None
+    solar_first: bool = False
     quality: str | None = None
     confidence: float | None = None
     expected_solar_window_start: datetime | None = None
@@ -420,7 +416,6 @@ class EvChargerControlRequest(BaseModel):
     target_soc_pct: float | None = Field(default=None, ge=0, le=100)
     manual_soc_pct: float | None = Field(default=None, ge=0, le=100)
     departure_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    required_energy_kwh: float | None = Field(default=None, ge=0, le=200)
     deadline_at: datetime | None = None
     clear_deadline_at: bool = False
 
@@ -1057,9 +1052,7 @@ class DashboardOptimizationSection(DashboardSectionMeta):
     strategy_sv: str | None = None
     explanation_sv: str | None = None
     reasoning_steps: list[str] = Field(default_factory=list)
-    reserved_solar_kwh: float | None = None
-    planned_grid_kwh: float | None = None
-    ev_need_kwh: float | None = None
+    solar_first: bool | None = None
     battery_soc_pct: float | None = None
 
 

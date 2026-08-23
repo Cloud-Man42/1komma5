@@ -25,7 +25,6 @@ class ChargingConfig:
     battery_charge_power_threshold_w: float = 1500.0
     smart_charge_hours: float = 4.0
     timezone: str = "Europe/Stockholm"
-    required_energy_kwh: float | None = None
     deadline_at: datetime | None = None
     departure_time: str | None = None
     start_delay_seconds: float = 120.0

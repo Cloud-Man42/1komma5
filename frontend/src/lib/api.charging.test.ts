@@ -43,7 +43,7 @@ describe("controlEvCharger", () => {
     vi.unstubAllGlobals();
   });
 
-  it("sends deadline and energy intent to the control endpoint", async () => {
+  it("sends mode, target SoC and deadline to the control endpoint", async () => {
     const response = { id: 1, site_slug: "akarp", name: "Halo" };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -54,7 +54,7 @@ describe("controlEvCharger", () => {
     await expect(
       controlEvCharger("akarp", 1, {
         charging_mode: "SMART_CHARGE",
-        required_energy_kwh: 22,
+        target_soc_pct: 90,
         deadline_at: "2026-08-19T05:00:00.000Z",
       }),
     ).resolves.toEqual(response);
@@ -64,7 +64,7 @@ describe("controlEvCharger", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         charging_mode: "SMART_CHARGE",
-        required_energy_kwh: 22,
+        target_soc_pct: 90,
         deadline_at: "2026-08-19T05:00:00.000Z",
       }),
     });

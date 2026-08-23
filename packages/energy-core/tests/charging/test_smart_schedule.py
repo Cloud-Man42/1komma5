@@ -141,12 +141,31 @@ def test_balanced_urgency_charges_at_average_price():
 
 def test_resolve_schedule_mode():
     now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
-    assert resolve_schedule_mode(departure_time=None, required_energy_kwh=None, deadline_at=None) == "none"
-    assert resolve_schedule_mode(departure_time="07:00", required_energy_kwh=None, deadline_at=None) == "departure"
-    assert (
-        resolve_schedule_mode(departure_time="07:00", required_energy_kwh=20.0, deadline_at=now)
-        == "deadline"
+    assert resolve_schedule_mode(departure_time=None, deadline_at=None) == "none"
+    assert resolve_schedule_mode(departure_time="07:00", deadline_at=None) == "departure"
+    assert resolve_schedule_mode(departure_time="07:00", deadline_at=now) == "deadline"
+    assert resolve_schedule_mode(departure_time=None, deadline_at=now) == "deadline"
+
+
+def test_balanced_urgency_still_skips_the_most_expensive_hour():
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    forecast = (
+        (now, 0.90),
+        (now + timedelta(hours=1), 0.20),
+        (now + timedelta(hours=2), 0.22),
+        (now + timedelta(hours=3), 0.24),
     )
+    charge, reason = should_charge_smart(
+        now,
+        departure_time="18:00",
+        price_forecast=forecast,
+        current_price=0.90,
+        expensive_threshold=0.35,
+        schedule_mode="deadline",
+        urgency=0.75,
+    )
+    assert charge is False
+    assert reason == "smart_wait_cheaper"
 
 
 def test_scheduled_cheapest_hour_charges():

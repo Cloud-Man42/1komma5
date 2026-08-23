@@ -96,10 +96,9 @@ def should_charge_by_price(
 def resolve_schedule_mode(
     *,
     departure_time: str | None,
-    required_energy_kwh: float | None,
     deadline_at: datetime | None,
 ) -> ScheduleMode:
-    if required_energy_kwh is not None and required_energy_kwh > 0 and deadline_at is not None:
+    if deadline_at is not None:
         return "deadline"
     if departure_time:
         return "departure"
@@ -132,6 +131,9 @@ def _balanced_urgency_decision(
         return True, "smart_urgency_balanced"
 
     hours_needed = max(1, int((charge_hours + urgency * charge_hours) + 0.999))
+    # Always leave the most expensive hour of the window out, otherwise a wide
+    # urgency window makes every hour qualify and the price rule stops mattering.
+    hours_needed = min(hours_needed, max(1, len(slots) - 1))
     cheapest = sorted(slots, key=lambda item: item[1])[:hours_needed]
     cheapest_hours = {_hour_key(ts) for ts, _ in cheapest}
     current_hour = _hour_key(now)

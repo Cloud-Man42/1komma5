@@ -34,7 +34,6 @@ _REASON_LABELS: dict[str, str] = {
     "battery_priority": "Batteri prioriteras",
     "deadline_risk": "Deadline — laddar i tid",
     "deadline_overdue": "Deadline passerad — max laddning",
-    "deadline_wait_cheaper": "Väntar trots deadline",
     "smart_solar_surplus": "Smart — solöverskott",
     "stable_grid_export": "Följer solöverskott",
     "insufficient_export": "Otillräckligt solöverskott",

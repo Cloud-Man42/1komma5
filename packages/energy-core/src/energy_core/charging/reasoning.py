@@ -49,7 +49,7 @@ class EnergyReasoningSnapshot:
     halo_connected: bool | None
     solar_plan_available: bool
     solar_plan_reason: str | None
-    solar_planned_grid_kwh: float | None
+    solar_first: bool
     active_optimizations: tuple[str, ...]
     energy_flow_line: str | None
     energy_balance_status: str | None
@@ -84,7 +84,7 @@ class EnergyReasoningSnapshot:
             "halo_connected": self.halo_connected,
             "solar_plan_available": self.solar_plan_available,
             "solar_plan_reason": self.solar_plan_reason,
-            "solar_planned_grid_kwh": self.solar_planned_grid_kwh,
+            "solar_first": self.solar_first,
             "active_optimizations": list(self.active_optimizations),
             "energy_flow_line": self.energy_flow_line,
             "energy_balance_status": self.energy_balance_status,
@@ -188,7 +188,7 @@ def build_energy_reasoning(
         halo_connected=charger.last_halo_connected,
         solar_plan_available=solar_plan is not None,
         solar_plan_reason=solar_plan.reason_code if solar_plan else None,
-        solar_planned_grid_kwh=solar_plan.planned_grid_kwh if solar_plan else None,
+        solar_first=bool(solar_plan.solar_first) if solar_plan else False,
         active_optimizations=active_optimizations,
         energy_flow_line=energy_flow_line,
         energy_balance_status=energy_balance_status,
@@ -271,13 +271,10 @@ def _build_steps(
             steps.append(_price_wait_step(price_reason))
 
     if solar_plan is not None:
-        if solar_plan.planned_grid_kwh and solar_plan.planned_grid_kwh > 0:
-            steps.append(
-                f"Solplan: {solar_plan.planned_grid_kwh:.1f} kWh från nät planeras "
-                f"({solar_plan.reason_code or 'plan'})."
-            )
-        elif solar_plan.reason_code:
-            steps.append(f"Solplan: {solar_plan.reason_code}.")
+        if solar_plan.solar_first:
+            steps.append("Solplan: solel prioriteras — nätladdning väntar tills deadline närmar sig.")
+        else:
+            steps.append("Solplan: för lite solel väntas — nätladdning planeras vid billiga timmar.")
 
     if active_optimizations:
         steps.append(f"Aktiva Heartbeat-optimeringar: {', '.join(active_optimizations)}.")
@@ -310,11 +307,10 @@ def _price_wait_step(reason: str) -> str:
     labels = {
         "smart_wait_cheaper": "Gott om tid — väntar på billigare timmar.",
         "smart_wait_expensive": "Elpriset är tydligt dyrt — väntar.",
-        "deadline_wait_cheaper": "Gott om tid till deadline — väntar på billigare timmar.",
         "expensive_no_forecast": "Dyrt elpris och ingen prognos — väntar.",
         "no_forecast": "Ingen elprisprognos — väntar.",
-        "solar_forecast_wait": "Solprognos täcker behovet — väntar med nätladdning.",
-        "solar_forecast_wait_cheaper": "Väntar på billigare nät-timmar trots planerat nätbehov.",
+        "solar_forecast_wait": "Solel väntas innan deadline — väntar med nätladdning.",
+        "solar_forecast_wait_cheaper": "Lite solel väntas — väntar på billigare nät-timmar.",
     }
     return labels.get(reason, f"Prisregel säger vänta ({reason}).")
 
