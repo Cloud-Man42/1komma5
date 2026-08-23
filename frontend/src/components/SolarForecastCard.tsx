@@ -101,6 +101,8 @@ export function SolarForecastCard({ siteSlug }: SolarForecastCardProps) {
     forecast.model_state === "NO_DATA" ||
     forecast.model_state === "LEARNING" ||
     (forecast.historical_samples ?? 0) === 0;
+  const productionDays = forecast.production_days_observed ?? 0;
+  const evaluatedDays = forecast.historical_samples ?? 0;
 
   const qualityClass = forecast.quality.toLowerCase().replace(/_/g, "-");
 
@@ -144,8 +146,10 @@ export function SolarForecastCard({ siteSlug }: SolarForecastCardProps) {
 
       {learning ? (
         <p className="muted">
-          Modellen lär sig — träffsäkerhet byggs upp när EMIC samlat in fler produktionsdagar (
-          {forecast.historical_samples ?? 0} hittills).
+          Modellen lär sig — träffsäkerhet byggs upp när EMIC utvärderat fler hela
+          produktionsdagar mot prognos (
+          {evaluatedDays} utvärderade
+          {productionDays > evaluatedDays ? ` av ${productionDays} med mätdata` : ""} hittills).
         </p>
       ) : null}
 

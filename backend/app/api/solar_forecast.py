@@ -52,6 +52,8 @@ from energy_core.solar_forecast.calibration import metrics_insufficient
 
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 
+from energy_core.solar_forecast.historical import count_production_days
+
 from energy_core.solar_forecast.types import MODEL_VERSION, ModelState, confidence_label_from_score
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -61,6 +63,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 router = APIRouter(tags=["solar-forecast"])
+
+
+
+
+
+async def _ensure_solar_observations_evaluated(session: AsyncSession, site, settings) -> None:
+
+    coordinator = SolarForecastCoordinator(settings)
+
+    await coordinator.evaluate_site_observations(session, site, now=datetime.now(UTC))
+
+    await session.flush()
+
+
+
+
+
+async def _production_days_observed(session: AsyncSession, site, settings, *, now: datetime) -> int:
+
+    window_days = settings.solar_forecast_rolling_window_days
+
+    since = now - timedelta(days=window_days + 2)
+
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+
+    readings = await reading_repo.list_readings(site.id, from_time=since, to_time=now, limit=100000)
+
+    raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
+
+    return count_production_days(
+
+        raw,
+
+        timezone=site.timezone,
+
+        window_days=window_days,
+
+        now=now,
+
+    )
 
 
 
@@ -216,6 +258,10 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
 
 
 
+    production_days = await _production_days_observed(session, site, settings, now=now)
+
+
+
     conf_score = getattr(forecast, "confidence_score", None) or model_profile.confidence_score
 
     conf_label = confidence_label_from_score(conf_score)
@@ -285,6 +331,8 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
         confidence_label=conf_label,
 
         historical_samples=getattr(forecast, "historical_samples", model_profile.historical_samples),
+
+        production_days_observed=production_days,
 
         points=[
 
@@ -534,6 +582,8 @@ async def get_solar_forecast(
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
+    await _ensure_solar_observations_evaluated(session, site, settings)
+
     forecast = await _resolve_forecast(session, site, settings)
 
     return await _forecast_response(session, site, forecast, settings)
@@ -606,11 +656,17 @@ async def get_solar_accuracy(
 
 
 
+    await _ensure_solar_observations_evaluated(session, site, settings)
+
+
+
     profile_repo = SolarForecastModelProfileRepository(session)
 
     profile = await profile_repo.get(site.id)
 
     insufficient = metrics_insufficient(profile, settings)
+
+    production_days = await _production_days_observed(session, site, settings, now=datetime.now(UTC))
 
 
 
@@ -639,6 +695,8 @@ async def get_solar_accuracy(
         sample_count_30d=profile.historical_samples,
 
         historical_samples=profile.historical_samples,
+
+        production_days_observed=production_days,
 
         correction_factor=profile.correction_factor,
 

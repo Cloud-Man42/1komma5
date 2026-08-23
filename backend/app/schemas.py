@@ -778,6 +778,7 @@ class SolarForecastResponse(BaseModel):
     confidence_score: float | None = None
     confidence_label: str | None = None
     historical_samples: int = 0
+    production_days_observed: int = 0
     points: list[SolarForecastPointResponse] = Field(default_factory=list)
 
 
@@ -794,6 +795,7 @@ class SolarAccuracyResponse(BaseModel):
     bias_pct_30d: float | None = None
     sample_count_30d: int = 0
     historical_samples: int = 0
+    production_days_observed: int = 0
     correction_factor: float = 1.0
     confidence_score: float | None = None
     confidence_label: str | None = None

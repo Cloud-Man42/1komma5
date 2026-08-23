@@ -54,7 +54,9 @@ from energy_core.solar_forecast.daily_evaluation import (
 
     build_observation_from_day,
 
-    days_to_evaluate,
+    days_in_evaluation_window,
+
+    forecast_kwh_for_day,
 
     recompute_profile_from_observations,
 
@@ -354,6 +356,12 @@ class SolarForecastCoordinator:
 
 
 
+    async def evaluate_site_observations(self, session, site, *, now: datetime | None = None) -> None:
+
+        await self._evaluate_daily_observations(session, site, now=now or datetime.now(UTC))
+
+
+
     async def _evaluate_daily_observations(self, session, site, *, now: datetime) -> None:
 
         from zoneinfo import ZoneInfo
@@ -361,14 +369,6 @@ class SolarForecastCoordinator:
 
 
         local_today = now.astimezone(ZoneInfo(site.timezone)).date()
-
-        last_eval = self._last_daily_eval.get(site.id)
-
-        if last_eval == local_today:
-
-            return
-
-
 
         config_repo = SolarSiteConfigRepository(session)
 
@@ -382,7 +382,9 @@ class SolarForecastCoordinator:
 
         reading_repo = EnergyReadingRepository(session, is_sqlite=self._settings.is_sqlite)
 
-        since = now - timedelta(days=self._settings.solar_forecast_rolling_window_days + 2)
+        window_days = self._settings.solar_forecast_rolling_window_days
+
+        since = now - timedelta(days=window_days + 2)
 
         readings = await reading_repo.list_readings(site.id, from_time=since, to_time=now, limit=100000)
 
@@ -404,7 +406,9 @@ class SolarForecastCoordinator:
 
 
 
-        for day in days_to_evaluate(site.timezone, now):
+        pending_days: list = []
+
+        for day in days_in_evaluation_window(site.timezone, now=now, window_days=window_days):
 
             existing = await obs_repo.get(site.id, day)
 
@@ -412,7 +416,21 @@ class SolarForecastCoordinator:
 
                 continue
 
+            pending_days.append(day)
 
+
+
+        if not pending_days:
+
+            last_eval = self._last_daily_eval.get(site.id)
+
+            if last_eval == local_today:
+
+                return
+
+
+
+        for day in pending_days:
 
             actual_kwh, completeness = actual_kwh_for_day(raw, day, site.timezone)
 
@@ -422,13 +440,25 @@ class SolarForecastCoordinator:
 
 
 
+            day_forecast = latest_forecast
+
+            if day_forecast is not None:
+
+                raw_kwh, corrected_kwh = forecast_kwh_for_day(day_forecast, day, site.timezone)
+
+                if raw_kwh <= 0 and corrected_kwh <= 0:
+
+                    day_forecast = None
+
+
+
             observation = build_observation_from_day(
 
                 site.id,
 
                 day,
 
-                forecast=latest_forecast,
+                forecast=day_forecast,
 
                 actual_kwh=actual_kwh,
 
@@ -478,7 +508,7 @@ class SolarForecastCoordinator:
 
 
 
-        all_obs = await obs_repo.list_for_site(site.id, limit=self._settings.solar_forecast_rolling_window_days + 5)
+        all_obs = await obs_repo.list_for_site(site.id, limit=window_days + 5)
 
         updated_profile = recompute_profile_from_observations(
 

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -247,7 +247,11 @@ async def test_solar_accuracy_learning_hides_metrics(client, monkeypatch):
         )
         await session.commit()
 
-    res = await ac.get("/api/sites/akarp/solar/accuracy")
+    with patch(
+        "app.api.solar_forecast._ensure_solar_observations_evaluated",
+        new=AsyncMock(),
+    ):
+        res = await ac.get("/api/sites/akarp/solar/accuracy")
     assert res.status_code == 200
     body = res.json()
     assert body["model_state"] == "LEARNING"
@@ -287,3 +291,33 @@ async def test_solar_forecast_includes_actual_vs_forecast_so_far(client, monkeyp
     body = res.json()
     assert body["actual_today_kwh"] > 0
     assert body["forecast_so_far_kwh"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_solar_accuracy_backfills_production_days(client):
+    ac, session_factory, settings = client
+    await enable_solar_config(ac, "akarp")
+    yesterday = datetime.now(UTC).date() - timedelta(days=1)
+    dense_readings = [
+        (hour, minute, 5000, 1500, 0, 3500, 60)
+        for hour in range(8, 18)
+        for minute in (0, 15, 30, 45)
+    ]
+    await seed_readings(
+        session_factory,
+        settings,
+        "akarp",
+        dense_readings,
+        day=yesterday.day,
+        month=yesterday.month,
+        year=yesterday.year,
+    )
+    with patch(
+        "energy_core.solar_forecast.coordinator.OpenMeteoWeatherProvider.get_forecast",
+        new=AsyncMock(return_value=_sample_weather()),
+    ):
+        res = await ac.get("/api/sites/akarp/solar/accuracy")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["production_days_observed"] >= 1
+    assert "historical_samples" in body

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from energy_core.solar_forecast.constants import (
@@ -157,6 +157,31 @@ def aggregate_buckets_from_readings(
             )
         )
     return result
+
+
+def count_production_days(
+    readings: list[tuple[datetime, float, float]],
+    *,
+    timezone: str,
+    window_days: int,
+    now: datetime | None = None,
+    min_kwh: float = 1.0,
+) -> int:
+    """Count local calendar days in the window with meaningful measured solar production."""
+    from energy_core.solar_forecast.daily_evaluation import actual_kwh_for_day
+
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    tz = ZoneInfo(timezone)
+    local_today = now.astimezone(tz).date()
+    counts = 0
+    for offset in range(1, window_days + 1):
+        day = local_today - timedelta(days=offset)
+        actual_kwh, _ = actual_kwh_for_day(readings, day, timezone)
+        if actual_kwh >= min_kwh:
+            counts += 1
+    return counts
 
 
 def actual_solar_kwh_today_from_readings(

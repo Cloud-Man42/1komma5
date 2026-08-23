@@ -13,7 +13,8 @@ const TOOLTIPS: Record<string, string> = {
   bias: "Visar om modellen systematiskt prognostiserar för högt (positivt) eller för lågt (negativt).",
   correction: "EMIC justerar grundprognosen baserat på historisk produktion för just denna anläggning.",
   confidence: "Hur säker modellen är baserat på historik, felnivå och datatäckning.",
-  samples: "Antal dagar med faktisk produktion som modellen har lärt sig från.",
+  samples: "Antal hela dagar där EMIC jämfört prognos med faktisk produktion och räknat dem som träningsdata.",
+  production: "Antal dagar med mätbar solproduktion i EMIC:s historik (senaste 60 dagarna).",
 };
 
 function Tooltip({ label, text }: { label: string; text: string }) {
@@ -75,6 +76,8 @@ export function SolarAccuracyView({ siteSlug }: SolarAccuracyViewProps) {
     accuracy.historical_samples === 0;
 
   const target = accuracy.min_samples_for_calibrated || 30;
+  const productionDays = accuracy.production_days_observed ?? 0;
+  const evaluatedDays = accuracy.historical_samples;
 
   return (
     <section className="peaks-section">
@@ -86,14 +89,15 @@ export function SolarAccuracyView({ siteSlug }: SolarAccuracyViewProps) {
             <strong>Prognosmodellen lär sig</strong>
           </p>
           <p className="muted">
-            Historiska observationer: {accuracy.historical_samples}
+            Utvärderade dagar: {evaluatedDays}
+            {productionDays > evaluatedDays ? ` (${productionDays} dagar med mätdata i historiken)` : ""}
           </p>
           <p className="muted">
             Modellens träffsäkerhet kan ännu inte beräknas. EMIC jämför automatiskt
             prognostiserad solproduktion med faktisk produktion och kalibrerar modellen över tid.
           </p>
           <p className="muted">
-            {accuracy.historical_samples} av rekommenderade {target} observationsdagar insamlade.
+            {evaluatedDays} av rekommenderade {target} utvärderingsdagar insamlade.
           </p>
         </div>
       ) : null}
@@ -104,9 +108,15 @@ export function SolarAccuracyView({ siteSlug }: SolarAccuracyViewProps) {
           <dd>{modelStateLabel(accuracy.model_state)}</dd>
         </div>
         <div>
-          <Tooltip label="Historiska dagar" text={TOOLTIPS.samples} />
-          <dd>{accuracy.historical_samples}</dd>
+          <Tooltip label="Utvärderade dagar" text={TOOLTIPS.samples} />
+          <dd>{evaluatedDays}</dd>
         </div>
+        {productionDays > 0 ? (
+          <div>
+            <Tooltip label="Dagar med mätdata" text={TOOLTIPS.production} />
+            <dd>{productionDays}</dd>
+          </div>
+        ) : null}
 
         {!learning && accuracy.mape_7d_pct != null ? (
           <div>

@@ -13,14 +13,15 @@ from energy_core.db.ev_charger_repo import EvChargerRepository
 async def test_dashboard_returns_site_overview(client):
     ac, session_factory, settings = client
     today = datetime.now(UTC)
+    reading_hour = max(0, today.hour - 1)
     await seed_readings(
         session_factory,
         settings,
         "akarp",
         [
-            (8, 0, 2000, 1500, 0, 500, 80),
-            (8, 5, 2500, 1600, 0, 700, 81),
-            (8, 10, 3000, 1700, 0, 900, 82),
+            (reading_hour, 0, 2000, 1500, 0, 500, 80),
+            (reading_hour, 5, 2500, 1600, 0, 700, 81),
+            (reading_hour, 10, 3000, 1700, 0, 900, 82),
         ],
         day=today.day,
         month=today.month,

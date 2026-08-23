@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 from energy_core.solar_forecast.daily_evaluation import (
     actual_kwh_for_day,
     build_observation_from_day,
+    days_in_evaluation_window,
     days_to_evaluate,
     determine_training_eligibility,
     evaluate_observation_errors,
@@ -22,6 +23,14 @@ def test_days_to_evaluate_returns_yesterday():
     now = datetime(2026, 6, 15, 10, 0, tzinfo=UTC)
     days = days_to_evaluate("Europe/Stockholm", now)
     assert len(days) >= 1
+
+
+def test_days_in_evaluation_window_excludes_today():
+    now = datetime(2026, 6, 15, 10, 0, tzinfo=UTC)
+    days = days_in_evaluation_window("Europe/Stockholm", now=now, window_days=7)
+    assert len(days) == 7
+    assert date(2026, 6, 14) in days
+    assert date(2026, 6, 15) not in days
 
 
 def test_actual_kwh_for_day_sums_buckets():

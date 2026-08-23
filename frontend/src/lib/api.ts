@@ -1226,6 +1226,7 @@ export interface SolarForecast {
   confidence_score?: number | null;
   confidence_label?: string | null;
   historical_samples?: number;
+  production_days_observed?: number;
   points: SolarForecastPoint[];
 }
 
@@ -1257,6 +1258,7 @@ export interface SolarAccuracy {
   bias_pct_30d: number | null;
   sample_count_30d: number;
   historical_samples: number;
+  production_days_observed: number;
   correction_factor: number;
   confidence_score: number | null;
   confidence_label: string | null;

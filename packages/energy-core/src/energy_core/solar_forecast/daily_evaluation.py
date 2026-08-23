@@ -260,3 +260,15 @@ def days_to_evaluate(
     if include_today_if_complete and local_now.hour >= 23:
         days.append(local_now.date())
     return days
+
+
+def days_in_evaluation_window(
+    timezone: str,
+    *,
+    now: datetime | None = None,
+    window_days: int,
+) -> list[date]:
+    """Return completed local calendar days in the rolling evaluation window (excludes today)."""
+    now = now or datetime.now(UTC)
+    local_today = now.astimezone(ZoneInfo(timezone)).date()
+    return [local_today - timedelta(days=offset) for offset in range(1, window_days + 1)]

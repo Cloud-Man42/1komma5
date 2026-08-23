@@ -23,6 +23,7 @@ describe("SolarAccuracyView", () => {
       bias_pct_30d: null,
       sample_count_30d: 0,
       historical_samples: 0,
+      production_days_observed: 12,
       correction_factor: 1,
       confidence_score: null,
       confidence_label: null,
@@ -35,7 +36,7 @@ describe("SolarAccuracyView", () => {
     render(<SolarAccuracyView siteSlug="akarp" />);
     expect(await screen.findByText("Modellkvalitet")).toBeTruthy();
     expect(screen.getByText(/Prognosmodellen lär sig/)).toBeTruthy();
-    expect(screen.queryByText("100.0 %")).toBeNull();
+    expect(screen.getByText(/12 dagar med mätdata/i)).toBeTruthy();
   });
 
   it("renders calibrated metrics", async () => {
@@ -52,6 +53,7 @@ describe("SolarAccuracyView", () => {
       bias_pct_30d: -2.0,
       sample_count_30d: 38,
       historical_samples: 38,
+      production_days_observed: 38,
       correction_factor: 0.937,
       confidence_score: 81,
       confidence_label: "High",
