@@ -29,11 +29,24 @@ def upgrade() -> None:
     op.add_column("ev_chargers", sa.Column("last_vehicle_connected", sa.Boolean(), nullable=True))
 
     op.execute("UPDATE ev_chargers SET control_source = 'chargeamp' WHERE control_source = 'heartbeat'")
-    op.alter_column("ev_chargers", "control_source", server_default="chargeamp")
+    # Batch mode so SQLite, which cannot ALTER COLUMN, rebuilds the table instead.
+    with op.batch_alter_table("ev_chargers") as batch:
+        batch.alter_column(
+            "control_source",
+            existing_type=sa.String(length=16),
+            existing_nullable=False,
+            server_default="chargeamp",
+        )
 
 
 def downgrade() -> None:
-    op.alter_column("ev_chargers", "control_source", server_default="heartbeat")
+    with op.batch_alter_table("ev_chargers") as batch:
+        batch.alter_column(
+            "control_source",
+            existing_type=sa.String(length=16),
+            existing_nullable=False,
+            server_default="heartbeat",
+        )
     op.drop_column("ev_chargers", "last_vehicle_connected")
     op.drop_column("ev_chargers", "last_halo_connected")
     op.drop_column("ev_chargers", "last_charger_error_code")

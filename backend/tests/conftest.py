@@ -47,6 +47,16 @@ def mock_open_meteo_forecast():
         yield
 
 
+@pytest.fixture(autouse=True)
+def clear_dashboard_cache():
+    """Every test gets a fresh database, so a cached section from an earlier test is stale."""
+    from app.api.dashboard import _CACHE
+
+    _CACHE.clear()
+    yield
+    _CACHE.clear()
+
+
 @pytest.fixture
 async def client(tmp_path):
     db_file = tmp_path / "test.db"

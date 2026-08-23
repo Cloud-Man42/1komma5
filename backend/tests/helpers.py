@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
 from energy_core.domain import NormalizedEnergyReading
 from httpx import AsyncClient
+
+READING_SPACING = timedelta(minutes=5)
+
+
+def recent_reading_timestamps(
+    now: datetime,
+    day_start: datetime,
+    count: int,
+    *,
+    spacing: timedelta = READING_SPACING,
+) -> list[datetime]:
+    """Return `count` timestamps ending at `now`, oldest first.
+
+    Never in the future and never before `day_start`, so daily aggregates pick them up
+    whatever time of day the suite runs. The spacing shrinks when the day has only just
+    started and there is not room for the full interval.
+    """
+    if count < 1:
+        return []
+    if count == 1:
+        return [now]
+    room = (now - day_start) / (count - 1)
+    step = min(spacing, room)
+    return [now - step * (count - 1 - index) for index in range(count)]
 
 
 async def seed_readings(
@@ -39,6 +64,49 @@ async def seed_readings(
                 ),
             )
         await session.commit()
+
+
+async def seed_recent_readings(
+    session_factory,
+    settings,
+    slug: str,
+    samples: list[tuple[float, float, float, float, float]],
+    *,
+    spacing: timedelta = READING_SPACING,
+) -> list[datetime]:
+    """Seed readings as (solar_w, consumption_w, import_w, export_w, battery_soc), oldest first.
+
+    Timestamps come from the clock rather than fixed hours, so the readings are always in
+    the past and always inside the site's current local day.
+    """
+    async with session_factory() as session:
+        site = await SiteRepository(session).get_by_slug(slug)
+        assert site is not None
+        now = datetime.now(UTC)
+        zone = ZoneInfo(site.timezone)
+        day_start = (
+            now.astimezone(zone)
+            .replace(hour=0, minute=0, second=0, microsecond=0)
+            .astimezone(UTC)
+        )
+        timestamps = recent_reading_timestamps(now, day_start, len(samples), spacing=spacing)
+        repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+        for recorded_at, (solar, consumption, imp, exp, soc) in zip(timestamps, samples, strict=True):
+            await repo.upsert_reading(
+                site.id,
+                NormalizedEnergyReading(
+                    site_slug=slug,
+                    recorded_at=recorded_at,
+                    solar_production_w=solar,
+                    consumption_w=consumption,
+                    grid_import_w=imp,
+                    grid_export_w=exp,
+                    battery_soc_pct=soc,
+                    battery_power_w=0,
+                ),
+            )
+        await session.commit()
+    return timestamps
 
 
 async def enable_solar_config(

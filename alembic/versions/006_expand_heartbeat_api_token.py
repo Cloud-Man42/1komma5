@@ -12,22 +12,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        "heartbeat_settings",
-        "api_token",
-        existing_type=sa.String(length=1024),
-        type_=sa.Text(),
-        existing_nullable=False,
-        existing_server_default="",
-    )
+    # Batch mode so SQLite, which cannot ALTER COLUMN, rebuilds the table instead.
+    with op.batch_alter_table("heartbeat_settings") as batch:
+        batch.alter_column(
+            "api_token",
+            existing_type=sa.String(length=1024),
+            type_=sa.Text(),
+            existing_nullable=False,
+            existing_server_default="",
+        )
 
 
 def downgrade() -> None:
-    op.alter_column(
-        "heartbeat_settings",
-        "api_token",
-        existing_type=sa.Text(),
-        type_=sa.String(length=1024),
-        existing_nullable=False,
-        existing_server_default="",
-    )
+    with op.batch_alter_table("heartbeat_settings") as batch:
+        batch.alter_column(
+            "api_token",
+            existing_type=sa.Text(),
+            type_=sa.String(length=1024),
+            existing_nullable=False,
+            existing_server_default="",
+        )

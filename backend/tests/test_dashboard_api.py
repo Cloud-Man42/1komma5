@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from helpers import create_charger, seed_readings
+from helpers import create_charger, seed_readings, seed_recent_readings
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 
@@ -12,20 +12,15 @@ from energy_core.db.ev_charger_repo import EvChargerRepository
 @pytest.mark.asyncio
 async def test_dashboard_returns_site_overview(client):
     ac, session_factory, settings = client
-    today = datetime.now(UTC)
-    reading_hour = max(0, today.hour - 1)
-    await seed_readings(
+    await seed_recent_readings(
         session_factory,
         settings,
         "akarp",
         [
-            (reading_hour, 0, 2000, 1500, 0, 500, 80),
-            (reading_hour, 5, 2500, 1600, 0, 700, 81),
-            (reading_hour, 10, 3000, 1700, 0, 900, 82),
+            (2000, 1500, 0, 500, 80),
+            (2500, 1600, 0, 700, 81),
+            (3000, 1700, 0, 900, 82),
         ],
-        day=today.day,
-        month=today.month,
-        year=today.year,
     )
     response = await ac.get("/api/sites/akarp/dashboard")
     assert response.status_code == 200
@@ -34,6 +29,18 @@ async def test_dashboard_returns_site_overview(client):
     assert body["freshness"]["updated_at"] is not None
     assert body["live"]["solar_production_w"] == 3000
     assert body["today"]["produced_kwh"] is not None
+
+
+@pytest.mark.asyncio
+async def test_dashboard_starts_with_an_empty_section_cache(client):
+    """The cache is module-level; a leftover entry would answer for another test's database."""
+    from app.api.dashboard import _CACHE
+
+    ac, _, _ = client
+    assert _CACHE == {}
+    response = await ac.get("/api/sites/akarp/dashboard")
+    assert response.status_code == 200
+    assert _CACHE != {}
 
 
 @pytest.mark.asyncio

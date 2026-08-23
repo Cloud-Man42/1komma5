@@ -1,9 +1,9 @@
-from datetime import UTC, datetime, timedelta, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from helpers import enable_solar_config, seed_readings
+from helpers import enable_solar_config, seed_readings, seed_recent_readings
 from energy_core.solar_forecast.types import WeatherForecast, WeatherForecastPoint
 
 
@@ -267,19 +267,14 @@ async def test_solar_accuracy_learning_hides_metrics(client, monkeypatch):
 async def test_solar_forecast_includes_actual_vs_forecast_so_far(client, monkeypatch):
     ac, session_factory, settings = client
     await enable_solar_config(ac, "akarp")
-    today = datetime.now(UTC)
-    reading_hour = max(0, today.hour - 1)
-    await seed_readings(
+    await seed_recent_readings(
         session_factory,
         settings,
         "akarp",
         [
-            (reading_hour, 0, 5000, 1200, 0, 3800, 55),
-            (reading_hour, 5, 5200, 1300, 0, 3900, 56),
+            (5000, 1200, 0, 3800, 55),
+            (5200, 1300, 0, 3900, 56),
         ],
-        day=today.day,
-        month=today.month,
-        year=today.year,
     )
     with patch(
         "energy_core.solar_forecast.coordinator.OpenMeteoWeatherProvider.get_forecast",
