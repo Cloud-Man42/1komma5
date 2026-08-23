@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from app.deps import set_session_factory
 from app.main import create_app
@@ -9,7 +12,39 @@ from energy_core.config import Settings
 from energy_core.db.models import Base
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.seed import seed_sites
+from energy_core.solar_forecast.types import WeatherForecast, WeatherForecastPoint
 from httpx import ASGITransport, AsyncClient
+
+
+def _sample_weather(site_id: int = 1) -> WeatherForecast:
+    now = datetime.now(UTC)
+    points = tuple(
+        WeatherForecastPoint(
+            timestamp=now + timedelta(minutes=15 * i),
+            ghi_wm2=600.0,
+            gti_wm2=550.0,
+            cloud_cover_pct=20.0,
+            temperature_c=18.0,
+        )
+        for i in range(16)
+    )
+    return WeatherForecast(
+        site_id=site_id,
+        fetched_at=now,
+        provider="test",
+        points=points,
+        source="live",
+    )
+
+
+@pytest.fixture(autouse=True)
+def mock_open_meteo_forecast():
+    """Prevent backend tests from calling the live Open-Meteo API."""
+    with patch(
+        "energy_core.solar_forecast.coordinator.OpenMeteoWeatherProvider.get_forecast",
+        new=AsyncMock(side_effect=lambda site_config, *_args, **_kwargs: _sample_weather(site_config.site_id)),
+    ):
+        yield
 
 
 @pytest.fixture

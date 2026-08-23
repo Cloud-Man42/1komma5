@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,13 +11,13 @@ def _sample_weather(site_id: int = 1) -> WeatherForecast:
     now = datetime.now(UTC)
     points = tuple(
         WeatherForecastPoint(
-            timestamp=now,
+            timestamp=now + timedelta(minutes=15 * i),
             ghi_wm2=600.0,
             gti_wm2=550.0,
             cloud_cover_pct=20.0,
             temperature_c=18.0,
         )
-        for _ in range(16)
+        for i in range(16)
     )
     return WeatherForecast(
         site_id=site_id,
