@@ -1,6 +1,6 @@
-import pytest
 from datetime import UTC, datetime
 
+import pytest
 from energy_core.config import HeartbeatProviderKind, Settings
 from energy_core.domain import RawEnergyReading
 from energy_core.normalization import normalize_reading

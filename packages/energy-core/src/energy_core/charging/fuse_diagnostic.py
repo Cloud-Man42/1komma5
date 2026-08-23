@@ -27,7 +27,11 @@ def compute_fuse_diagnostic(state: EnergyState, config: ChargingConfig) -> FuseD
     limiting_phase: float | None = None
     if config.main_fuse_a is not None:
         fuse_headroom = max(0.0, config.main_fuse_a - config.safety_margin_a)
-        phase_values = [state.phase_current_l1_a, state.phase_current_l2_a, state.phase_current_l3_a]
+        phase_values = [
+            state.phase_current_l1_a,
+            state.phase_current_l2_a,
+            state.phase_current_l3_a,
+        ]
         if any(value is not None for value in phase_values):
             for phase_current in phase_values:
                 if phase_current is None:
@@ -55,7 +59,9 @@ def compute_fuse_diagnostic(state: EnergyState, config: ChargingConfig) -> FuseD
         )
 
     if not headroom_values:
-        return FuseDiagnostic(headroom_a=None, limiting_phase_a=None, grid_import_headroom_w=grid_import_headroom_w)
+        return FuseDiagnostic(
+            headroom_a=None, limiting_phase_a=None, grid_import_headroom_w=grid_import_headroom_w
+        )
     return FuseDiagnostic(
         headroom_a=min(headroom_values),
         limiting_phase_a=limiting_phase,

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "018_ev_energy_accounting"
 down_revision = "017_drop_bridge_mode"
@@ -38,8 +38,18 @@ def upgrade() -> None:
         sa.Column("energy_quality", sa.String(length=16), nullable=True),
         sa.Column("cost_quality", sa.String(length=16), nullable=True),
         sa.Column("attribution_quality", sa.String(length=16), nullable=True),
-        sa.Column("savings_baseline", sa.String(length=32), nullable=False, server_default="IMMEDIATE_GRID_CHARGING"),
-        sa.Column("calculation_version", sa.String(length=32), nullable=False, server_default="ev-energy-v1"),
+        sa.Column(
+            "savings_baseline",
+            sa.String(length=32),
+            nullable=False,
+            server_default="IMMEDIATE_GRID_CHARGING",
+        ),
+        sa.Column(
+            "calculation_version",
+            sa.String(length=32),
+            nullable=False,
+            server_default="ev-energy-v1",
+        ),
         sa.Column("reconciliation_delta_kwh", sa.Float(), nullable=True),
         sa.Column("reconciliation_note", sa.String(length=128), nullable=True),
         sa.Column("chargeamps_session_id", sa.String(length=128), nullable=True),
@@ -47,7 +57,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["site_id"], ["sites.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_ev_charging_sessions_charger_started", "ev_charging_sessions", ["charger_id", "started_at"])
+    op.create_index(
+        "ix_ev_charging_sessions_charger_started",
+        "ev_charging_sessions",
+        ["charger_id", "started_at"],
+    )
 
     op.create_table(
         "ev_charging_intervals",
@@ -78,8 +92,16 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["charger_id"], ["ev_chargers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_ev_charging_intervals_session_start", "ev_charging_intervals", ["session_id", "start_time"])
-    op.create_index("ix_ev_charging_intervals_charger_start", "ev_charging_intervals", ["charger_id", "start_time"])
+    op.create_index(
+        "ix_ev_charging_intervals_session_start",
+        "ev_charging_intervals",
+        ["session_id", "start_time"],
+    )
+    op.create_index(
+        "ix_ev_charging_intervals_charger_start",
+        "ev_charging_intervals",
+        ["charger_id", "start_time"],
+    )
 
     op.create_table(
         "battery_energy_ledger",

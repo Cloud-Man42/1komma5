@@ -53,10 +53,15 @@ class ChargeAmpsHaloAdapter:
         try:
             status_payload = await self._client.get_chargepoint_status()
             settings = await self._client.get_connector_settings()
-            connector = _connector_by_id(
-                status_payload.get("connectorStatuses") or status_payload.get("connector_statuses") or [],
-                self._client._connector_id,
-            ) or {}
+            connector = (
+                _connector_by_id(
+                    status_payload.get("connectorStatuses")
+                    or status_payload.get("connector_statuses")
+                    or [],
+                    self._client._connector_id,
+                )
+                or {}
+            )
             connector_status = str(connector.get("status") or connector.get("ocppStatus") or "")
             current = _float_or_none(settings.get("maxCurrent"))
             self._last_known_current_a = current

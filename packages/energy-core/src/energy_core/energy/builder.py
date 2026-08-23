@@ -56,7 +56,9 @@ def _parse_optimizations(items: list[dict[str, Any]] | None) -> bool:
     return False
 
 
-def _parse_market_prices(data: dict[str, Any] | None) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
+def _parse_market_prices(
+    data: dict[str, Any] | None,
+) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
     parsed = parse_market_prices(data)
     forecast = tuple(
         (point.timestamp, point.all_in_eur_kwh or point.spot_eur_kwh)
@@ -96,8 +98,13 @@ def build_energy_state(
         {"optimizations": optimizations or []},
     )
 
-    charging_mode = ems_fields.get("heartbeat_charging_mode") or ev_fields.get("heartbeat_charging_mode")
-    smart_active = ems_fields.get("heartbeat_smart_charge_active") or str(charging_mode or "").upper() == "SMART_CHARGE"
+    charging_mode = ems_fields.get("heartbeat_charging_mode") or ev_fields.get(
+        "heartbeat_charging_mode"
+    )
+    smart_active = (
+        ems_fields.get("heartbeat_smart_charge_active")
+        or str(charging_mode or "").upper() == "SMART_CHARGE"
+    )
 
     state = EnergyState(
         timestamp=overview["timestamp"],
@@ -121,7 +128,9 @@ def build_energy_state(
         heartbeat_smart_charge_active=bool(smart_active),
         ev_charge_from_grid_recommended=_parse_optimizations(optimizations),
         departure_time=ev_fields.get("departure_time"),
-        target_soc=float(ev_fields["target_soc"]) if isinstance(ev_fields.get("target_soc"), (int, float)) else None,
+        target_soc=float(ev_fields["target_soc"])
+        if isinstance(ev_fields.get("target_soc"), (int, float))
+        else None,
         raw_field_hints=hints,
     )
     return state.with_age(now)

@@ -1,4 +1,5 @@
 """Read-only probe for Charge Amps meter/session fields. Never log credentials."""
+
 import asyncio
 import json
 import os
@@ -7,7 +8,6 @@ import sys
 from energy_core.chargers.charge_amps import build_chargeamps_controller
 from energy_core.chargers.client import CHARGEAMPS_API_BASE, ChargeAmpsClient
 from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
-
 
 CHARGER_ID = os.getenv("CHARGEAMPS_PROBE_CHARGER_ID", "").strip()
 if not CHARGER_ID:
@@ -27,14 +27,20 @@ async def probe_web() -> None:
     controller = build_chargeamps_controller(CHARGER_ID, use_mock=False)
     adapter = ChargeAmpsMeterAdapter.from_controller(controller)
     snapshot = await adapter.get_snapshot()
-    print("WEB_SNAPSHOT", json.dumps({
-        "cumulative_kwh": snapshot.cumulative_kwh,
-        "power_w": snapshot.power_w,
-        "is_charging": snapshot.is_charging,
-        "vehicle_connected": snapshot.vehicle_connected,
-        "ocpp_status": snapshot.ocpp_status,
-        "source": snapshot.energy_source,
-    }, default=str))
+    print(
+        "WEB_SNAPSHOT",
+        json.dumps(
+            {
+                "cumulative_kwh": snapshot.cumulative_kwh,
+                "power_w": snapshot.power_w,
+                "is_charging": snapshot.is_charging,
+                "vehicle_connected": snapshot.vehicle_connected,
+                "ocpp_status": snapshot.ocpp_status,
+                "source": snapshot.energy_source,
+            },
+            default=str,
+        ),
+    )
 
 
 async def probe_external(api_key: str, email: str, password: str) -> None:
@@ -45,15 +51,25 @@ async def probe_external(api_key: str, email: str, password: str) -> None:
         password=password,
     )
     status = await client.get_chargepoint_status(force=True)
-    print("EXTERNAL_STATUS_KEYS", sorted(status.keys()) if isinstance(status, dict) else type(status))
+    print(
+        "EXTERNAL_STATUS_KEYS", sorted(status.keys()) if isinstance(status, dict) else type(status)
+    )
     connectors = status.get("connectorStatuses") or status.get("connector_statuses") or []
     if connectors:
-        print("EXTERNAL_CONNECTOR_KEYS", sorted(connectors[0].keys()) if isinstance(connectors[0], dict) else connectors[0])
+        print(
+            "EXTERNAL_CONNECTOR_KEYS",
+            sorted(connectors[0].keys()) if isinstance(connectors[0], dict) else connectors[0],
+        )
 
     for path in EXTERNAL_CANDIDATE_PATHS:
         try:
             data = await client._request("GET", path)
-            print("EXTERNAL_OK", path, "keys=", sorted(data.keys()) if isinstance(data, dict) else type(data))
+            print(
+                "EXTERNAL_OK",
+                path,
+                "keys=",
+                sorted(data.keys()) if isinstance(data, dict) else type(data),
+            )
         except Exception as exc:
             print("EXTERNAL_FAIL", path, type(exc).__name__, str(exc)[:120])
 

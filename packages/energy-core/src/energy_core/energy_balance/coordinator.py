@@ -74,9 +74,15 @@ class EnergyBalanceCoordinator:
 
         if sungrow is not None:
             if sungrow.fresh:
-                logger.debug("Sungrow.Telemetry.Received site=%s age=%.1f", site.slug, sungrow.data_age_seconds)
+                logger.debug(
+                    "Sungrow.Telemetry.Received site=%s age=%.1f",
+                    site.slug,
+                    sungrow.data_age_seconds,
+                )
             else:
-                logger.warning("Sungrow.Telemetry.Stale site=%s age=%.1f", site.slug, sungrow.data_age_seconds)
+                logger.warning(
+                    "Sungrow.Telemetry.Stale site=%s age=%.1f", site.slug, sungrow.data_age_seconds
+                )
 
         logger.debug(
             "EnergyBalance.Calculated site=%s charger=%s status=%s",
@@ -85,7 +91,9 @@ class EnergyBalanceCoordinator:
             snapshot.status.value,
         )
         if "residual_high" in snapshot.flags:
-            logger.info("EnergyBalance.ResidualHigh site=%s residual=%s", site.slug, snapshot.residual_w)
+            logger.info(
+                "EnergyBalance.ResidualHigh site=%s residual=%s", site.slug, snapshot.residual_w
+            )
         if "possible_double_counting" in snapshot.flags:
             logger.warning("EnergyBalance.DoubleCountingSuspected site=%s", site.slug)
 

@@ -1,11 +1,14 @@
 """Probe Charge Amps RFID tags for remotestart."""
+
 import json
 import os
 import sys
 
 import httpx
 
-CP = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CHARGEAMPS_PROBE_CHARGER_ID", "")).strip()
+CP = (
+    sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CHARGEAMPS_PROBE_CHARGER_ID", "")
+).strip()
 if not CP:
     raise SystemExit("Pass charger id as argv[1] or set CHARGEAMPS_PROBE_CHARGER_ID")
 BASE = "https://my.charge.space"
@@ -28,9 +31,9 @@ for c in data.get("connectors", []):
     print("connector", json.dumps(c, indent=2)[:800])
 
 for path in [
-    f"/users/chargepoints/owned?expand=settings",
+    "/users/chargepoints/owned?expand=settings",
     f"/chargepoints/{CP}/rfidtags",
-    f"/users/rfidtags",
+    "/users/rfidtags",
 ]:
     try:
         resp = httpx.get(f"{BASE}/api{path}", headers=h, timeout=20)

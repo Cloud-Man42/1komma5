@@ -3,14 +3,13 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from energy_core.charging.override import (
     ALLOWED_OVERRIDE_HOURS,
+    BridgeChargerConfig,
     override_active,
     override_decision,
     override_until_from_hours,
 )
-from energy_core.charging.override import BridgeChargerConfig
 
 
 def test_allowed_override_hours():

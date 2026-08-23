@@ -131,7 +131,9 @@ class ChargeAmpsExternalController:
             raise RuntimeError("Connector settings unavailable in mock mode")
         return await self._adapter._client.get_connector_settings(force=True)
 
-    async def _request(self, method: str, path: str, *, json_body: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _request(
+        self, method: str, path: str, *, json_body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if self._adapter is None:
             raise RuntimeError("Direct request unavailable in mock mode")
         return await self._adapter._client._request(method, path, json_body=json_body)

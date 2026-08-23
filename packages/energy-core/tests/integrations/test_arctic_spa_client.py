@@ -1,7 +1,6 @@
 """Tests for Arctic Spa HTTP client."""
 
 import pytest
-
 from energy_core.integrations.arctic_spa.client import ArcticSpaApiError, ArcticSpaClient
 from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
 
@@ -42,5 +41,7 @@ async def test_unauthorized_error_type():
 
 
 def test_status_heater_from_filtering():
-    status = ArcticSpaStatus.from_api({"connected": True, "filter_status": "Filtering", "temperatureF": 98, "setpointF": 100})
+    status = ArcticSpaStatus.from_api(
+        {"connected": True, "filter_status": "Filtering", "temperatureF": 98, "setpointF": 100}
+    )
     assert status.heater_active is True

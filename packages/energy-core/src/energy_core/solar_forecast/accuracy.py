@@ -63,7 +63,9 @@ def summarize_accuracy(
     mae = sum(abs_errors) / len(abs_errors)
 
     mape_samples = [
-        e.percentage_error for e in evaluations if e.actual_energy_kwh >= min_energy_kwh and e.percentage_error is not None
+        e.percentage_error
+        for e in evaluations
+        if e.actual_energy_kwh >= min_energy_kwh and e.percentage_error is not None
     ]
     mape = sum(mape_samples) / len(mape_samples) if mape_samples else None
 

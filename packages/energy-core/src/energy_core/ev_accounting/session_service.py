@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter, MeterSnapshot, session_energy_from_meter
+from energy_core.chargers.meter_adapter import (
+    MeterSnapshot,
+    session_energy_from_meter,
+)
 from energy_core.db.ev_session_repo import EvChargingSessionRecord, EvChargingSessionRepository
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.ev_accounting.constants import CALCULATION_VERSION, DEFAULT_SAVINGS_BASELINE
@@ -93,7 +95,9 @@ class EVSessionService:
         interval_repo = EvChargingIntervalRepository(db)
         intervals = await interval_repo.list_for_session(active.id)
 
-        measured_kwh, quality = session_energy_from_meter(active.meter_start_kwh, meter.cumulative_kwh)
+        measured_kwh, quality = session_energy_from_meter(
+            active.meter_start_kwh, meter.cumulative_kwh
+        )
         if measured_kwh is None:
             measured_kwh = sum(i.charged_energy_kwh for i in intervals)
             quality = "ESTIMATED"
@@ -114,12 +118,16 @@ class EVSessionService:
 
         cost_calc = EVChargingCostCalculator()
         actual_cost = sum(i.actual_cost_sek for i in intervals)
-        reference_cost = sum(i.reference_cost_sek for i in intervals if i.reference_cost_sek is not None)
+        reference_cost = sum(
+            i.reference_cost_sek for i in intervals if i.reference_cost_sek is not None
+        )
         reference_cost = reference_cost if reference_cost > 0 else None
         savings = (reference_cost - actual_cost) if reference_cost is not None else None
         solar_contrib = sum(
             cost_calc.solar_contribution_sek(
-                EnergyAttribution(i.solar_direct_kwh, i.solar_battery_kwh, i.grid_battery_kwh, i.grid_direct_kwh),
+                EnergyAttribution(
+                    i.solar_direct_kwh, i.solar_battery_kwh, i.grid_battery_kwh, i.grid_direct_kwh
+                ),
                 grid_price_sek_kwh=i.electricity_price_sek_kwh,
             )
             for i in intervals

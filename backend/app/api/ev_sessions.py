@@ -173,7 +173,9 @@ async def get_ev_stats(
     session: AsyncSession = Depends(get_db_session),
 ) -> EvChargingStatsResponse:
     if period not in {"session", "day", "week", "month", "year", "all"}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid period")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid period"
+        )
 
     charger_repo = EvChargerRepository(session)
     await _get_charger_or_404(charger_repo, slug, charger_id)

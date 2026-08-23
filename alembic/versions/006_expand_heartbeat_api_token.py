@@ -1,14 +1,15 @@
 """Expand HeartBeat api_token column for JWT storage."""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "006_expand_heartbeat_api_token"
-down_revision: Union[str, None] = "005_ev_bridge_settings"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "005_ev_bridge_settings"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

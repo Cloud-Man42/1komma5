@@ -55,7 +55,9 @@ async def get_site_forecast(
     try:
         zone = ZoneInfo(site.timezone)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid site timezone: {site.timezone}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid site timezone: {site.timezone}"
+        ) from exc
     history = await reading_repo.list_financial_stats(
         site_id=site.id,
         period="day",
@@ -132,7 +134,9 @@ async def get_site_financial_stats(
     try:
         zone = ZoneInfo(site.timezone)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid site timezone: {site.timezone}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid site timezone: {site.timezone}"
+        ) from exc
     from_time = datetime(year, 1, 1, tzinfo=zone).astimezone(UTC) if year is not None else None
     to_time = datetime(year + 1, 1, 1, tzinfo=zone).astimezone(UTC) if year is not None else None
     stats = await reading_repo.list_financial_stats(
@@ -188,7 +192,9 @@ async def get_site_peaks(
     try:
         zone = ZoneInfo(site.timezone)
     except ZoneInfoNotFoundError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid site timezone: {site.timezone}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid site timezone: {site.timezone}"
+        ) from exc
     if year is not None:
         from_time = datetime(year, 1, 1, tzinfo=zone).astimezone(UTC)
         to_time = datetime(year + 1, 1, 1, tzinfo=zone).astimezone(UTC)

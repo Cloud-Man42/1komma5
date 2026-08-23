@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from energy_core.ev_accounting.constants import DEFAULT_SAVINGS_BASELINE
-from energy_core.ev_accounting.models import EnergyAttribution, IntervalCostResult, SiteEnergySample
+from energy_core.ev_accounting.models import EnergyAttribution, IntervalCostResult
 
 
 class EVChargingCostCalculator:
@@ -37,10 +37,12 @@ class EVChargingCostCalculator:
 
         reference: float | None = None
         savings: float | None = None
-        if baseline == DEFAULT_SAVINGS_BASELINE and price is not None:
-            reference = attribution.total_kwh * price
-            savings = reference - actual_cash
-        elif baseline == "AVERAGE_GRID_PRICE" and price is not None:
+        if (
+            baseline == DEFAULT_SAVINGS_BASELINE
+            and price is not None
+            or baseline == "AVERAGE_GRID_PRICE"
+            and price is not None
+        ):
             reference = attribution.total_kwh * price
             savings = reference - actual_cash
 
@@ -64,10 +66,17 @@ class EVChargingCostCalculator:
         return round(solar_kwh * grid_price_sek_kwh, 4)
 
     @staticmethod
-    def aggregate_session_costs(intervals: list[IntervalCostResult]) -> tuple[float, float, float | None, float | None]:
+    def aggregate_session_costs(
+        intervals: list[IntervalCostResult],
+    ) -> tuple[float, float, float | None, float | None]:
         actual = sum(i.actual_cash_cost_sek for i in intervals)
         opportunity = sum(i.opportunity_cost_sek for i in intervals)
         refs = [i.reference_cost_sek for i in intervals if i.reference_cost_sek is not None]
         reference = sum(refs) if refs else None
         savings = (reference - actual) if reference is not None else None
-        return round(actual, 2), round(opportunity, 2), round(reference, 2) if reference else None, round(savings, 2) if savings is not None else None
+        return (
+            round(actual, 2),
+            round(opportunity, 2),
+            round(reference, 2) if reference else None,
+            round(savings, 2) if savings is not None else None,
+        )

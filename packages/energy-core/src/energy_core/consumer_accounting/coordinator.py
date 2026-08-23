@@ -7,8 +7,16 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.consumer_accounting.aggregator import merge_interval_into_bucket, period_bounds, quality_percentages
-from energy_core.db.consumer_repo import ConsumerAggregateRepository, ConsumerIntervalRepository, ConsumerRepository
+from energy_core.consumer_accounting.aggregator import (
+    merge_interval_into_bucket,
+    period_bounds,
+    quality_percentages,
+)
+from energy_core.db.consumer_repo import (
+    ConsumerAggregateRepository,
+    ConsumerIntervalRepository,
+    ConsumerRepository,
+)
 from energy_core.db.models import SiteModel
 
 logger = logging.getLogger(__name__)
@@ -22,7 +30,9 @@ class ConsumerAccountingCoordinator:
             return 0
         consumer, _config = spa_row
         now = datetime.now(UTC)
-        await self._update_aggregates(db, consumer.id, consumer.timezone or site.timezone or "Europe/Stockholm", now)
+        await self._update_aggregates(
+            db, consumer.id, consumer.timezone or site.timezone or "Europe/Stockholm", now
+        )
         return 1
 
     async def _update_aggregates(

@@ -9,7 +9,11 @@ from typing import Any
 
 import httpx
 
-from energy_core.heartbeat_connection import CLOUD_HOST, build_heartbeat_api_url, HeartbeatConnectionType
+from energy_core.heartbeat_connection import (
+    CLOUD_HOST,
+    HeartbeatConnectionType,
+    build_heartbeat_api_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +95,9 @@ class HeartbeatClient:
         return data if isinstance(data, list) else []
 
     async def list_charging_modes(self, system_id: str) -> list[dict[str, Any]]:
-        data = await self._request("GET", f"/v1/sites/{system_id}/assets/evs/displayed-ev-charging-modes")
+        data = await self._request(
+            "GET", f"/v1/sites/{system_id}/assets/evs/displayed-ev-charging-modes"
+        )
         if isinstance(data, dict):
             return data.get("displayedEvChargingModes", [])
         return []

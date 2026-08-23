@@ -3,8 +3,9 @@
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
+    # Host side only (GH-46); postgres keeps listening on 5432 in the container.
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: energy
       POSTGRES_PASSWORD: energy

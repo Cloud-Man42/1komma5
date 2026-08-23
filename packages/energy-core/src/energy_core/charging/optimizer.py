@@ -109,7 +109,10 @@ class EvChargingOptimizer:
         if normalized_mode(mode) in PRICE_MODES:
             return self._optimize_price_target(state, config, now=now, mode=mode)
 
-        if uses_price_optimization(mode, override_active=False) or state.heartbeat_smart_charge_active:
+        if (
+            uses_price_optimization(mode, override_active=False)
+            or state.heartbeat_smart_charge_active
+        ):
             return self._optimize_smart_target(
                 state, config, now=now, mode=mode, solar_plan=solar_plan
             )
@@ -136,13 +139,17 @@ class EvChargingOptimizer:
             if self._solar_state.export_above_start_since is None:
                 self._solar_state.export_above_start_since = now
             self._solar_state.export_below_stop_since = None
-            if (now - self._solar_state.export_above_start_since).total_seconds() < config.solar_start_delay_seconds:
+            if (
+                now - self._solar_state.export_above_start_since
+            ).total_seconds() < config.solar_start_delay_seconds:
                 return OptimizerTarget(0.0, "solar_start_delay")
         elif export_w <= config.solar_stop_threshold_w:
             self._solar_state.export_above_start_since = None
             if self._solar_state.export_below_stop_since is None:
                 self._solar_state.export_below_stop_since = now
-            if (now - self._solar_state.export_below_stop_since).total_seconds() >= config.solar_stop_delay_seconds:
+            if (
+                now - self._solar_state.export_below_stop_since
+            ).total_seconds() >= config.solar_stop_delay_seconds:
                 self._reset_solar_delays()
                 return OptimizerTarget(0.0, "insufficient_export")
             return OptimizerTarget(0.0, "solar_stop_delay")
@@ -275,7 +282,9 @@ def _battery_blocks_ev(state: EnergyState, config: ChargingConfig) -> bool:
     power = state.battery_power_w
     if soc is None or power is None:
         return False
-    return soc < config.battery_low_soc_threshold and power > config.battery_charge_power_threshold_w
+    return (
+        soc < config.battery_low_soc_threshold and power > config.battery_charge_power_threshold_w
+    )
 
 
 def charging_urgency(
@@ -319,7 +328,9 @@ def _should_wait_for_solar_forecast(
     )
 
 
-def _deadline_from_departure(now: datetime, departure_time: str | None, timezone: str) -> datetime | None:
+def _deadline_from_departure(
+    now: datetime, departure_time: str | None, timezone: str
+) -> datetime | None:
     if not departure_time:
         return None
     try:
@@ -357,7 +368,9 @@ def _power_for_current(current_a: float, config: ChargingConfig) -> float:
     return current_a * config.nominal_voltage_v
 
 
-def _target_to_decision(target: OptimizerTarget, mode: str, config: ChargingConfig) -> ChargingDecision:
+def _target_to_decision(
+    target: OptimizerTarget, mode: str, config: ChargingConfig
+) -> ChargingDecision:
     if target.reason == "stale_data":
         return _decision("NONE", 0.0, None, target.reason, mode, skip_apply=True)
     if target.target_current_a <= 0:

@@ -66,12 +66,9 @@ def is_anomaly(
     coverage: float,
     solar_w_near_zero: bool,
 ) -> bool:
-    return (
-        coverage < MIN_COVERAGE_FRACTION
-        or (
-            baseline_kwh >= ANOMALY_BASELINE_MIN_KWH
-            and actual_kwh <= baseline_kwh * ANOMALY_RATIO_THRESHOLD
-        )
+    return coverage < MIN_COVERAGE_FRACTION or (
+        baseline_kwh >= ANOMALY_BASELINE_MIN_KWH
+        and actual_kwh <= baseline_kwh * ANOMALY_RATIO_THRESHOLD
     )
 
 

@@ -4,7 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 from energy_core.charging.config import ChargingConfig
 from energy_core.charging.signal_filter import FilteredEnergySignals
-from energy_core.charging.state_machine import SmartChargingRuntime, SmartChargingState, evaluate_smart_charging
+from energy_core.charging.state_machine import (
+    SmartChargingRuntime,
+    SmartChargingState,
+    evaluate_smart_charging,
+)
 
 
 def _config(**kwargs) -> ChargingConfig:
@@ -36,7 +40,9 @@ def _signals(**kwargs) -> FilteredEnergySignals:
 
 def test_paused_mode_stops_once():
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
-    runtime = SmartChargingRuntime(requested_current_a=12.0, state=SmartChargingState.CHARGING_STABLE)
+    runtime = SmartChargingRuntime(
+        requested_current_a=12.0, state=SmartChargingState.CHARGING_STABLE
+    )
     runtime, decision = evaluate_smart_charging(
         runtime=runtime,
         config=_config(),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -51,7 +51,9 @@ class ConsumerRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_spa_for_site(self, site_id: int) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel] | None:
+    async def get_spa_for_site(
+        self, site_id: int
+    ) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel] | None:
         result = await self._session.execute(
             select(EnergyConsumerModel, SpaDeviceConfigModel)
             .join(SpaDeviceConfigModel, SpaDeviceConfigModel.consumer_id == EnergyConsumerModel.id)
@@ -63,7 +65,9 @@ class ConsumerRepository:
         row = result.first()
         return row if row is None else (row[0], row[1])
 
-    async def get_spa_by_site_slug(self, slug: str) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel, SiteModel] | None:
+    async def get_spa_by_site_slug(
+        self, slug: str
+    ) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel, SiteModel] | None:
         result = await self._session.execute(
             select(EnergyConsumerModel, SpaDeviceConfigModel, SiteModel)
             .join(SiteModel, SiteModel.id == EnergyConsumerModel.site_id)
@@ -73,7 +77,9 @@ class ConsumerRepository:
         row = result.first()
         return None if row is None else (row[0], row[1], row[2])
 
-    async def get_or_create_spa(self, site: SiteModel) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel]:
+    async def get_or_create_spa(
+        self, site: SiteModel
+    ) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel]:
         existing = await self.get_spa_for_site(site.id)
         if existing is not None:
             return existing
@@ -93,7 +99,9 @@ class ConsumerRepository:
         await self._session.flush()
         return consumer, config
 
-    async def list_enabled_spa_consumers(self) -> list[tuple[EnergyConsumerModel, SpaDeviceConfigModel, SiteModel]]:
+    async def list_enabled_spa_consumers(
+        self,
+    ) -> list[tuple[EnergyConsumerModel, SpaDeviceConfigModel, SiteModel]]:
         result = await self._session.execute(
             select(EnergyConsumerModel, SpaDeviceConfigModel, SiteModel)
             .join(SiteModel, SiteModel.id == EnergyConsumerModel.site_id)
@@ -248,7 +256,10 @@ class ConsumerSampleRepository:
         result = await self._session.execute(
             select(func.count())
             .select_from(ConsumerSampleModel)
-            .where(ConsumerSampleModel.consumer_id == consumer_id, ConsumerSampleModel.recorded_at >= since)
+            .where(
+                ConsumerSampleModel.consumer_id == consumer_id,
+                ConsumerSampleModel.recorded_at >= since,
+            )
         )
         return int(result.scalar_one())
 
@@ -311,7 +322,11 @@ class ConsumerAggregateRepository:
             stmt = sqlite_insert(ConsumerAggregateModel).values(**kwargs)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["consumer_id", "granularity", "period_start"],
-                set_={k: v for k, v in kwargs.items() if k not in {"consumer_id", "granularity", "period_start"}},
+                set_={
+                    k: v
+                    for k, v in kwargs.items()
+                    if k not in {"consumer_id", "granularity", "period_start"}
+                },
             )
             await self._session.execute(stmt)
         else:
@@ -375,4 +390,8 @@ class ConsumerAggregateRepository:
             )
         )
         row = result.one()
-        return {"energy_kwh": float(row[0]), "actual_cost_sek": float(row[1]), "savings_sek": float(row[2])}
+        return {
+            "energy_kwh": float(row[0]),
+            "actual_cost_sek": float(row[1]),
+            "savings_sek": float(row[2]),
+        }

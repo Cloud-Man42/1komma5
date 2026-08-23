@@ -1,11 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.deps import get_db_session
 from app.schemas import (
     ChargeAmpsConfigResponse,
-    ChargingReadinessResponse,
     ChargerReadinessIssueResponse,
+    ChargingReadinessResponse,
     HeartbeatConfigResponse,
     HeartbeatConfigUpdateRequest,
     SiteHeartbeatMappingResponse,
@@ -20,6 +17,8 @@ from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.heartbeat_auth import HeartbeatAuthError
 from energy_core.heartbeat_config import build_heartbeat_connection_info
 from energy_core.heartbeat_connection import HeartbeatConnectionType
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["system"])
 
@@ -55,7 +54,9 @@ def _to_response(repo_record, sites, info) -> HeartbeatConfigResponse:
 
 
 @router.get("/system/heartbeat-config", response_model=HeartbeatConfigResponse)
-async def get_heartbeat_config(session: AsyncSession = Depends(get_db_session)) -> HeartbeatConfigResponse:
+async def get_heartbeat_config(
+    session: AsyncSession = Depends(get_db_session),
+) -> HeartbeatConfigResponse:
     repo = HeartbeatSettingsRepository(session)
     record = await repo.get_record()
     sites = await repo.list_site_mappings()
@@ -64,7 +65,9 @@ async def get_heartbeat_config(session: AsyncSession = Depends(get_db_session)) 
 
 
 @router.get("/system/chargeamps-config", response_model=ChargeAmpsConfigResponse)
-async def get_chargeamps_config(session: AsyncSession = Depends(get_db_session)) -> ChargeAmpsConfigResponse:
+async def get_chargeamps_config(
+    session: AsyncSession = Depends(get_db_session),
+) -> ChargeAmpsConfigResponse:
     repo = EvChargerRepository(session)
     charger_api_keys_configured = await repo.count_with_chargeamps_api_key()
     info = build_chargeamps_connection_info(
@@ -85,7 +88,9 @@ async def get_chargeamps_config(session: AsyncSession = Depends(get_db_session))
 
 
 @router.get("/system/charging-readiness", response_model=ChargingReadinessResponse)
-async def get_charging_readiness(session: AsyncSession = Depends(get_db_session)) -> ChargingReadinessResponse:
+async def get_charging_readiness(
+    session: AsyncSession = Depends(get_db_session),
+) -> ChargingReadinessResponse:
     repo = EvChargerRepository(session)
     chargers = await repo.list_bridge_enabled_with_sites()
     report = evaluate_charging_readiness(chargers)
@@ -145,9 +150,8 @@ async def update_heartbeat_config(
             ) from exc
 
     record = await repo.get_record()
-    should_refresh_token = (
-        payload.connection_type == HeartbeatConnectionType.CLOUD
-        and (password or (record.username and record.password_configured))
+    should_refresh_token = payload.connection_type == HeartbeatConnectionType.CLOUD and (
+        password or (record.username and record.password_configured)
     )
     if should_refresh_token:
         try:
@@ -167,7 +171,9 @@ async def update_heartbeat_config(
 
 
 @router.get("/system/integrations/spa-readiness", response_model=SpaReadinessResponse)
-async def get_spa_readiness(session: AsyncSession = Depends(get_db_session)) -> SpaReadinessResponse:
+async def get_spa_readiness(
+    session: AsyncSession = Depends(get_db_session),
+) -> SpaReadinessResponse:
     settings = get_settings()
     if not settings.arctic_spa_enabled:
         return SpaReadinessResponse(enabled=False)

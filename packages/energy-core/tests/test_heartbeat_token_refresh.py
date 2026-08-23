@@ -4,7 +4,6 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from energy_core.config import Settings
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.models import Base

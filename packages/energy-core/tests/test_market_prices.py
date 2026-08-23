@@ -9,7 +9,9 @@ def _price_node(amount: float) -> dict:
     return {"price": {"amount": amount}}
 
 
-def _v4_payload(*, timestamps: list[str], spot_prices: list[float], all_in_prices: list[float]) -> dict:
+def _v4_payload(
+    *, timestamps: list[str], spot_prices: list[float], all_in_prices: list[float]
+) -> dict:
     timeseries = {
         ts: {
             "marketPrice": spot,
@@ -44,8 +46,7 @@ def _v4_payload(*, timestamps: list[str], spot_prices: list[float], all_in_price
 def test_parse_v4_market_prices():
     now = datetime(2026, 8, 13, 18, tzinfo=UTC)
     timestamps = [
-        (now + timedelta(hours=offset)).isoformat().replace("+00:00", "Z")
-        for offset in range(3)
+        (now + timedelta(hours=offset)).isoformat().replace("+00:00", "Z") for offset in range(3)
     ]
     payload = _v4_payload(
         timestamps=timestamps,

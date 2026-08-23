@@ -11,10 +11,7 @@ from energy_core.charging.smart_schedule import (
 
 def _forecast(*prices: tuple[str, float]) -> tuple[tuple[datetime, float], ...]:
     base = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
-    return tuple(
-        (base + timedelta(hours=index), price)
-        for index, (_, price) in enumerate(prices)
-    )
+    return tuple((base + timedelta(hours=index), price) for index, (_, price) in enumerate(prices))
 
 
 def test_cheap_now_charges_immediately():

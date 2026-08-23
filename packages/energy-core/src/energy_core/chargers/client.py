@@ -147,7 +147,9 @@ class ChargeAmpsClient:
                     continue
                 if response.status_code in {401, 403}:
                     self._token = None
-                    raise ChargerApiError("AUTH_ERROR", "Charge Amps authentication failed", response.status_code)
+                    raise ChargerApiError(
+                        "AUTH_ERROR", "Charge Amps authentication failed", response.status_code
+                    )
                 if response.status_code >= 500:
                     last_error = ChargerApiError(
                         "CHARGER_OFFLINE",
@@ -163,7 +165,9 @@ class ChargeAmpsClient:
                     return {}
                 data = response.json()
                 if not isinstance(data, dict):
-                    raise ChargerApiError("INVALID_RESPONSE", "Unexpected Charge Amps response shape")
+                    raise ChargerApiError(
+                        "INVALID_RESPONSE", "Unexpected Charge Amps response shape"
+                    )
                 return data
             except httpx.TimeoutException as exc:
                 last_error = ChargerApiError("TIMEOUT", sanitize_error_message(str(exc)))
@@ -206,7 +210,9 @@ class ChargeAmpsClient:
                     json={"email": self._email, "password": self._password},
                 )
             if response.status_code in {401, 403}:
-                raise ChargerApiError("AUTH_ERROR", "Charge Amps login failed", response.status_code)
+                raise ChargerApiError(
+                    "AUTH_ERROR", "Charge Amps login failed", response.status_code
+                )
             response.raise_for_status()
             data = response.json()
             token = data.get("token") if isinstance(data, dict) else None

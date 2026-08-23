@@ -1,11 +1,14 @@
 """Probe Charge Amps user NFC tags and charging state."""
+
 import json
 import os
 import sys
 
 import httpx
 
-CP = (sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CHARGEAMPS_PROBE_CHARGER_ID", "")).strip()
+CP = (
+    sys.argv[1] if len(sys.argv) > 1 else os.environ.get("CHARGEAMPS_PROBE_CHARGER_ID", "")
+).strip()
 if not CP:
     raise SystemExit("Pass charger id as argv[1] or set CHARGEAMPS_PROBE_CHARGER_ID")
 BASE = "https://my.charge.space"
@@ -21,14 +24,20 @@ r = httpx.post(
 token = r.json().get("token", "")
 h = {"Authorization": f"Bearer {token}", "Origin": BASE}
 
-owned = httpx.get(f"{BASE}/api/users/chargepoints/owned?expand=settings", headers=h, timeout=20).json()
+owned = httpx.get(
+    f"{BASE}/api/users/chargepoints/owned?expand=settings", headers=h, timeout=20
+).json()
 for cp in owned:
     if cp.get("id") != CP:
         continue
     print("=== owned cp match ===")
     for key in sorted(cp.keys()):
         val = cp[key]
-        if "nfc" in key.lower() or "tag" in key.lower() or key in {"connectors", "id", "name", "ip"}:
+        if (
+            "nfc" in key.lower()
+            or "tag" in key.lower()
+            or key in {"connectors", "id", "name", "ip"}
+        ):
             print(key, val if key != "connectors" else "...")
     for c in cp.get("connectors", []):
         if c.get("connectorId") == 1:
@@ -56,5 +65,10 @@ data = httpx.get(f"{BASE}/api/chargepoints/{CP}", headers=h, timeout=20).json()
 c1 = next(c for c in data["connectors"] if c["connectorId"] == 1)
 print(
     "status fields:",
-    {k: c1.get(k) for k in c1 if "status" in k.lower() or k in {"isCharging", "ocppStatus", "mode", "remoteStartRequested"}},
+    {
+        k: c1.get(k)
+        for k in c1
+        if "status" in k.lower()
+        or k in {"isCharging", "ocppStatus", "mode", "remoteStartRequested"}
+    },
 )

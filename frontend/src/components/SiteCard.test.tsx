@@ -41,13 +41,19 @@ describe("SiteCard", () => {
 
 describe("EnergyChart mobile layout", () => {
   beforeEach(() => {
+    // Must be a constructible value, not an arrow function: recharts'
+    // ResponsiveContainer calls `new ResizeObserver(...)`, and an arrow
+    // function has no [[Construct]] slot, so `new` on it throws
+    // "is not a constructor". A class literal is used rather than
+    // `vi.fn(function () { ... })` because nothing in this file asserts
+    // against the observer's calls, so no spy capability is needed.
     vi.stubGlobal(
       "ResizeObserver",
-      vi.fn().mockImplementation(() => ({
-        observe: vi.fn(),
-        unobserve: vi.fn(),
-        disconnect: vi.fn(),
-      })),
+      class ResizeObserverStub {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
     );
     vi.stubGlobal(
       "matchMedia",

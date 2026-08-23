@@ -1,14 +1,15 @@
 """Add editable HeartBeat settings table."""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "003_heartbeat_settings"
-down_revision: Union[str, None] = "002_timescaledb"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "002_timescaledb"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -24,7 +25,9 @@ def upgrade() -> None:
         sa.Column("username", sa.String(length=255), nullable=False, server_default=""),
         sa.Column("password", sa.String(length=512), nullable=False, server_default=""),
         sa.Column("api_token", sa.String(length=1024), nullable=False, server_default=""),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.execute(

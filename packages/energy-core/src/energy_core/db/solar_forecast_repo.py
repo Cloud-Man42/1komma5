@@ -185,7 +185,9 @@ class SolarWeatherCacheRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_latest_valid(self, site_id: int, *, now: datetime | None = None) -> WeatherForecast | None:
+    async def get_latest_valid(
+        self, site_id: int, *, now: datetime | None = None
+    ) -> WeatherForecast | None:
         now = now or datetime.now(UTC)
         stmt = (
             select(SolarWeatherCacheModel)
@@ -197,7 +199,9 @@ class SolarWeatherCacheRepository:
         row = await self._session.scalar(stmt)
         if row is None:
             return None
-        return _weather_from_json(site_id, row.payload_json, row.fetched_at, row.provider, source="cache")
+        return _weather_from_json(
+            site_id, row.payload_json, row.fetched_at, row.provider, source="cache"
+        )
 
     async def save(self, weather: WeatherForecast, *, valid_until: datetime) -> None:
         payload = _weather_to_json(weather)
@@ -286,8 +290,12 @@ class SolarForecastRepository:
             )
         )
         for run_id in old_runs:
-            await self._session.execute(delete(SolarForecastPointModel).where(SolarForecastPointModel.run_id == run_id))
-            await self._session.execute(delete(SolarForecastRunModel).where(SolarForecastRunModel.id == run_id))
+            await self._session.execute(
+                delete(SolarForecastPointModel).where(SolarForecastPointModel.run_id == run_id)
+            )
+            await self._session.execute(
+                delete(SolarForecastRunModel).where(SolarForecastRunModel.id == run_id)
+            )
 
 
 class SolarPerformanceProfileRepository:
@@ -318,7 +326,9 @@ class SolarPerformanceProfileRepository:
             row = SolarSitePerformanceProfileModel(site_id=profile.site_id)
             self._session.add(row)
         row.global_factor = profile.global_factor
-        row.seasonal_factors_json = json.dumps({str(k): v for k, v in profile.seasonal_factors.items()})
+        row.seasonal_factors_json = json.dumps(
+            {str(k): v for k, v in profile.seasonal_factors.items()}
+        )
         row.hour_factors_json = json.dumps({str(k): v for k, v in profile.hour_factors.items()})
         row.weather_factors_json = json.dumps(profile.weather_factors)
         row.sample_count = profile.sample_count
@@ -440,7 +450,9 @@ def _weather_from_json(
     )
 
 
-def _forecast_from_models(run: SolarForecastRunModel, points: list[SolarForecastPointModel]) -> SolarForecast:
+def _forecast_from_models(
+    run: SolarForecastRunModel, points: list[SolarForecastPointModel]
+) -> SolarForecast:
     from energy_core.solar_forecast.physical import baseline_energy_kwh
 
     today_pts = points
@@ -526,7 +538,9 @@ class SolarForecastObservationRepository:
             SolarForecastObservationModel,
             (observation.site_id, observation.forecast_date),
         )
-        hourly_json = json.dumps(observation.cloud_cover_hourly) if observation.cloud_cover_hourly else None
+        hourly_json = (
+            json.dumps(observation.cloud_cover_hourly) if observation.cloud_cover_hourly else None
+        )
         now = datetime.now(UTC)
         if row is None:
             self._session.add(
@@ -613,7 +627,9 @@ class SolarForecastObservationRepository:
         rows = await self._session.scalars(stmt)
         return [_observation_to_domain(r) for r in rows]
 
-    async def list_training_eligible(self, site_id: int, *, days: int = 90) -> list[SolarForecastObservation]:
+    async def list_training_eligible(
+        self, site_id: int, *, days: int = 90
+    ) -> list[SolarForecastObservation]:
         since = datetime.now(UTC).date().fromordinal(datetime.now(UTC).date().toordinal() - days)
         stmt = (
             select(SolarForecastObservationModel)
@@ -697,7 +713,9 @@ class SolarForecastModelProfileRepository:
         row.improvement_pct_30d = profile.improvement_pct_30d
         row.correction_factor = profile.correction_factor
         row.confidence_score = profile.confidence_score
-        row.seasonal_factors_json = json.dumps({str(k): v for k, v in profile.seasonal_factors.items()})
+        row.seasonal_factors_json = json.dumps(
+            {str(k): v for k, v in profile.seasonal_factors.items()}
+        )
         row.last_training_at = profile.last_training_at
         row.last_evaluation_at = profile.last_evaluation_at
         row.updated_at = profile.updated_at or now

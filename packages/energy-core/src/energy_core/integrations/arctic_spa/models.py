@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-def fahrenheit_to_celsius(value: float | int | None) -> float | None:
+def fahrenheit_to_celsius(value: float | None) -> float | None:
     if value is None:
         return None
     return round((float(value) - 32.0) * 5.0 / 9.0, 2)

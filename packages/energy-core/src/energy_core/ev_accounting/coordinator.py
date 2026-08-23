@@ -45,7 +45,9 @@ class EVAccountingCoordinator:
         if live_overview:
             parsed = parse_live_overview(live_overview)
             duration_hours = 60.0 / 3600.0  # ~1 min aligned to collector
-            price = await self._current_price(db, site.id, is_sqlite, site.fallback_purchase_price_sek_kwh)
+            price = await self._current_price(
+                db, site.id, is_sqlite, site.fallback_purchase_price_sek_kwh
+            )
             sample = SiteEnergySample(
                 pv_power_w=parsed.get("pv_power_w") or 0.0,
                 house_consumption_w=parsed.get("home_consumption_w") or 0.0,
@@ -57,7 +59,9 @@ class EVAccountingCoordinator:
                 electricity_price_sek_kwh=price,
                 duration_hours=duration_hours,
             )
-            await self._sampler.sample_site_ledger(db, site=site, sample=sample, is_sqlite=is_sqlite)
+            await self._sampler.sample_site_ledger(
+                db, site=site, sample=sample, is_sqlite=is_sqlite
+            )
 
         charger_repo = EvChargerRepository(db)
         chargers = await charger_repo.list_for_site(site.id)
@@ -65,7 +69,9 @@ class EVAccountingCoordinator:
             if not charger.chargeamp_charger_id:
                 continue
             try:
-                processed += await self._process_charger(db, charger, site, live_overview, is_sqlite)
+                processed += await self._process_charger(
+                    db, charger, site, live_overview, is_sqlite
+                )
             except Exception:
                 logger.exception("EV accounting failed charger_id=%s", charger.id)
         return processed

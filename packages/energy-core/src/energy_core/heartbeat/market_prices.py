@@ -45,7 +45,9 @@ def _legacy_points(data: dict[str, Any]) -> tuple[float | None, tuple[MarketPric
         for point in series:
             if not isinstance(point, dict):
                 continue
-            ts = _parse_dt(str(point.get("timestamp") or point.get("time") or point.get("from") or ""))
+            ts = _parse_dt(
+                str(point.get("timestamp") or point.get("time") or point.get("from") or "")
+            )
             price = point.get("price") or point.get("value")
             if ts is None or not isinstance(price, (int, float)):
                 continue

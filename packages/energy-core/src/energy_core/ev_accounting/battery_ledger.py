@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
-from energy_core.ev_accounting.models import BatteryDischargeSplit, BatteryLedgerState, SiteEnergySample
+from energy_core.ev_accounting.models import (
+    BatteryDischargeSplit,
+    BatteryLedgerState,
+    SiteEnergySample,
+)
 
 
 class BatteryEnergyLedgerService:
@@ -74,11 +76,17 @@ class BatteryEnergyLedgerService:
 
         solar_out = actual_discharge * solar_fraction
         grid_out = actual_discharge * grid_fraction
-        grid_cost_out = ledger.grid_energy_cost_sek * (grid_out / ledger.grid_energy_kwh) if ledger.grid_energy_kwh > 0 else 0.0
+        grid_cost_out = (
+            ledger.grid_energy_cost_sek * (grid_out / ledger.grid_energy_kwh)
+            if ledger.grid_energy_kwh > 0
+            else 0.0
+        )
 
         new_state = BatteryLedgerState(
             solar_energy_kwh=max(0.0, ledger.solar_energy_kwh - solar_out),
             grid_energy_kwh=max(0.0, ledger.grid_energy_kwh - grid_out),
             grid_energy_cost_sek=max(0.0, ledger.grid_energy_cost_sek - grid_cost_out),
         )
-        return new_state, BatteryDischargeSplit(solar_kwh=solar_out, grid_kwh=grid_out, grid_cost_sek=grid_cost_out)
+        return new_state, BatteryDischargeSplit(
+            solar_kwh=solar_out, grid_kwh=grid_out, grid_cost_sek=grid_cost_out
+        )

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.deps import get_db_session
 from energy_core.db.models import EvChargerModel
 from energy_core.virtual_evse.device_profile import VirtualEvseDeviceProfile
@@ -17,6 +13,9 @@ from energy_core.virtual_evse.semp_payloads import (
     build_device_status,
 )
 from energy_core.virtual_evse.store import GLOBAL_VIRTUAL_EVSE_STORE
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["semp"])
 
@@ -65,18 +64,26 @@ async def get_semp_device(device_id: str, session: AsyncSession = Depends(get_db
 
 
 @router.get("/semp/{device_id}/DeviceStatus")
-async def get_semp_device_status(device_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_semp_device_status(
+    device_id: str, session: AsyncSession = Depends(get_db_session)
+) -> dict:
     charger = await _charger_for_device(session, device_id)
     state = _resolve_state(charger)
     if state is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Virtual EVSE state unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Virtual EVSE state unavailable"
+        )
     return build_device_status(state)
 
 
 @router.get("/semp/{device_id}/Device2EM")
-async def get_semp_device2em(device_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
+async def get_semp_device2em(
+    device_id: str, session: AsyncSession = Depends(get_db_session)
+) -> dict:
     charger = await _charger_for_device(session, device_id)
     state = _resolve_state(charger)
     if state is None:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Virtual EVSE state unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Virtual EVSE state unavailable"
+        )
     return build_device2em(state)

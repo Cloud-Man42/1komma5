@@ -27,7 +27,9 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def build_chargeamps_connection_info(*, charger_api_keys_configured: int = 0) -> ChargeAmpsConnectionInfo:
+def build_chargeamps_connection_info(
+    *, charger_api_keys_configured: int = 0
+) -> ChargeAmpsConnectionInfo:
     provider = os.getenv("CHARGEAMPS_PROVIDER", "external").strip().lower() or "external"
     mock = _env_bool("CHARGEAMPS_MOCK", default=True)
     env_api_key_configured = bool(os.getenv("CHARGEAMPS_API_KEY", "").strip())
@@ -40,11 +42,15 @@ def build_chargeamps_connection_info(*, charger_api_keys_configured: int = 0) ->
     if mock:
         notes.append("CHARGEAMPS_MOCK är aktiv — ingen riktig Halo-styrning.")
     if effective_provider == "external" and not api_key_configured:
-        notes.append("CHARGEAMPS_API_KEY saknas i miljövariabler och ingen per-laddbox-nyckel är sparad.")
+        notes.append(
+            "CHARGEAMPS_API_KEY saknas i miljövariabler och ingen per-laddbox-nyckel är sparad."
+        )
     if effective_provider == "web" and (not email_configured or not password_configured):
         notes.append("CHARGEAMPS_EMAIL/PASSWORD saknas — web-API kan inte autentisera.")
     if provider == "web" and api_key_configured and effective_provider == "external":
-        notes.append("Per-laddbox API-nyckel används — External API har företräde framför web-provider.")
+        notes.append(
+            "Per-laddbox API-nyckel används — External API har företräde framför web-provider."
+        )
 
     if mock:
         ready = False

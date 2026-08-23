@@ -3,6 +3,7 @@ name = "energy-backend"
 version = "0.1.0"
 description = "FastAPI backend for energy monitoring"
 requires-python = ">=3.12"
+license = "Apache-2.0"
 dependencies = [
     "energy-core",
     "fastapi>=0.115",

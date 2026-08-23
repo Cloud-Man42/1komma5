@@ -87,7 +87,9 @@ async def get_charger_manufacturer(manufacturer_id: str) -> ChargerManufacturerR
     )
 
 
-@router.get("/manufacturers/{manufacturer_id}/models", response_model=list[ChargerCatalogModelResponse])
+@router.get(
+    "/manufacturers/{manufacturer_id}/models", response_model=list[ChargerCatalogModelResponse]
+)
 async def list_charger_models(manufacturer_id: str) -> list[ChargerCatalogModelResponse]:
     if get_manufacturer(manufacturer_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manufacturer not found")
@@ -98,11 +100,15 @@ async def list_charger_models(manufacturer_id: str) -> list[ChargerCatalogModelR
     "/manufacturers/{manufacturer_id}/models/{model_id}",
     response_model=ChargerModelDetailResponse,
 )
-async def get_charger_model_detail(manufacturer_id: str, model_id: str) -> ChargerModelDetailResponse:
+async def get_charger_model_detail(
+    manufacturer_id: str, model_id: str
+) -> ChargerModelDetailResponse:
     model = get_model(manufacturer_id, model_id)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model not found")
-    methods = [_method_response(method) for method in list_integration_methods(manufacturer_id, model_id)]
+    methods = [
+        _method_response(method) for method in list_integration_methods(manufacturer_id, model_id)
+    ]
     return ChargerModelDetailResponse(
         model=_model_response(model),
         integration_methods=methods,

@@ -1,7 +1,7 @@
 import pytest
-from datetime import UTC, datetime
-
-from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRecord, HeartbeatSettingsRepository
+from energy_core.db.heartbeat_settings_repo import (
+    HeartbeatSettingsRecord,
+)
 from energy_core.heartbeat_config import build_heartbeat_connection_info
 from energy_core.heartbeat_connection import (
     HeartbeatConnectionType,
@@ -9,10 +9,6 @@ from energy_core.heartbeat_connection import (
     connection_type_label,
 )
 from energy_core.providers.onekommafive import HeartbeatRuntimeConfig, OneKommaFiveHeartbeatProvider
-from energy_core.providers.mock import MockHeartbeatProvider
-from energy_core.domain import RawEnergyReading
-from energy_core.config import HeartbeatProviderKind, Settings
-from energy_core.normalization import normalize_reading
 
 
 def _record(**kwargs) -> HeartbeatSettingsRecord:
@@ -67,7 +63,11 @@ def test_heartbeat_connection_info_mock():
 
 def test_heartbeat_connection_info_cloud_not_configured():
     info = build_heartbeat_connection_info(
-        _record(connection_type="cloud", host="heartbeat.1komma5grad.com", api_url="https://heartbeat.1komma5grad.com/api"),
+        _record(
+            connection_type="cloud",
+            host="heartbeat.1komma5grad.com",
+            api_url="https://heartbeat.1komma5grad.com/api",
+        ),
         [],
     )
     assert info.implementation_status == "not_configured"

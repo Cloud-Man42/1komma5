@@ -89,7 +89,9 @@ class EvChargerRepository:
 
     async def list_for_site(self, site_id: int) -> list[EvChargerModel]:
         result = await self._session.scalars(
-            select(EvChargerModel).where(EvChargerModel.site_id == site_id).order_by(EvChargerModel.name)
+            select(EvChargerModel)
+            .where(EvChargerModel.site_id == site_id)
+            .order_by(EvChargerModel.name)
         )
         return list(result)
 
@@ -355,7 +357,9 @@ class EvChargerRepository:
         if grid_deadband_w is not None:
             charger.grid_deadband_w = grid_deadband_w
         if minimum_current_change_interval_seconds is not None:
-            charger.minimum_current_change_interval_seconds = minimum_current_change_interval_seconds
+            charger.minimum_current_change_interval_seconds = (
+                minimum_current_change_interval_seconds
+            )
         if max_current_increase_per_step_a is not None:
             charger.max_current_increase_per_step_a = max_current_increase_per_step_a
         if max_current_decrease_per_step_a is not None:

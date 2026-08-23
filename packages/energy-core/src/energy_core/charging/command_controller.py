@@ -66,7 +66,11 @@ class ChargingCommandController:
         try:
             status = await self._adapter.get_status()
             if not status.connected:
-                current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
+                current = (
+                    self._anti_flapping.last_command_current_a
+                    or self._anti_flapping.last_applied_current_a
+                    or 0.0
+                )
                 return CommandApplyResult(
                     applied=False,
                     applied_current_a=current,
@@ -75,7 +79,11 @@ class ChargingCommandController:
                     error_code="CHARGER_OFFLINE",
                 )
             if not status.vehicle_connected and requested > 0:
-                current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
+                current = (
+                    self._anti_flapping.last_command_current_a
+                    or self._anti_flapping.last_applied_current_a
+                    or 0.0
+                )
                 return CommandApplyResult(
                     applied=False,
                     applied_current_a=current,
@@ -95,11 +103,7 @@ class ChargingCommandController:
                         reason="already_stopped",
                         charger_status=status,
                     )
-                if (
-                    previous_command is not None
-                    and previous_command <= 0
-                    and status.charging
-                ):
+                if previous_command is not None and previous_command <= 0 and status.charging:
                     await self._adapter.stop_charging()
                     record_applied(self._anti_flapping, 0.0, now=now)
                     return CommandApplyResult(
@@ -109,7 +113,11 @@ class ChargingCommandController:
                         charger_status=status,
                     )
 
-            if requested > 0 and previous_command is not None and abs(previous_command - requested) < 0.01:
+            if (
+                requested > 0
+                and previous_command is not None
+                and abs(previous_command - requested) < 0.01
+            ):
                 if status.charging:
                     return CommandApplyResult(
                         applied=False,
@@ -162,7 +170,11 @@ class ChargingCommandController:
                 charger_status=status,
             )
         except ChargerApiError as exc:
-            current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
+            current = (
+                self._anti_flapping.last_command_current_a
+                or self._anti_flapping.last_applied_current_a
+                or 0.0
+            )
             logger.warning("charging command failed code=%s", exc.code)
             return CommandApplyResult(
                 applied=False,

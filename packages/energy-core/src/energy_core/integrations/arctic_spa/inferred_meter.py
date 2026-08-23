@@ -74,7 +74,9 @@ class InferredArcticSpaMeter:
     def _power_from_status(self, status: ArcticSpaStatus | None) -> float:
         if status is None or not status.connected:
             return 0.0
-        return min(sum(self._component_breakdown(status).values()), self.profiles.max_plausible_power_w)
+        return min(
+            sum(self._component_breakdown(status).values()), self.profiles.max_plausible_power_w
+        )
 
     def _component_breakdown(self, status: ArcticSpaStatus) -> dict[str, float]:
         breakdown: dict[str, float] = {}

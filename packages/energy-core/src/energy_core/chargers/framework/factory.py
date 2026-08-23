@@ -52,7 +52,9 @@ class ChargerAdapterFactory:
 def configuration_from_model(charger: EvChargerModel) -> ChargerConfiguration:
     manufacturer_id = charger.manufacturer_id or _legacy_manufacturer_id(charger.manufacturer)
     model_id = charger.model_id or _legacy_model_id(charger.model)
-    integration_method = charger.integration_method or _legacy_integration_method(charger.control_source)
+    integration_method = charger.integration_method or _legacy_integration_method(
+        charger.control_source
+    )
     connection_settings = _parse_connection_settings(charger.connection_settings)
     external_id = (
         connection_settings.get("charger_id")
@@ -112,7 +114,10 @@ def _build_charge_amps(config: ChargerConfiguration) -> ChargerAdapter:
         max_current_a=config.max_current_a,
         phases=config.phases,
     )
-    from energy_core.chargers.charge_amps import ChargeAmpsExternalController, MockChargeAmpsController
+    from energy_core.chargers.charge_amps import (
+        ChargeAmpsExternalController,
+        MockChargeAmpsController,
+    )
 
     if isinstance(controller, ChargeAmpsExternalController) and controller._adapter is not None:
         inner = controller._adapter

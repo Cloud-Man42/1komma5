@@ -55,7 +55,9 @@ class ArcticSpaService:
                 success=True,
                 spa_found=True,
                 spa_online=status.connected,
-                message="Anslutning lyckades" if status.connected else "Spa hittades men är offline",
+                message="Anslutning lyckades"
+                if status.connected
+                else "Spa hittades men är offline",
                 last_update=now,
                 masked_api_key=masked,
             )

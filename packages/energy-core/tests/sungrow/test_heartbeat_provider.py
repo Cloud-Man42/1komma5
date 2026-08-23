@@ -1,6 +1,6 @@
 """Tests for Sungrow Heartbeat proxy mapper."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from energy_core.sungrow.heartbeat_provider import map_heartbeat_to_sungrow
 

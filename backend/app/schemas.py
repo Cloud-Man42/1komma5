@@ -596,7 +596,9 @@ class HeartbeatConfigUpdateRequest(BaseModel):
 
     @field_validator("connection_type", mode="before")
     @classmethod
-    def normalize_connection_type(cls, value: str | HeartbeatConnectionType) -> HeartbeatConnectionType:
+    def normalize_connection_type(
+        cls, value: str | HeartbeatConnectionType
+    ) -> HeartbeatConnectionType:
         if isinstance(value, HeartbeatConnectionType):
             return value
         return HeartbeatConnectionType(str(value).lower())

@@ -21,7 +21,9 @@ def test_anti_flapping_hysteresis():
 
 def test_min_interval_blocks_change():
     now = datetime.now(UTC)
-    state = AntiFlappingState(last_applied_current_a=8.0, last_change_at=now - timedelta(seconds=10))
+    state = AntiFlappingState(
+        last_applied_current_a=8.0, last_change_at=now - timedelta(seconds=10)
+    )
     config = AntiFlappingConfig(min_change_interval_seconds=60, current_hysteresis_a=0)
     apply_ok, _, reason = should_apply_current(12.0, state, config, now=now)
     assert apply_ok is False

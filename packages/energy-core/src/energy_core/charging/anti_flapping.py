@@ -29,7 +29,10 @@ def should_apply_current(
     now = now or datetime.now(UTC)
     requested_a = max(0.0, requested_a)
 
-    if state.last_command_current_a is not None and abs(state.last_command_current_a - requested_a) < 0.01:
+    if (
+        state.last_command_current_a is not None
+        and abs(state.last_command_current_a - requested_a) < 0.01
+    ):
         return False, state.last_applied_current_a or 0.0, "duplicate_command"
 
     if state.last_applied_current_a is not None:
@@ -45,7 +48,9 @@ def should_apply_current(
     return True, requested_a, "apply"
 
 
-def record_applied(state: AntiFlappingState, current_a: float, *, now: datetime | None = None) -> None:
+def record_applied(
+    state: AntiFlappingState, current_a: float, *, now: datetime | None = None
+) -> None:
     now = now or datetime.now(UTC)
     state.last_applied_current_a = current_a
     state.last_command_current_a = current_a

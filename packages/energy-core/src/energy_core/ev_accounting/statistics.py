@@ -54,7 +54,9 @@ class EVStatisticsService:
             to_time=period_to,
             statuses=("COMPLETED", "ESTIMATED", "INCOMPLETE"),
         )
-        return self._aggregate(sessions, period=period, period_from=period_from, period_to=period_to)
+        return self._aggregate(
+            sessions, period=period, period_from=period_from, period_to=period_to
+        )
 
     @staticmethod
     def _default_from(period: Period, to_time: datetime) -> datetime:

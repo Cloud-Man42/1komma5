@@ -31,7 +31,9 @@ def clamp_factor(value: float) -> float:
     return max(MIN_CORRECTION_FACTOR, min(MAX_CORRECTION_FACTOR, value))
 
 
-def build_profile(samples: list[PerformanceSample], *, now: datetime | None = None) -> SitePerformanceProfile:
+def build_profile(
+    samples: list[PerformanceSample], *, now: datetime | None = None
+) -> SitePerformanceProfile:
     now = now or datetime.now(UTC)
     if not samples:
         return SitePerformanceProfile(site_id=0, sample_count=0, updated_at=now)
@@ -57,9 +59,15 @@ def build_profile(samples: list[PerformanceSample], *, now: datetime | None = No
     return SitePerformanceProfile(
         site_id=site_id,
         global_factor=clamp_factor(global_factor),
-        seasonal_factors={m: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for m, v in seasonal.items()},
-        hour_factors={h: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for h, v in hourly.items()},
-        weather_factors={k: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for k, v in weather.items()},
+        seasonal_factors={
+            m: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for m, v in seasonal.items()
+        },
+        hour_factors={
+            h: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for h, v in hourly.items()
+        },
+        weather_factors={
+            k: clamp_factor(shrink_factor(_weighted_mean(v), len(v))) for k, v in weather.items()
+        },
         sample_count=len(samples),
         updated_at=now,
     )

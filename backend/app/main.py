@@ -1,16 +1,27 @@
-from contextlib import asynccontextmanager
 import logging
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-
-from app.api import chargers_catalog, dashboard, ev_chargers, ev_sessions, prices, readings, semp, sites, solar_forecast, spa, system
+from app.api import (
+    chargers_catalog,
+    dashboard,
+    ev_chargers,
+    ev_sessions,
+    prices,
+    readings,
+    semp,
+    sites,
+    solar_forecast,
+    spa,
+    system,
+)
 from app.deps import set_session_factory
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.config import Settings, get_settings
 from energy_core.db.session import create_engine, create_session_factory
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +44,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or get_settings()
-    app = FastAPI(title="EMIC API", description="Energy Monitoring In a Cloud", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(
+        title="EMIC API",
+        description="Energy Monitoring In a Cloud",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
     app.state.settings = resolved_settings
 
     app.add_middleware(

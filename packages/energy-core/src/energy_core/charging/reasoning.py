@@ -165,7 +165,9 @@ def build_energy_reasoning(
         charging_active=charging_active,
         charging_mode=mode,
         heartbeat_charging_mode=energy.heartbeat_charging_mode if energy else None,
-        ev_charge_from_grid_recommended=bool(energy.ev_charge_from_grid_recommended) if energy else False,
+        ev_charge_from_grid_recommended=bool(energy.ev_charge_from_grid_recommended)
+        if energy
+        else False,
         ev_target_power_w=energy.ev_target_power_w if energy else None,
         pv_power_w=energy.pv_power_w if energy else None,
         grid_import_w=energy.grid_import_w if energy else None,
@@ -272,9 +274,13 @@ def _build_steps(
 
     if solar_plan is not None:
         if solar_plan.solar_first:
-            steps.append("Solplan: solel prioriteras — nätladdning väntar tills deadline närmar sig.")
+            steps.append(
+                "Solplan: solel prioriteras — nätladdning väntar tills deadline närmar sig."
+            )
         else:
-            steps.append("Solplan: för lite solel väntas — nätladdning planeras vid billiga timmar.")
+            steps.append(
+                "Solplan: för lite solel väntas — nätladdning planeras vid billiga timmar."
+            )
 
     if active_optimizations:
         steps.append(f"Aktiva Heartbeat-optimeringar: {', '.join(active_optimizations)}.")
@@ -315,7 +321,9 @@ def _price_wait_step(reason: str) -> str:
     return labels.get(reason, f"Prisregel säger vänta ({reason}).")
 
 
-def parse_active_optimizations(items: list[dict[str, Any]] | None, *, now: datetime | None = None) -> tuple[str, ...]:
+def parse_active_optimizations(
+    items: list[dict[str, Any]] | None, *, now: datetime | None = None
+) -> tuple[str, ...]:
     if not items:
         return ()
     now = now or datetime.now(UTC)
@@ -329,9 +337,7 @@ def parse_active_optimizations(items: list[dict[str, Any]] | None, *, now: datet
         if start and end:
             if start <= now <= end:
                 active.append(event_type)
-        elif start and start <= now:
-            active.append(event_type)
-        elif start is None and end is None:
+        elif start and start <= now or start is None and end is None:
             active.append(event_type)
     return tuple(active)
 
@@ -387,7 +393,9 @@ async def load_energy_reasoning_for_charger(
             )
             active_optimizations = parse_active_optimizations(items, now=now)
         except Exception:
-            logger.debug("energy reasoning heartbeat fetch failed site=%s", site.slug, exc_info=True)
+            logger.debug(
+                "energy reasoning heartbeat fetch failed site=%s", site.slug, exc_info=True
+            )
 
     settings = get_settings()
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)

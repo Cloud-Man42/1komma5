@@ -52,7 +52,9 @@ def parse_live_overview(data: dict[str, Any]) -> dict[str, Any]:
         ev_power = _power_value((ev_chargers[0] or {}).get("power"))
     if ev_power is None:
         aggregated = hero.get("evChargersAggregated") or data.get("evChargersAggregated") or {}
-        ev_power = _power_value(aggregated.get("power") if isinstance(aggregated, dict) else aggregated)
+        ev_power = _power_value(
+            aggregated.get("power") if isinstance(aggregated, dict) else aggregated
+        )
 
     battery_power = _power_value(battery.get("power"))
     battery_soc = battery.get("stateOfCharge")
@@ -67,7 +69,9 @@ def parse_live_overview(data: dict[str, Any]) -> dict[str, Any]:
     grid_import = _power_value(hero.get("gridConsumption"))
     grid_export = _power_value(hero.get("gridFeedIn"))
 
-    home_consumption_w = _power_value(household.get("power") if isinstance(household, dict) else household)
+    home_consumption_w = _power_value(
+        household.get("power") if isinstance(household, dict) else household
+    )
     if home_consumption_w is None and isinstance(household, dict):
         home_consumption_w = _power_value(household)
 

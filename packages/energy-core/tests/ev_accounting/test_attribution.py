@@ -53,7 +53,9 @@ def test_c_solar_battery():
 
 
 def test_d_grid_battery():
-    ledger = BatteryLedgerState(solar_energy_kwh=0.0, grid_energy_kwh=10.0, grid_energy_cost_sek=5.0)
+    ledger = BatteryLedgerState(
+        solar_energy_kwh=0.0, grid_energy_kwh=10.0, grid_energy_cost_sek=5.0
+    )
     service = BatteryEnergyLedgerService()
     _, split = service._apply_discharge(ledger, 4.0)
     engine = EnergyAttributionEngine()

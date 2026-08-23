@@ -55,14 +55,20 @@ def _raw_signals(state: EnergyState) -> FilteredEnergySignals:
     )
 
 
-def _blend(previous: FilteredEnergySignals, current: FilteredEnergySignals, alpha: float) -> FilteredEnergySignals:
+def _blend(
+    previous: FilteredEnergySignals, current: FilteredEnergySignals, alpha: float
+) -> FilteredEnergySignals:
     return FilteredEnergySignals(
         grid_import_w=_ewma(previous.grid_import_w, current.grid_import_w, alpha),
         grid_export_w=_ewma(previous.grid_export_w, current.grid_export_w, alpha),
         pv_power_w=_ewma(previous.pv_power_w, current.pv_power_w, alpha),
         home_consumption_w=_ewma(previous.home_consumption_w, current.home_consumption_w, alpha),
-        battery_charge_power_w=_ewma(previous.battery_charge_power_w, current.battery_charge_power_w, alpha),
-        battery_discharge_power_w=_ewma(previous.battery_discharge_power_w, current.battery_discharge_power_w, alpha),
+        battery_charge_power_w=_ewma(
+            previous.battery_charge_power_w, current.battery_charge_power_w, alpha
+        ),
+        battery_discharge_power_w=_ewma(
+            previous.battery_discharge_power_w, current.battery_discharge_power_w, alpha
+        ),
     )
 
 

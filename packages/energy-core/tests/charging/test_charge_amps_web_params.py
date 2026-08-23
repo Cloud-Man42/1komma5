@@ -1,7 +1,6 @@
 """Tests for Charge Amps current parameter formatting."""
 
 import pytest
-
 from energy_core.chargers.charge_amps_web import _current_param
 
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "020_solar_forecast_engine"
 down_revision = "019_smart_charging_state"
@@ -15,7 +15,9 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "solar_site_configurations",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("latitude", sa.Float(), nullable=True),
         sa.Column("longitude", sa.Float(), nullable=True),
         sa.Column("installed_peak_power_kw", sa.Float(), nullable=True),
@@ -31,7 +33,9 @@ def upgrade() -> None:
     )
     op.create_table(
         "solar_weather_cache",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("fetched_at", sa.DateTime(timezone=True), primary_key=True),
         sa.Column("provider", sa.String(length=64), nullable=False, server_default="open-meteo"),
         sa.Column("payload_json", sa.Text(), nullable=False),
@@ -40,9 +44,16 @@ def upgrade() -> None:
     op.create_table(
         "solar_forecast_runs",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("generated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("model_version", sa.String(length=32), nullable=False, server_default="solar-forecast-v1"),
+        sa.Column(
+            "model_version",
+            sa.String(length=32),
+            nullable=False,
+            server_default="solar-forecast-v1",
+        ),
         sa.Column("quality", sa.String(length=32), nullable=False, server_default="LOW"),
         sa.Column("weather_source", sa.String(length=16), nullable=False, server_default="live"),
         sa.Column("confidence", sa.Float(), nullable=False, server_default="0"),
@@ -60,7 +71,12 @@ def upgrade() -> None:
     op.create_index("ix_solar_forecast_runs_generated_at", "solar_forecast_runs", ["generated_at"])
     op.create_table(
         "solar_forecast_points",
-        sa.Column("run_id", sa.Integer(), sa.ForeignKey("solar_forecast_runs.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "run_id",
+            sa.Integer(),
+            sa.ForeignKey("solar_forecast_runs.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
         sa.Column("timestamp", sa.DateTime(timezone=True), primary_key=True),
         sa.Column("baseline_power_w", sa.Float(), nullable=False, server_default="0"),
         sa.Column("corrected_power_w", sa.Float(), nullable=False, server_default="0"),
@@ -74,18 +90,27 @@ def upgrade() -> None:
     )
     op.create_table(
         "solar_forecast_evaluations",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("bucket_start", sa.DateTime(timezone=True), primary_key=True),
         sa.Column("forecasted_energy_kwh", sa.Float(), nullable=False, server_default="0"),
         sa.Column("actual_energy_kwh", sa.Float(), nullable=False, server_default="0"),
         sa.Column("absolute_error_kwh", sa.Float(), nullable=False, server_default="0"),
         sa.Column("percentage_error", sa.Float(), nullable=True),
         sa.Column("squared_error", sa.Float(), nullable=False, server_default="0"),
-        sa.Column("model_version", sa.String(length=32), nullable=False, server_default="solar-forecast-v1"),
+        sa.Column(
+            "model_version",
+            sa.String(length=32),
+            nullable=False,
+            server_default="solar-forecast-v1",
+        ),
     )
     op.create_table(
         "solar_site_performance_profiles",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("global_factor", sa.Float(), nullable=False, server_default="1"),
         sa.Column("seasonal_factors_json", sa.Text(), nullable=False, server_default="{}"),
         sa.Column("hour_factors_json", sa.Text(), nullable=False, server_default="{}"),

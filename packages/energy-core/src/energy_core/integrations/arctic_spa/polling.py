@@ -54,7 +54,9 @@ class ArcticSpaPollingService:
                         now=now,
                     )
                 except Exception:
-                    logger.exception("Arctic Spa poll failed consumer_id=%s site=%s", consumer.id, site.slug)
+                    logger.exception(
+                        "Arctic Spa poll failed consumer_id=%s site=%s", consumer.id, site.slug
+                    )
             return polled
 
     async def _poll_one(
@@ -122,7 +124,11 @@ class ArcticSpaPollingService:
                 price_repo = MarketPriceRepository(session, is_sqlite=is_sqlite)
                 hour = now.replace(minute=0, second=0, microsecond=0)
                 mp = await price_repo.get_at(site.id, hour)
-                price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+                price = (
+                    mp.all_in_price_sek_kwh
+                    if mp and mp.all_in_price_sek_kwh
+                    else site.fallback_purchase_price_sek_kwh
+                )
                 duration_hours = max(0.0, (now - start_time).total_seconds() / 3600.0)
                 site_sample = SiteEnergySample(
                     pv_power_w=0.0,
@@ -156,7 +162,9 @@ class ArcticSpaPollingService:
             )
             return 1
         except ArcticSpaApiError as exc:
-            backoff_seconds = min(600, 30 * (2 ** min(await self._failure_count(repo, consumer.id), 5)))
+            backoff_seconds = min(
+                600, 30 * (2 ** min(await self._failure_count(repo, consumer.id), 5))
+            )
             await repo.upsert_poll_state(
                 consumer.id,
                 last_error_at=now,

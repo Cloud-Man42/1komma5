@@ -12,15 +12,13 @@ from energy_core.solar_forecast.calibration import (
     is_outlier_ratio,
     weather_condition_bucket,
 )
-from energy_core.solar_forecast.historical import aggregate_buckets_from_readings, actual_energy_kwh
-from energy_core.solar_forecast.physical import baseline_energy_kwh, baseline_power_w
+from energy_core.solar_forecast.historical import actual_energy_kwh, aggregate_buckets_from_readings
+from energy_core.solar_forecast.physical import baseline_energy_kwh
 from energy_core.solar_forecast.types import (
     MODEL_VERSION,
     SolarForecast,
-    SolarForecastObservation,
     SolarForecastModelProfile,
-    SolarSiteConfiguration,
-    WeatherForecastPoint,
+    SolarForecastObservation,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,7 +50,11 @@ def actual_kwh_for_day(
     actual = sum(actual_energy_kwh(b.avg_solar_w) for b in buckets)
     if not buckets:
         return 0.0, 0.0
-    completeness = sum(min(1.0, b.sample_count / max(1, b.expected_samples)) for b in buckets) / len(buckets) * 100.0
+    completeness = (
+        sum(min(1.0, b.sample_count / max(1, b.expected_samples)) for b in buckets)
+        / len(buckets)
+        * 100.0
+    )
     return round(actual, 3), round(completeness, 1)
 
 

@@ -94,7 +94,12 @@ def merge_interval_into_bucket(bucket: AggregateBucket, interval) -> AggregateBu
 def quality_percentages(counts: dict[str, int]) -> dict[str, float]:
     total = sum(counts.values())
     if total <= 0:
-        return {"measured_pct": 0.0, "calculated_pct": 0.0, "estimated_pct": 0.0, "missing_pct": 0.0}
+        return {
+            "measured_pct": 0.0,
+            "calculated_pct": 0.0,
+            "estimated_pct": 0.0,
+            "missing_pct": 0.0,
+        }
     return {
         "measured_pct": round(100.0 * counts.get("MEASURED", 0) / total, 1),
         "calculated_pct": round(100.0 * counts.get("CALCULATED", 0) / total, 1),

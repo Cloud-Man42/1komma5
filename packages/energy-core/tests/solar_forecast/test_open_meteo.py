@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from energy_core.solar_forecast.open_meteo import OpenMeteoWeatherProvider, WeatherProviderError
 from energy_core.solar_forecast.types import SolarSiteConfiguration
 
@@ -36,7 +35,9 @@ def test_missing_time_raises() -> None:
     provider = OpenMeteoWeatherProvider()
     with pytest.raises(WeatherProviderError):
         provider._parse_response(
-            SolarSiteConfiguration(site_id=1, latitude=1, longitude=1, installed_peak_power_kw=1, enabled=True),
+            SolarSiteConfiguration(
+                site_id=1, latitude=1, longitude=1, installed_peak_power_kw=1, enabled=True
+            ),
             {"minutely_15": {}},
             provider="open-meteo",
         )

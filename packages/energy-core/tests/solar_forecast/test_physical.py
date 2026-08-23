@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
-from energy_core.solar_forecast.physical import baseline_power_w, baseline_energy_kwh
+from energy_core.solar_forecast.physical import baseline_energy_kwh, baseline_power_w
 from energy_core.solar_forecast.types import SolarSiteConfiguration, WeatherForecastPoint
 
 

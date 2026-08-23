@@ -2,7 +2,10 @@
 
 from datetime import UTC, datetime, timedelta
 
-from energy_core.charging.external_limitation import EXTERNAL_LIMIT_STABLE_SECONDS, ExternalLimitationTracker
+from energy_core.charging.external_limitation import (
+    EXTERNAL_LIMIT_STABLE_SECONDS,
+    ExternalLimitationTracker,
+)
 
 
 def test_not_limited_when_actual_matches_requested():

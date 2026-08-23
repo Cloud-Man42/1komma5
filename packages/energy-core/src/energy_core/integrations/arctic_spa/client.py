@@ -68,7 +68,9 @@ class ArcticSpaClient:
                 if response.status_code == 401:
                     raise ArcticSpaApiError("Unauthorized — check API key", status_code=401)
                 if response.status_code >= 500:
-                    raise ArcticSpaApiError(f"Server error {response.status_code}", status_code=response.status_code)
+                    raise ArcticSpaApiError(
+                        f"Server error {response.status_code}", status_code=response.status_code
+                    )
                 if response.status_code >= 400:
                     raise ArcticSpaApiError(
                         f"Request failed {response.status_code}: {response.text[:200]}",

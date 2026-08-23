@@ -106,7 +106,7 @@ make test-integration
 
 ```powershell
 $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-uv sync
+uv sync --all-packages
 cd frontend; npm ci; cd ..
 uv run alembic upgrade head
 uv run python scripts/seed.py
@@ -115,7 +115,7 @@ uv run python scripts/seed.py
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
 
 # Terminal 2 (from project root)
-uv run python -m app --directory collector
+uv run --directory collector python -m app
 
 # Terminal 3
 cd frontend; npm run dev

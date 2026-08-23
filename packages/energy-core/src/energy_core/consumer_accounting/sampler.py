@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,7 +54,11 @@ class ConsumerSampler:
         price = site_sample.electricity_price_sek_kwh if site_sample else None
         if price is None:
             mp = await price_repo.get_at(site.id, hour)
-            price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+            price = (
+                mp.all_in_price_sek_kwh
+                if mp and mp.all_in_price_sek_kwh
+                else site.fallback_purchase_price_sek_kwh
+            )
 
         ledger_repo = BatteryEnergyLedgerRepository(db)
         ledger_row = await ledger_repo.get_latest(site.id)
@@ -92,16 +96,24 @@ class ConsumerSampler:
             0.0,
             energy_kwh - attr_result.attribution.total_kwh,
         )
-        cost_result = self._cost.interval_costs(
-            attr_result.attribution,
-            grid_price_sek_kwh=price,
-            grid_battery_avg_cost_sek_kwh=ledger_state.grid_avg_cost_sek_kwh,
-            export_compensation_sek_kwh=site.export_compensation_sek_kwh,
-        ) if cost_enabled else None
+        cost_result = (
+            self._cost.interval_costs(
+                attr_result.attribution,
+                grid_price_sek_kwh=price,
+                grid_battery_avg_cost_sek_kwh=ledger_state.grid_avg_cost_sek_kwh,
+                export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+            )
+            if cost_enabled
+            else None
+        )
 
         avg_power = spa_sample.power_w
         heater_runtime = duration_hours * 3600.0 if spa_sample.heater_active else 0.0
-        pump_runtime = duration_hours * 3600.0 if any(v != "off" for v in spa_sample.pump_states.values()) else 0.0
+        pump_runtime = (
+            duration_hours * 3600.0
+            if any(v != "off" for v in spa_sample.pump_states.values())
+            else 0.0
+        )
 
         interval_repo = ConsumerIntervalRepository(db)
         await interval_repo.insert(
@@ -128,7 +140,9 @@ class ConsumerSampler:
             heater_runtime_seconds=heater_runtime,
             pump_runtime_seconds=pump_runtime,
             confidence=attr_result.confidence,
-            data_quality=spa_sample.quality.value if isinstance(spa_sample.quality, DataQuality) else str(spa_sample.quality),
+            data_quality=spa_sample.quality.value
+            if isinstance(spa_sample.quality, DataQuality)
+            else str(spa_sample.quality),
         )
 
     @staticmethod
