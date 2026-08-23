@@ -199,7 +199,146 @@ def test_stale_data_is_safe():
     assert decision.reason == "stale_data"
 
 
+def test_smart_everyday_mode_charges_at_average_price():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    forecast = (
+        (now, 0.52),
+        (now + timedelta(hours=1), 0.54),
+        (now + timedelta(hours=2), 0.50),
+        (now + timedelta(hours=3), 0.56),
+    )
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            electricity_price_eur_kwh=0.52,
+            price_forecast=forecast,
+        ),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.requested_current_a > 0
+    assert decision.reason == "normal_price_ok"
+
+
+def test_smart_high_urgency_charges_despite_expensive_hour():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    deadline = now + timedelta(hours=3)
+    forecast = (
+        (now, 0.55),
+        (now + timedelta(hours=1), 0.12),
+        (now + timedelta(hours=2), 0.15),
+        (now + timedelta(hours=3), 0.18),
+    )
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            electricity_price_eur_kwh=0.55,
+            price_forecast=forecast,
+        ),
+        config=_config(required_energy_kwh=50.0, deadline_at=deadline),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.requested_current_a > 0
+    assert decision.reason == "deadline_risk"
+
+
+def test_deadline_with_slack_uses_live_price_instead_of_waiting():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    deadline = now + timedelta(hours=10)
+    forecast = (
+        (now, 0.40),
+        (now + timedelta(hours=1), 0.90),
+        (now + timedelta(hours=2), 0.90),
+        (now + timedelta(hours=3), 0.90),
+    )
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            electricity_price_eur_kwh=0.40,
+            price_forecast=forecast,
+        ),
+        config=_config(required_energy_kwh=10.0, deadline_at=deadline),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.reason != "deadline_wait_cheaper"
+    assert decision.requested_current_a > 0
+
+
+def test_solar_starts_at_lower_export_threshold():
+    optimizer = EvChargingOptimizer()
+    decision = optimizer.optimize(
+        _state(grid_export_w=1200, grid_import_w=0),
+        config=_config(
+            solar_start_delay_seconds=0.0,
+            solar_start_threshold_w=1000.0,
+            solar_stop_threshold_w=600.0,
+            phases=1,
+            min_current_a=4.0,
+        ),
+        charging_mode="SOLAR_CHARGE",
+    )
+    assert decision.requested_current_a > 0
+    assert decision.reason == "stable_grid_export"
+
+
+def test_solar_export_below_lowered_threshold_still_waits():
+    optimizer = EvChargingOptimizer()
+    decision = optimizer.optimize(
+        _state(grid_export_w=800, grid_import_w=0),
+        config=_config(
+            solar_start_delay_seconds=0.0,
+            solar_start_threshold_w=1000.0,
+            solar_stop_threshold_w=600.0,
+            phases=1,
+            min_current_a=4.0,
+        ),
+        charging_mode="SOLAR_CHARGE",
+    )
+    assert decision.requested_current_a == 0
+    assert decision.reason == "export_hysteresis"
+
+
+def test_default_config_uses_balanced_solar_thresholds():
+    config = ChargingConfig()
+    assert config.solar_start_threshold_w == 1000.0
+    assert config.solar_stop_threshold_w == 600.0
+    assert config.solar_start_delay_seconds == 15.0
+
+
 def test_solar_forecast_wait_defers_grid_charging():
+    from energy_core.solar_forecast.types import SolarChargingPlan
+
+    optimizer = EvChargingOptimizer()
+    plan = SolarChargingPlan(
+        expected_usable_solar_kwh=15.0,
+        planning_solar_kwh=14.0,
+        reserved_solar_kwh=10.0,
+        planned_grid_kwh=0.0,
+        quality="HIGH",
+        confidence=0.9,
+        expected_solar_window_start=None,
+        expected_solar_window_end=None,
+        cheapest_grid_window=None,
+        explanation_sv="test",
+        reason_code="solar_forecast_wait",
+    )
+    target = optimizer.optimize_target(
+        _state(grid_export_w=0, electricity_price_eur_kwh=0.55, price_forecast=((datetime.now(UTC), 0.55),)),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        solar_plan=plan,
+    )
+    assert target.target_current_a == 0.0
+    assert target.reason == "solar_forecast_wait"
+
+
+def test_solar_forecast_wait_allows_cheap_grid_charging():
     from energy_core.solar_forecast.types import SolarChargingPlan
 
     optimizer = EvChargingOptimizer()
@@ -222,6 +361,6 @@ def test_solar_forecast_wait_defers_grid_charging():
         charging_mode="SMART_CHARGE",
         solar_plan=plan,
     )
-    assert target.target_current_a == 0.0
-    assert target.reason == "solar_forecast_wait"
+    assert target.target_current_a > 0
+    assert target.reason == "cheap_now"
 

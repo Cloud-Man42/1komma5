@@ -163,7 +163,10 @@ function ChargerControlForm({
         <p className="muted">
           {priceOnly
             ? "Billigast pris laddar när elpriset är som lägst. Avfärd, energibehov och klar senast används inte."
-            : "Smart laddning använder elprisprognos från Heartbeat. Klar senast prioriteras när energibehov och deadline är satta."}
+            : selectedMode === "SMART_CHARGE" &&
+                (charger.departure_time == null || charger.required_energy_kwh == null)
+              ? "Smart laddning laddar vid normalt eller billigt elpris även utan avresa. För bäst balans mellan kostnad och leverans, ange avresa och energibehov (kWh)."
+              : "Smart laddning använder elprisprognos från Heartbeat. Klar senast prioriteras när energibehov och deadline är satta."}
         </p>
 
         <button type="submit" className="btn-primary">

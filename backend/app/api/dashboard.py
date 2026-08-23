@@ -23,6 +23,7 @@ from app.schemas import (
     DashboardTodaySection,
 )
 from energy_core.charging.engine import bridge_status_from_charger
+from energy_core.charging.reasoning import build_energy_reasoning
 from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.config import Settings
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository
@@ -268,6 +269,67 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
     )
 
 
+async def _fetch_price_forecast(session: AsyncSession, site) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
+    if not site.external_system_id:
+        return None, ()
+    client = await create_heartbeat_client(session)
+    if client is None:
+        return None, ()
+    now = datetime.now(UTC)
+    from_iso = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    to_iso = (now + timedelta(hours=23)).isoformat().replace("+00:00", "Z")
+    try:
+        raw = await client.fetch_market_prices(
+            site.external_system_id,
+            from_iso=from_iso,
+            to_iso=to_iso,
+            resolution="1h",
+        )
+        parsed = parse_market_prices(raw)
+    except Exception:
+        return None, ()
+    forecast = tuple(
+        (point.timestamp, point.all_in_eur_kwh or point.spot_eur_kwh)
+        for point in parsed.points
+    )
+    return parsed.current_price_eur_kwh, forecast
+
+
+def _energy_for_optimization(
+    balance,
+    live: DashboardLiveSection | None,
+    *,
+    current_price: float | None,
+    price_forecast: tuple[tuple[datetime, float], ...],
+) -> EnergyState | None:
+    if balance is None and live is None and current_price is None:
+        return None
+    timestamp = balance.recorded_at if balance is not None else datetime.now(UTC)
+    return EnergyState(
+        timestamp=timestamp or datetime.now(UTC),
+        electricity_price_eur_kwh=current_price,
+        price_forecast=price_forecast,
+        pv_power_w=live.solar_production_w if live else None,
+        grid_import_w=(
+            balance.sungrow_grid_import_w
+            if balance is not None and balance.status != "UNAVAILABLE"
+            else (live.grid_import_w if live else None)
+        ),
+        grid_export_w=live.grid_export_w if live else None,
+        home_consumption_w=(
+            balance.heartbeat_home_consumption_w
+            if balance is not None and balance.status != "UNAVAILABLE"
+            else (live.consumption_w if live else None)
+        ),
+        ev_actual_power_w=(
+            balance.heartbeat_observed_ev_power_w
+            if balance is not None and balance.status != "UNAVAILABLE"
+            else (live.ev_power_w if live else None)
+        ),
+        battery_soc=live.battery_soc_pct if live else None,
+    )
+
+
 async def _compute_optimization(
     session: AsyncSession,
     site,
@@ -284,7 +346,14 @@ async def _compute_optimization(
     if bridge_charger is None:
         section = DashboardOptimizationSection(
             strategy_sv="Ingen SmartLaddning aktiv",
-            explanation_sv="Aktivera bridge under Konfiguration för att styra laddboxen.",
+            explanation_sv=(
+                "EMIC styr inte laddboxen automatiskt. Aktivera bridge under Konfiguration "
+                "för smart laddning med solel, elpris och EV-behov."
+            ),
+            reasoning_steps=[
+                "EMIC-styrning är avstängd — laddboxen styrs inte automatiskt.",
+                "Aktivera bridge under Konfiguration för att styra laddboxen.",
+            ],
         )
         _cache_set(site.slug, "optimization", section)
         return section
@@ -292,30 +361,40 @@ async def _compute_optimization(
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=bridge_charger.id)
     balance = snapshot_to_response(latest, charger_id=bridge_charger.id) if latest else None
-    energy = None
-    if balance and balance.status != "UNAVAILABLE":
-        energy = EnergyState(
-            timestamp=balance.recorded_at or datetime.now(UTC),
-            grid_import_w=balance.sungrow_grid_import_w,
-            home_consumption_w=balance.heartbeat_home_consumption_w,
-            ev_actual_power_w=balance.heartbeat_observed_ev_power_w,
-        )
+    current_price, price_forecast = await _fetch_price_forecast(session, site)
+    energy = _energy_for_optimization(
+        balance,
+        live,
+        current_price=current_price,
+        price_forecast=price_forecast,
+    )
     status_record = bridge_status_from_charger(bridge_charger, site=site, energy=energy)
-    plan = await load_solar_charging_plan_for_charger(session, site, bridge_charger)
+    plan = await load_solar_charging_plan_for_charger(
+        session,
+        site,
+        bridge_charger,
+        price_forecast=price_forecast,
+        current_price=current_price,
+    )
+    reasoning = build_energy_reasoning(
+        charger=bridge_charger,
+        site=site,
+        energy=energy,
+        solar_plan=plan,
+    )
 
     strategy = status_record.display_status_sv or "Smart laddning aktiv"
-    explanation = None
-    reserved_solar = planned_grid = None
-    if plan is not None and plan.available:
-        explanation = plan.explanation_sv
-        reserved_solar = plan.reserved_solar_kwh
-        planned_grid = plan.planned_grid_kwh
-    elif status_record.decision_reason:
-        explanation = status_record.display_status_sv
+    explanation = plan.explanation_sv if plan is not None else None
+    reserved_solar = plan.reserved_solar_kwh if plan is not None else None
+    planned_grid = plan.planned_grid_kwh if plan is not None else None
+    steps = list(reasoning.reasoning_steps)
+    if explanation is None and steps:
+        explanation = " ".join(steps[:2])
 
     section = DashboardOptimizationSection(
         strategy_sv=strategy,
         explanation_sv=explanation,
+        reasoning_steps=steps,
         reserved_solar_kwh=reserved_solar,
         planned_grid_kwh=planned_grid,
         ev_need_kwh=bridge_charger.required_energy_kwh,

@@ -266,9 +266,9 @@ def _build_steps(
     if show_price_rules:
         steps.append(f"Elprisnivå: {tier_label}.")
         if price_would_charge:
-            steps.append(f"Prisregel säger ladda ({price_reason}).")
+            steps.append(_price_charge_step(price_reason))
         else:
-            steps.append(f"Prisregel säger vänta ({price_reason}).")
+            steps.append(_price_wait_step(price_reason))
 
     if solar_plan is not None:
         if solar_plan.planned_grid_kwh and solar_plan.planned_grid_kwh > 0:
@@ -293,6 +293,30 @@ def _build_steps(
         steps.append(f"Tillämpad ström: {charger.last_applied_current_a:.1f} A.")
 
     return tuple(steps)
+
+
+def _price_charge_step(reason: str) -> str:
+    labels = {
+        "cheap_now": "Prisregel: billigt elpris — laddar från nätet.",
+        "normal_price_ok": "Vardagsläge: normalt pris — laddar utan att vänta på dyraste timmarna.",
+        "smart_scheduled": "Prisregel: nuvarande timme är bland de billigaste — laddar.",
+        "smart_urgency_balanced": "Deadline närmar sig — laddar vid normalt pris.",
+        "deadline_risk": "Deadline närmar sig — laddar för att hinna klart.",
+    }
+    return labels.get(reason, f"Prisregel säger ladda ({reason}).")
+
+
+def _price_wait_step(reason: str) -> str:
+    labels = {
+        "smart_wait_cheaper": "Gott om tid — väntar på billigare timmar.",
+        "smart_wait_expensive": "Elpriset är tydligt dyrt — väntar.",
+        "deadline_wait_cheaper": "Gott om tid till deadline — väntar på billigare timmar.",
+        "expensive_no_forecast": "Dyrt elpris och ingen prognos — väntar.",
+        "no_forecast": "Ingen elprisprognos — väntar.",
+        "solar_forecast_wait": "Solprognos täcker behovet — väntar med nätladdning.",
+        "solar_forecast_wait_cheaper": "Väntar på billigare nät-timmar trots planerat nätbehov.",
+    }
+    return labels.get(reason, f"Prisregel säger vänta ({reason}).")
 
 
 def parse_active_optimizations(items: list[dict[str, Any]] | None, *, now: datetime | None = None) -> tuple[str, ...]:

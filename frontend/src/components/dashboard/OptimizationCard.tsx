@@ -9,14 +9,26 @@ export function OptimizationCard({
 }) {
   if (!optimization) return null;
 
+  const steps = optimization.reasoning_steps ?? [];
+
   return (
     <DashboardSection title="EMIC-optimering" subtitle="Vad systemet gör just nu">
       <div className="dashboard-surface">
         <p className="detail-card-value">{optimization.strategy_sv ?? "—"}</p>
         {optimization.explanation_sv && (
-          <p className="detail-card-meta">
-            <strong>Varför?</strong> {optimization.explanation_sv}
-          </p>
+          <p className="detail-card-meta">{optimization.explanation_sv}</p>
+        )}
+        {steps.length > 0 && (
+          <div style={{ marginTop: "var(--space-4)" }}>
+            <p className="detail-card-meta">
+              <strong>Så resonerar EMIC</strong>
+            </p>
+            <ol className="reasoning-steps" data-testid="optimization-reasoning-steps">
+              {steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
         )}
         <dl className="metrics" style={{ marginTop: "var(--space-4)" }}>
           {optimization.reserved_solar_kwh != null && (

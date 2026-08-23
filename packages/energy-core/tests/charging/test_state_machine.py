@@ -76,6 +76,113 @@ def test_start_requires_delay():
     assert runtime.state == SmartChargingState.WAITING_TO_START
 
 
+def test_urgent_reason_ramps_faster():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime(
+        requested_current_a=8.0,
+        state=SmartChargingState.CHARGING_STABLE,
+        last_start_at=now - timedelta(seconds=600),
+    )
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(max_current_increase_per_step_a=1.0),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="deadline_risk",
+        slow_signals=_signals(),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=True,
+        fault_code=None,
+        now=now,
+    )
+    assert decision.requested_current_a == 10.0
+
+
+def test_normal_reason_ramps_one_amp_per_step():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime(
+        requested_current_a=8.0,
+        state=SmartChargingState.CHARGING_STABLE,
+        last_start_at=now - timedelta(seconds=600),
+    )
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(max_current_increase_per_step_a=1.0),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="cheap_now",
+        slow_signals=_signals(),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=True,
+        fault_code=None,
+        now=now,
+    )
+    assert decision.requested_current_a == 9.0
+
+
+def test_solar_export_above_lowered_threshold_passes_gate():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime()
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(solar_start_threshold_w=1000.0),
+        charging_mode="SOLAR_CHARGE",
+        optimizer_target_a=8.0,
+        optimizer_reason="stable_grid_export",
+        slow_signals=_signals(grid_export_w=1200.0),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=False,
+        fault_code=None,
+        now=now,
+    )
+    assert decision.reason != "waiting_for_export"
+    assert decision.action == "set_current"
+
+
+def test_solar_export_below_threshold_waits_for_export():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime()
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(solar_start_threshold_w=1000.0),
+        charging_mode="SOLAR_CHARGE",
+        optimizer_target_a=8.0,
+        optimizer_reason="stable_grid_export",
+        slow_signals=_signals(grid_export_w=700.0),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=False,
+        fault_code=None,
+        now=now,
+    )
+    assert decision.action == "none"
+    assert decision.reason == "waiting_for_export"
+
+
+def test_urgent_reason_skips_start_delay():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime()
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(start_delay_seconds=120.0),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="deadline_risk",
+        slow_signals=_signals(),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=False,
+        fault_code=None,
+        now=now,
+    )
+    assert decision.action == "set_current"
+    assert decision.reason == "deadline_risk"
+    assert runtime.state == SmartChargingState.STARTING
+
+
 def test_start_after_delay():
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     runtime = SmartChargingRuntime(start_condition_since=now - timedelta(seconds=130))

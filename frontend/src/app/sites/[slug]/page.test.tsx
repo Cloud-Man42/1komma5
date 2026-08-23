@@ -35,7 +35,11 @@ const mockDashboard = {
   ev: { available: false, charging: false },
   solar: { expected_today_kwh: 31.8, remaining_kwh: 18.4, confidence_pct: 87 },
   price: null,
-  optimization: { strategy_sv: "Väntar på sol", explanation_sv: "Tillräcklig solel förväntas." },
+  optimization: {
+    strategy_sv: "Väntar på sol",
+    explanation_sv: "Tillräcklig solel förväntas.",
+    reasoning_steps: ["Elprisnivå: grönt (billigt)."],
+  },
   alerts: [],
   spa_integration_enabled: false,
 };

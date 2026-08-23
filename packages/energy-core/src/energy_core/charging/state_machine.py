@@ -18,6 +18,13 @@ from energy_core.charging.policy import (
 )
 from energy_core.charging.signal_filter import FilteredEnergySignals
 
+URGENT_OPTIMIZER_REASONS = frozenset(
+    {
+        "deadline_risk",
+        "deadline_overdue",
+    }
+)
+
 
 class SmartChargingState(StrEnum):
     PAUSED = "PAUSED"
@@ -147,7 +154,8 @@ def evaluate_smart_charging(
         )
 
     runtime.stop_condition_since = None
-    next_current = _apply_ramp(runtime.requested_current_a, desired, config)
+    urgent = _is_urgent_reason(optimizer_reason)
+    next_current = _apply_ramp(runtime.requested_current_a, desired, config, urgent=urgent)
     if abs(next_current - runtime.requested_current_a) < 0.01:
         runtime.state = SmartChargingState.CHARGING_STABLE
         runtime.target_current_a = desired
@@ -196,7 +204,8 @@ def _handle_start_path(
         runtime.state = SmartChargingState.WAITING_TO_START
         return runtime, _none_decision(0.0, policy_mode, reason="waiting_for_export")
 
-    if uses_start_delay(mode, override_active=override_active):
+    urgent = _is_urgent_reason(reason)
+    if uses_start_delay(mode, override_active=override_active) and not urgent:
         if runtime.start_condition_since is None:
             runtime.start_condition_since = now
         elapsed = (now - runtime.start_condition_since).total_seconds()
@@ -204,7 +213,10 @@ def _handle_start_path(
             runtime.state = SmartChargingState.WAITING_TO_START
             return runtime, _none_decision(0.0, policy_mode, reason="start_delay")
 
-    start_current = max(config.min_current_a, desired if fast_start else _apply_ramp(0.0, desired, config))
+    start_current = max(
+        config.min_current_a,
+        desired if fast_start or urgent else _apply_ramp(0.0, desired, config, urgent=urgent),
+    )
     runtime.state = SmartChargingState.CHARGING_STABLE if fast_start else SmartChargingState.STARTING
     runtime.requested_current_a = start_current
     runtime.target_current_a = desired
@@ -293,12 +305,17 @@ def _start_allowed(runtime: SmartChargingRuntime, config: ChargingConfig, now: d
     return len(runtime.automatic_starts) < config.max_automatic_starts_per_hour
 
 
-def _apply_ramp(current: float, target: float, config: ChargingConfig) -> float:
+def _apply_ramp(current: float, target: float, config: ChargingConfig, *, urgent: bool = False) -> float:
+    increase_step = config.max_current_increase_per_step_a * (2.0 if urgent else 1.0)
     if target > current:
-        return min(target, current + config.max_current_increase_per_step_a)
+        return min(target, current + increase_step)
     if target < current:
         return max(target, current - config.max_current_decrease_per_step_a)
     return current
+
+
+def _is_urgent_reason(reason: str) -> bool:
+    return reason in URGENT_OPTIMIZER_REASONS
 
 
 def _clamp_target(target: float, config: ChargingConfig) -> float:

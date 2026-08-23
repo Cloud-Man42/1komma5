@@ -15,7 +15,12 @@ from energy_core.charging.policy import (
     uses_price_optimization,
 )
 from energy_core.charging.power_to_current import power_to_current_a
-from energy_core.charging.smart_schedule import should_charge_by_price, should_charge_smart
+from energy_core.charging.smart_schedule import (
+    price_allows_immediate_grid_charge,
+    resolve_schedule_mode,
+    should_charge_by_price,
+    should_charge_smart,
+)
 from energy_core.energy.state import EnergyState
 from energy_core.solar_forecast.types import SolarChargingPlan
 
@@ -178,8 +183,17 @@ class EvChargingOptimizer:
         mode: str,
         solar_plan: SolarChargingPlan | None = None,
     ) -> OptimizerTarget:
-        deadline = config.deadline_at or _deadline_from_departure(now, config.departure_time or state.departure_time, config.timezone)
+        deadline = config.deadline_at or _deadline_from_departure(
+            now, config.departure_time or state.departure_time, config.timezone
+        )
         required_kwh = config.required_energy_kwh
+        urgency = charging_urgency(
+            now,
+            deadline=deadline,
+            required_kwh=required_kwh,
+            config=config,
+            solar_plan=solar_plan,
+        )
         if required_kwh is not None and deadline is not None:
             deadline_target = _deadline_target(
                 now,
@@ -188,6 +202,8 @@ class EvChargingOptimizer:
                 config=config,
                 mode=mode,
                 solar_plan=solar_plan,
+                state=state,
+                urgency=urgency,
             )
             if deadline_target is not None:
                 return deadline_target
@@ -206,11 +222,20 @@ class EvChargingOptimizer:
             if current > 0:
                 return OptimizerTarget(current, "smart_solar_surplus")
 
-        # Advisory: wait for forecast solar before cheap grid charging
-        if solar_plan is not None and solar_plan.planned_grid_kwh <= 0.01:
-            if solar_plan.reason_code == "solar_forecast_wait":
-                return OptimizerTarget(0.0, "solar_forecast_wait")
+        if _should_wait_for_solar_forecast(
+            solar_plan,
+            urgency=urgency,
+            state=state,
+            config=config,
+            now=now,
+        ):
+            return OptimizerTarget(0.0, "solar_forecast_wait")
 
+        schedule_mode = resolve_schedule_mode(
+            departure_time=config.departure_time or state.departure_time,
+            required_energy_kwh=required_kwh,
+            deadline_at=deadline,
+        )
         charge, reason = should_charge_smart(
             now,
             departure_time=config.departure_time or state.departure_time,
@@ -219,9 +244,16 @@ class EvChargingOptimizer:
             expensive_threshold=config.expensive_price_eur_kwh,
             charge_hours=config.smart_charge_hours,
             timezone=config.timezone,
+            schedule_mode=schedule_mode,
+            urgency=urgency,
         )
         if charge:
-            if solar_plan and solar_plan.planned_grid_kwh > 0 and reason in {"cheap_now", "smart_scheduled"}:
+            if solar_plan and solar_plan.planned_grid_kwh > 0 and reason in {
+                "cheap_now",
+                "smart_scheduled",
+                "normal_price_ok",
+                "smart_urgency_balanced",
+            }:
                 return OptimizerTarget(_max_current(config), "solar_forecast_partial_grid")
             return OptimizerTarget(_max_current(config), reason)
         if solar_plan and solar_plan.planned_grid_kwh > 0:
@@ -254,6 +286,54 @@ def _battery_blocks_ev(state: EnergyState, config: ChargingConfig) -> bool:
     return soc < config.battery_low_soc_threshold and power > config.battery_charge_power_threshold_w
 
 
+def charging_urgency(
+    now: datetime,
+    *,
+    deadline: datetime | None,
+    required_kwh: float | None,
+    config: ChargingConfig,
+    solar_plan: SolarChargingPlan | None = None,
+) -> float:
+    if deadline is None or required_kwh is None or required_kwh <= 0:
+        return 0.0
+    if deadline <= now:
+        return 1.0
+    hours_left = max(0.0, (deadline - now).total_seconds() / 3600.0)
+    if hours_left <= 0:
+        return 1.0
+    max_power = _power_for_current(_max_current(config), config)
+    if max_power <= 0:
+        return 1.0
+    grid_capacity_kwh = (max_power / 1000.0) * hours_left
+    solar_expected = solar_plan.planning_solar_kwh if solar_plan else 0.0
+    gap = max(0.0, required_kwh - solar_expected)
+    if grid_capacity_kwh <= 0.01:
+        return 1.0
+    return max(0.0, min(1.0, gap / grid_capacity_kwh))
+
+
+def _should_wait_for_solar_forecast(
+    solar_plan: SolarChargingPlan | None,
+    *,
+    urgency: float,
+    state: EnergyState,
+    config: ChargingConfig,
+    now: datetime,
+) -> bool:
+    if solar_plan is None or solar_plan.planned_grid_kwh > 0.01:
+        return False
+    if solar_plan.reason_code != "solar_forecast_wait":
+        return False
+    if urgency >= 0.5:
+        return False
+    return not price_allows_immediate_grid_charge(
+        state.electricity_price_eur_kwh,
+        state.price_forecast,
+        expensive_threshold=config.expensive_price_eur_kwh,
+        now=now,
+    )
+
+
 def _deadline_target(
     now: datetime,
     *,
@@ -262,6 +342,8 @@ def _deadline_target(
     config: ChargingConfig,
     mode: str,
     solar_plan: SolarChargingPlan | None = None,
+    state: EnergyState | None = None,
+    urgency: float = 0.0,
 ) -> OptimizerTarget | None:
     if deadline <= now:
         current = _max_current(config)
@@ -277,16 +359,29 @@ def _deadline_target(
     solar_expected = solar_plan.planning_solar_kwh if solar_plan else 0.0
     available_kwh = grid_capacity_kwh + solar_expected
     if available_kwh >= required_kwh * 0.95:
-        if solar_plan and solar_plan.planned_grid_kwh <= 0.01:
+        if state is not None and _should_wait_for_solar_forecast(
+            solar_plan,
+            urgency=urgency,
+            state=state,
+            config=config,
+            now=now,
+        ):
             return OptimizerTarget(0.0, "solar_forecast_wait")
+        schedule_mode = resolve_schedule_mode(
+            departure_time=config.departure_time,
+            required_energy_kwh=required_kwh,
+            deadline_at=deadline,
+        )
         charge, reason = should_charge_smart(
             now,
             departure_time=config.departure_time,
-            price_forecast=(),
-            current_price=None,
+            price_forecast=state.price_forecast if state is not None else (),
+            current_price=state.electricity_price_eur_kwh if state is not None else None,
             expensive_threshold=config.expensive_price_eur_kwh,
             charge_hours=config.smart_charge_hours,
             timezone=config.timezone,
+            schedule_mode=schedule_mode,
+            urgency=urgency,
         )
         if charge:
             return OptimizerTarget(_max_current(config), reason)

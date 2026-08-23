@@ -44,9 +44,9 @@ class EvChargerRecord:
     target_soc_pct: float | None = None
     required_energy_kwh: float | None = None
     deadline_at: datetime | None = None
-    solar_start_threshold_w: float = 1500.0
-    solar_stop_threshold_w: float = 800.0
-    solar_start_delay_seconds: int = 30
+    solar_start_threshold_w: float = 1000.0
+    solar_stop_threshold_w: float = 600.0
+    solar_start_delay_seconds: int = 15
     solar_stop_delay_seconds: int = 60
     last_charging_action: str | None = None
     last_charging_reason: str | None = None
@@ -131,9 +131,9 @@ class EvChargerRepository:
         target_soc_pct: float | None = None,
         required_energy_kwh: float | None = None,
         deadline_at: datetime | None = None,
-        solar_start_threshold_w: float = 1500.0,
-        solar_stop_threshold_w: float = 800.0,
-        solar_start_delay_seconds: int = 30,
+        solar_start_threshold_w: float = 1000.0,
+        solar_stop_threshold_w: float = 600.0,
+        solar_start_delay_seconds: int = 15,
         solar_stop_delay_seconds: int = 60,
         start_delay_seconds: int = 120,
         stop_delay_seconds: int = 300,

@@ -6,7 +6,10 @@ from energy_core.charging.state_machine import SmartChargingState
 
 _REASON_LABELS: dict[str, str] = {
     "smart_wait_cheaper": "Väntar på lägre pris",
+    "smart_wait_expensive": "Väntar — dyrt elpris",
     "smart_scheduled": "Laddar smart",
+    "smart_urgency_balanced": "Laddar smart (deadline närmar sig)",
+    "normal_price_ok": "Laddar smart (normalt pris)",
     "cheap_now": "Laddar smart",
     "quick_charge": "Snabbladdning",
     "override": "Snabbladdning (override)",

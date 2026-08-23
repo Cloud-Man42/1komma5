@@ -86,6 +86,7 @@ export interface DashboardPriceSection extends DashboardSectionMeta {
 export interface DashboardOptimizationSection extends DashboardSectionMeta {
   strategy_sv: string | null;
   explanation_sv: string | null;
+  reasoning_steps: string[];
   reserved_solar_kwh: number | null;
   planned_grid_kwh: number | null;
   ev_need_kwh: number | null;

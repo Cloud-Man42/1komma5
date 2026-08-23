@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 # Matches frontend PriceChart green bars (value <= average * ratio).
 GREEN_PRICE_RATIO = 0.85
+# Matches dashboard "red" tier — clearly expensive hours.
+RED_PRICE_RATIO = 1.15
+
+ScheduleMode = Literal["none", "departure", "deadline"]
 
 
 def should_charge_smart(
@@ -18,8 +23,10 @@ def should_charge_smart(
     expensive_threshold: float,
     charge_hours: float = 4.0,
     timezone: str = "Europe/Stockholm",
+    schedule_mode: ScheduleMode = "departure",
+    urgency: float = 0.0,
 ) -> tuple[bool, str]:
-    """Decide whether to charge now based on price forecast and departure."""
+    """Decide whether to charge now based on price forecast, schedule and urgency."""
     if current_price is not None and current_price <= expensive_threshold:
         return True, "cheap_now"
 
@@ -38,26 +45,32 @@ def should_charge_smart(
             return True, "cheap_now"
         return False, "no_forecast_in_window"
 
+    average = _average_price(slots)
     if current_price is not None:
-        average = _average_price(slots)
         if average is not None and _is_green_price(current_price, average):
             return True, "cheap_now"
         min_price = min(price for _, price in slots)
         if current_price <= min_price + 0.001:
             return True, "cheap_now"
 
-    hours_needed = max(1, int(charge_hours + 0.999))
-    cheapest = sorted(slots, key=lambda item: item[1])[:hours_needed]
-    cheapest_hours = {_hour_key(ts) for ts, _ in cheapest}
+    if schedule_mode == "none":
+        return _everyday_schedule_decision(current_price, average)
 
-    current_hour = _hour_key(now)
-    if current_hour in cheapest_hours:
-        return True, "smart_scheduled"
+    clamped_urgency = max(0.0, min(1.0, urgency))
+    if clamped_urgency >= 0.8:
+        return True, "deadline_risk"
 
-    if current_price is not None and current_price <= expensive_threshold:
-        return True, "cheap_now"
+    if clamped_urgency >= 0.4:
+        return _balanced_urgency_decision(
+            now,
+            slots=slots,
+            current_price=current_price,
+            average=average,
+            charge_hours=charge_hours,
+            urgency=clamped_urgency,
+        )
 
-    return False, "smart_wait_cheaper"
+    return _cheapest_hours_decision(now, slots=slots, charge_hours=charge_hours)
 
 
 def should_charge_by_price(
@@ -76,7 +89,70 @@ def should_charge_by_price(
         current_price=current_price,
         expensive_threshold=expensive_threshold,
         charge_hours=charge_hours,
+        schedule_mode="departure",
     )
+
+
+def resolve_schedule_mode(
+    *,
+    departure_time: str | None,
+    required_energy_kwh: float | None,
+    deadline_at: datetime | None,
+) -> ScheduleMode:
+    if required_energy_kwh is not None and required_energy_kwh > 0 and deadline_at is not None:
+        return "deadline"
+    if departure_time:
+        return "departure"
+    return "none"
+
+
+def _everyday_schedule_decision(
+    current_price: float | None,
+    average: float | None,
+) -> tuple[bool, str]:
+    if current_price is None or average is None:
+        return False, "no_forecast"
+    if current_price <= average:
+        return True, "normal_price_ok"
+    if current_price > average * RED_PRICE_RATIO:
+        return False, "smart_wait_expensive"
+    return False, "smart_wait_cheaper"
+
+
+def _balanced_urgency_decision(
+    now: datetime,
+    *,
+    slots: list[tuple[datetime, float]],
+    current_price: float | None,
+    average: float | None,
+    charge_hours: float,
+    urgency: float,
+) -> tuple[bool, str]:
+    if current_price is not None and average is not None and current_price <= average:
+        return True, "smart_urgency_balanced"
+
+    hours_needed = max(1, int((charge_hours + urgency * charge_hours) + 0.999))
+    cheapest = sorted(slots, key=lambda item: item[1])[:hours_needed]
+    cheapest_hours = {_hour_key(ts) for ts, _ in cheapest}
+    current_hour = _hour_key(now)
+    if current_hour in cheapest_hours:
+        return True, "smart_scheduled"
+    return False, "smart_wait_cheaper"
+
+
+def _cheapest_hours_decision(
+    now: datetime,
+    *,
+    slots: list[tuple[datetime, float]],
+    charge_hours: float,
+) -> tuple[bool, str]:
+    hours_needed = max(1, int(charge_hours + 0.999))
+    cheapest = sorted(slots, key=lambda item: item[1])[:hours_needed]
+    cheapest_hours = {_hour_key(ts) for ts, _ in cheapest}
+    current_hour = _hour_key(now)
+    if current_hour in cheapest_hours:
+        return True, "smart_scheduled"
+    return False, "smart_wait_cheaper"
 
 
 def _average_price(slots: list[tuple[datetime, float]]) -> float | None:
@@ -131,3 +207,23 @@ def _hour_key(ts: datetime) -> datetime:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
     return ts.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def price_allows_immediate_grid_charge(
+    current_price: float | None,
+    price_forecast: tuple[tuple[datetime, float], ...],
+    *,
+    expensive_threshold: float,
+    now: datetime | None = None,
+) -> bool:
+    """True when grid charging should not be deferred for solar forecast."""
+    if current_price is not None and current_price <= expensive_threshold:
+        return True
+    if current_price is None or not price_forecast:
+        return False
+    reference = now or datetime.now(UTC)
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=UTC)
+    slots = _hourly_slots(price_forecast, reference - timedelta(hours=1), reference + timedelta(hours=24))
+    average = _average_price(slots)
+    return average is not None and _is_green_price(current_price, average)

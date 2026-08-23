@@ -17,9 +17,9 @@ class ChargingConfig:
     main_fuse_a: float | None = None
     safety_margin_a: float = 2.0
     expensive_price_eur_kwh: float = 0.35
-    solar_start_threshold_w: float = 1500.0
-    solar_stop_threshold_w: float = 800.0
-    solar_start_delay_seconds: float = 30.0
+    solar_start_threshold_w: float = 1000.0
+    solar_stop_threshold_w: float = 600.0
+    solar_start_delay_seconds: float = 15.0
     solar_stop_delay_seconds: float = 60.0
     battery_low_soc_threshold: float = 20.0
     battery_charge_power_threshold_w: float = 1500.0

@@ -1056,6 +1056,7 @@ class DashboardPriceSection(DashboardSectionMeta):
 class DashboardOptimizationSection(DashboardSectionMeta):
     strategy_sv: str | None = None
     explanation_sv: str | None = None
+    reasoning_steps: list[str] = Field(default_factory=list)
     reserved_solar_kwh: float | None = None
     planned_grid_kwh: float | None = None
     ev_need_kwh: float | None = None

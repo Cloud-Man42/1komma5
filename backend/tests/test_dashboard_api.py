@@ -118,5 +118,19 @@ async def test_dashboard_ev_section_with_energy_balance(client):
     assert body["ev"]["available"] is True
     assert body["ev"]["charging"] is True
     assert body["optimization"]["strategy_sv"] is not None
+    assert isinstance(body["optimization"]["reasoning_steps"], list)
+    assert len(body["optimization"]["reasoning_steps"]) >= 1
 
     await ac.delete(f"/api/sites/akarp/ev-chargers/{charger['id']}")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_optimization_without_bridge(client):
+    ac, _, _ = client
+    response = await ac.get("/api/sites/akarp/dashboard")
+    assert response.status_code == 200
+    body = response.json()
+    optimization = body["optimization"]
+    assert optimization["strategy_sv"] == "Ingen SmartLaddning aktiv"
+    assert optimization["reasoning_steps"]
+    assert "bridge" in optimization["explanation_sv"].lower()
