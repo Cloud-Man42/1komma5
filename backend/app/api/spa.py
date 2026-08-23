@@ -77,7 +77,9 @@ def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse
     actual = totals.get("actual_cost_sek", 0.0) or 0.0
     reference = totals.get("reference_cost_sek")
     savings = totals.get("savings_sek")
-    renewable = (totals.get("solar_direct_kwh", 0.0) or 0.0) + (totals.get("solar_battery_kwh", 0.0) or 0.0)
+    renewable = (totals.get("solar_direct_kwh", 0.0) or 0.0) + (
+        totals.get("solar_battery_kwh", 0.0) or 0.0
+    )
     own_pct = round(100.0 * renewable / energy, 1) if energy > 0 else None
     savings_pct = round(100.0 * savings / reference, 1) if savings and reference else None
     avg_cost = round(actual / energy, 4) if energy > 0 else None
@@ -104,7 +106,9 @@ def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse
 
 
 @router.get("/sites/{slug}/spa/status", response_model=SpaStatusResponse)
-async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaStatusResponse:
+async def get_spa_status(
+    slug: str, session: AsyncSession = Depends(get_db_session)
+) -> SpaStatusResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     sample_repo = ConsumerSampleRepository(session)
     latest = await sample_repo.get_latest(consumer.id)
@@ -121,11 +125,17 @@ async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_sessi
         consumer_id=consumer.id,
         site_slug=slug,
         online=bool(parsed.connected) if parsed else False,
-        water_temperature_c=parsed.temperature_c if parsed else (latest.water_temperature_c if latest else None),
-        set_temperature_c=parsed.setpoint_c if parsed else (latest.set_temperature_c if latest else None),
+        water_temperature_c=parsed.temperature_c
+        if parsed
+        else (latest.water_temperature_c if latest else None),
+        set_temperature_c=parsed.setpoint_c
+        if parsed
+        else (latest.set_temperature_c if latest else None),
         heater_active=parsed.heater_active if parsed else bool(latest and latest.heater_active),
         pump_label=parsed.primary_pump_label if parsed else "Pump: Av",
-        filter_status=parsed.filter_status if parsed else (latest.filter_status if latest else None),
+        filter_status=parsed.filter_status
+        if parsed
+        else (latest.filter_status if latest else None),
         errors=list(parsed.errors) if parsed else [],
         current_power_w=latest.power_w if latest else None,
         last_updated=config.last_status_at or (latest.recorded_at if latest else None),
@@ -150,7 +160,9 @@ async def get_spa_energy_period(
 
 
 @router.get("/sites/{slug}/spa/energy/today", response_model=SpaEnergyPeriodResponse)
-async def get_spa_energy_today(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaEnergyPeriodResponse:
+async def get_spa_energy_today(
+    slug: str, session: AsyncSession = Depends(get_db_session)
+) -> SpaEnergyPeriodResponse:
     return await get_spa_energy_period(slug, "today", session)
 
 
@@ -188,7 +200,9 @@ async def get_spa_cost(
 
 
 @router.get("/sites/{slug}/spa/health", response_model=SpaHealthResponse)
-async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaHealthResponse:
+async def get_spa_health(
+    slug: str, session: AsyncSession = Depends(get_db_session)
+) -> SpaHealthResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     repo = ConsumerRepository(session)
     sample_repo = ConsumerSampleRepository(session)
@@ -198,10 +212,14 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
     latest = await sample_repo.get_latest(consumer.id)
     settings = get_settings()
     agg_repo = ConsumerAggregateRepository(session)
-    day_start, _ = period_bounds(granularity="day", reference=datetime.now(UTC), timezone=consumer.timezone)
+    day_start, _ = period_bounds(
+        granularity="day", reference=datetime.now(UTC), timezone=consumer.timezone
+    )
     agg = await agg_repo.get_for_period(consumer.id, granularity="day", period_start=day_start)
-    api_status = "OK" if poll and poll.last_success_at else (
-        "ERROR" if config.integration_enabled else "DISABLED"
+    api_status = (
+        "OK"
+        if poll and poll.last_success_at
+        else ("ERROR" if config.integration_enabled else "DISABLED")
     )
     if config.integration_enabled and not settings.arctic_spa_enabled:
         api_status = "DISABLED"
@@ -225,7 +243,9 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
 
 
 @router.get("/sites/{slug}/spa/config", response_model=SpaConfigResponse)
-async def get_spa_config(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaConfigResponse:
+async def get_spa_config(
+    slug: str, session: AsyncSession = Depends(get_db_session)
+) -> SpaConfigResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     return SpaConfigResponse(
         consumer_id=consumer.id,

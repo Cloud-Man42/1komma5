@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 
@@ -15,7 +15,12 @@ class EnergyAttribution:
 
     @property
     def total_kwh(self) -> float:
-        return self.solar_direct_kwh + self.solar_battery_kwh + self.grid_battery_kwh + self.grid_direct_kwh
+        return (
+            self.solar_direct_kwh
+            + self.solar_battery_kwh
+            + self.grid_battery_kwh
+            + self.grid_direct_kwh
+        )
 
     @property
     def renewable_kwh(self) -> float:

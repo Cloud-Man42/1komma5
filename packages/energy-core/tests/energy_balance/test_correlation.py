@@ -3,10 +3,8 @@
 from datetime import UTC, datetime, timedelta
 
 from energy_core.chargers.meter_adapter import MeterSnapshot
-from energy_core.energy.state import EnergyState
 from energy_core.energy_balance.correlation import correlate_telemetry
 from energy_core.sungrow.types import SungrowTelemetrySnapshot
-from energy_core.virtual_evse.state import VirtualEvseState, VirtualEvseStatus
 
 
 def _sungrow(offset_seconds: float = 0) -> SungrowTelemetrySnapshot:

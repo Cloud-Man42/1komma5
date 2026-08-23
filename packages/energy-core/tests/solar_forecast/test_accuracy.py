@@ -1,6 +1,6 @@
 """Tests for forecast accuracy metrics."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from energy_core.solar_forecast.accuracy import EvaluationInput, evaluate_point, summarize_accuracy

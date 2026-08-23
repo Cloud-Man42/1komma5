@@ -395,7 +395,11 @@ def test_solar_forecast_wait_defers_grid_charging():
         solar_first=True,
     )
     target = optimizer.optimize_target(
-        _state(grid_export_w=0, electricity_price_eur_kwh=0.55, price_forecast=((datetime.now(UTC), 0.55),)),
+        _state(
+            grid_export_w=0,
+            electricity_price_eur_kwh=0.55,
+            price_forecast=((datetime.now(UTC), 0.55),),
+        ),
         config=_config(),
         charging_mode="SMART_CHARGE",
         solar_plan=plan,
@@ -454,4 +458,3 @@ def test_little_expected_solar_tops_up_from_grid():
     )
     assert target.target_current_a > 0
     assert target.reason == "solar_forecast_partial_grid"
-

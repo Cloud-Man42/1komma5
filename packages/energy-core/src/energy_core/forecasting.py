@@ -203,10 +203,7 @@ def _sum(values: Iterable[ForecastValues]) -> ForecastValues:
 
 def _rounded(value: ForecastValues) -> ForecastValues:
     return ForecastValues(
-        **{
-            field.name: round(getattr(value, field.name), 2)
-            for field in fields(ForecastValues)
-        }
+        **{field.name: round(getattr(value, field.name), 2) for field in fields(ForecastValues)}
     )
 
 

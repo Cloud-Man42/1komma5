@@ -42,7 +42,9 @@ def mock_open_meteo_forecast():
     """Prevent backend tests from calling the live Open-Meteo API."""
     with patch(
         "energy_core.solar_forecast.coordinator.OpenMeteoWeatherProvider.get_forecast",
-        new=AsyncMock(side_effect=lambda site_config, *_args, **_kwargs: _sample_weather(site_config.site_id)),
+        new=AsyncMock(
+            side_effect=lambda site_config, *_args, **_kwargs: _sample_weather(site_config.site_id)
+        ),
     ):
         yield
 

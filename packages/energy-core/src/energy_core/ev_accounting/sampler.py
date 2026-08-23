@@ -16,7 +16,10 @@ from energy_core.db.repositories import MarketPriceRepository
 from energy_core.ev_accounting.attribution import EnergyAttributionEngine
 from energy_core.ev_accounting.battery_ledger import BatteryEnergyLedgerService
 from energy_core.ev_accounting.cost import EVChargingCostCalculator
-from energy_core.ev_accounting.models import BatteryLedgerState, ChargerSessionState, SiteEnergySample
+from energy_core.ev_accounting.models import (
+    BatteryLedgerState,
+    SiteEnergySample,
+)
 from energy_core.ev_accounting.session_service import EVSessionService
 
 logger = logging.getLogger(__name__)
@@ -109,7 +112,11 @@ class EVSessionSampler:
         if price is None:
             hour = now.replace(minute=0, second=0, microsecond=0)
             mp = await price_repo.get_at(site.id, hour)
-            price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+            price = (
+                mp.all_in_price_sek_kwh
+                if mp and mp.all_in_price_sek_kwh
+                else site.fallback_purchase_price_sek_kwh
+            )
 
         _, discharge_split = self._ledger_service.update(
             ledger_state,

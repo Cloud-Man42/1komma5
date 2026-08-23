@@ -7,7 +7,7 @@ UV ?= uv
 # environment, was set on the command line, or was marked `export`, so a plain assignment
 # silently does nothing while looking like it configures every recipe (GH-12).
 
-.PHONY: install migrate seed backend-dev collector-dev frontend-dev test test-integration docker-build docker-up docker-down docker-logs docker-test
+.PHONY: install migrate seed backend-dev collector-dev frontend-dev lint test test-integration docker-build docker-up docker-down docker-logs docker-test
 
 install:
 	$(UV) sync --all-packages
@@ -34,6 +34,20 @@ test:
 
 test-integration:
 	$(UV) run pytest -m integration
+
+# The Python lint gate (GH-28). Both commands are read-only: `ruff format
+# --check` reports what `ruff format` would rewrite without rewriting it.
+# Make aborts the target on the first recipe line that exits nonzero and
+# propagates that status, so `make lint` exits nonzero whenever either
+# command does -- do not prefix either line with `-`, and do not append
+# `|| true`, or the gate stops reporting failures it has found.
+#
+# Python only, on purpose. The frontend has its own gate (`npm run lint`,
+# GH-23); folding it in here would make this target's exit code depend on
+# eslint as well as ruff, which is not what its name promises.
+lint:
+	$(UV) run ruff check .
+	$(UV) run ruff format --check .
 
 docker-build:
 	docker compose build

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from energy_core.charging.config import ChargingConfig
@@ -76,7 +76,9 @@ def evaluate_smart_charging(
 
     if fault_code or not halo_connected:
         runtime.state = SmartChargingState.FAULT
-        return runtime, _stop_decision(0.0, "fault", policy_mode, reason=fault_code or "charger_offline")
+        return runtime, _stop_decision(
+            0.0, "fault", policy_mode, reason=fault_code or "charger_offline"
+        )
 
     if respects_manual_pause(charging_mode, override_active=override_active):
         runtime.state = SmartChargingState.PAUSED
@@ -159,7 +161,9 @@ def evaluate_smart_charging(
     if abs(next_current - runtime.requested_current_a) < 0.01:
         runtime.state = SmartChargingState.CHARGING_STABLE
         runtime.target_current_a = desired
-        return runtime, _none_decision(runtime.requested_current_a, policy_mode, reason=optimizer_reason)
+        return runtime, _none_decision(
+            runtime.requested_current_a, policy_mode, reason=optimizer_reason
+        )
 
     if next_current < runtime.requested_current_a:
         runtime.state = SmartChargingState.REDUCING
@@ -217,7 +221,9 @@ def _handle_start_path(
         config.min_current_a,
         desired if fast_start or urgent else _apply_ramp(0.0, desired, config, urgent=urgent),
     )
-    runtime.state = SmartChargingState.CHARGING_STABLE if fast_start else SmartChargingState.STARTING
+    runtime.state = (
+        SmartChargingState.CHARGING_STABLE if fast_start else SmartChargingState.STARTING
+    )
     runtime.requested_current_a = start_current
     runtime.target_current_a = desired
     runtime.last_requested_change_at = now
@@ -244,7 +250,11 @@ def _handle_stop_path(
     runtime.start_condition_since = None
     runtime.target_current_a = 0.0
 
-    if not fast_stop and in_run_period and (temporary_import_ok or import_w <= config.grid_deadband_w):
+    if (
+        not fast_stop
+        and in_run_period
+        and (temporary_import_ok or import_w <= config.grid_deadband_w)
+    ):
         reduced = _apply_ramp(runtime.requested_current_a, config.min_current_a, config)
         if reduced >= config.min_current_a:
             runtime.state = SmartChargingState.REDUCING
@@ -265,7 +275,9 @@ def _handle_stop_path(
     elapsed = (now - runtime.stop_condition_since).total_seconds()
     if elapsed < stop_delay and is_charging:
         runtime.state = SmartChargingState.WAITING_TO_STOP
-        return runtime, _none_decision(runtime.requested_current_a, policy_mode, reason="stop_delay")
+        return runtime, _none_decision(
+            runtime.requested_current_a, policy_mode, reason="stop_delay"
+        )
 
     runtime.state = SmartChargingState.STOPPING
     runtime.requested_current_a = 0.0
@@ -291,7 +303,9 @@ def _temporary_import_allowed(
     return False
 
 
-def _in_minimum_run_period(runtime: SmartChargingRuntime, config: ChargingConfig, now: datetime) -> bool:
+def _in_minimum_run_period(
+    runtime: SmartChargingRuntime, config: ChargingConfig, now: datetime
+) -> bool:
     if runtime.last_start_at is None:
         return False
     return (now - runtime.last_start_at).total_seconds() < config.minimum_run_time_seconds
@@ -305,7 +319,9 @@ def _start_allowed(runtime: SmartChargingRuntime, config: ChargingConfig, now: d
     return len(runtime.automatic_starts) < config.max_automatic_starts_per_hour
 
 
-def _apply_ramp(current: float, target: float, config: ChargingConfig, *, urgent: bool = False) -> float:
+def _apply_ramp(
+    current: float, target: float, config: ChargingConfig, *, urgent: bool = False
+) -> float:
     increase_step = config.max_current_increase_per_step_a * (2.0 if urgent else 1.0)
     if target > current:
         return min(target, current + increase_step)

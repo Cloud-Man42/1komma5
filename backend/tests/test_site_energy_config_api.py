@@ -1,5 +1,4 @@
 import pytest
-
 from helpers import create_charger
 
 

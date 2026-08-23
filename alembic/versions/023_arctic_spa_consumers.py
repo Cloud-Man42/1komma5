@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "023_arctic_spa_consumers"
 down_revision = "022_energy_balance_diagnostics"
@@ -22,8 +22,12 @@ def upgrade() -> None:
         sa.Column("consumer_type", sa.String(length=32), nullable=False, server_default="SPA"),
         sa.Column("name", sa.String(length=128), nullable=False, server_default="Arctic Spa"),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column("timezone", sa.String(length=64), nullable=False, server_default="Europe/Stockholm"),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column(
+            "timezone", sa.String(length=64), nullable=False, server_default="Europe/Stockholm"
+        ),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+        ),
         sa.ForeignKeyConstraint(["site_id"], ["sites.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("site_id", "consumer_type", name="uq_energy_consumers_site_type"),
@@ -33,12 +37,21 @@ def upgrade() -> None:
         "spa_device_config",
         sa.Column("consumer_id", sa.Integer(), nullable=False),
         sa.Column("integration_enabled", sa.Boolean(), nullable=False, server_default=sa.false()),
-        sa.Column("api_base_url", sa.String(length=255), nullable=False, server_default="https://api.myarcticspa.com"),
+        sa.Column(
+            "api_base_url",
+            sa.String(length=255),
+            nullable=False,
+            server_default="https://api.myarcticspa.com",
+        ),
         sa.Column("api_key", sa.String(length=512), nullable=False, server_default=""),
         sa.Column("external_spa_id", sa.String(length=128), nullable=False, server_default=""),
         sa.Column("poll_interval_seconds", sa.Integer(), nullable=False, server_default="60"),
-        sa.Column("energy_collection_enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column("cost_calculation_enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column(
+            "energy_collection_enabled", sa.Boolean(), nullable=False, server_default=sa.true()
+        ),
+        sa.Column(
+            "cost_calculation_enabled", sa.Boolean(), nullable=False, server_default=sa.true()
+        ),
         sa.Column("power_profiles_json", sa.Text(), nullable=False, server_default="{}"),
         sa.Column("last_status_json", sa.Text(), nullable=False, server_default="{}"),
         sa.Column("last_status_at", sa.DateTime(timezone=True), nullable=True),
@@ -78,7 +91,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["consumer_id"], ["energy_consumers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("consumer_id", "recorded_at"),
     )
-    op.create_index("ix_consumer_samples_consumer_recorded", "consumer_samples", ["consumer_id", "recorded_at"])
+    op.create_index(
+        "ix_consumer_samples_consumer_recorded", "consumer_samples", ["consumer_id", "recorded_at"]
+    )
 
     op.create_table(
         "consumer_intervals",
@@ -110,7 +125,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["consumer_id"], ["energy_consumers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_consumer_intervals_consumer_start", "consumer_intervals", ["consumer_id", "start_time"])
+    op.create_index(
+        "ix_consumer_intervals_consumer_start", "consumer_intervals", ["consumer_id", "start_time"]
+    )
 
     op.create_table(
         "consumer_aggregates",
@@ -138,12 +155,20 @@ def upgrade() -> None:
         sa.Column("missing_pct", sa.Float(), nullable=True),
         sa.ForeignKeyConstraint(["consumer_id"], ["energy_consumers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("consumer_id", "granularity", "period_start", name="uq_consumer_aggregates_period"),
+        sa.UniqueConstraint(
+            "consumer_id", "granularity", "period_start", name="uq_consumer_aggregates_period"
+        ),
     )
-    op.create_index("ix_consumer_aggregates_consumer_granularity", "consumer_aggregates", ["consumer_id", "granularity", "period_start"])
+    op.create_index(
+        "ix_consumer_aggregates_consumer_granularity",
+        "consumer_aggregates",
+        ["consumer_id", "granularity", "period_start"],
+    )
 
     bind = op.get_bind()
-    if bind.dialect.name == "postgresql" and os.environ.get("ENABLE_TIMESCALEDB", "false").lower() in ("1", "true", "yes"):
+    if bind.dialect.name == "postgresql" and os.environ.get(
+        "ENABLE_TIMESCALEDB", "false"
+    ).lower() in ("1", "true", "yes"):
         op.execute(
             "SELECT create_hypertable('consumer_samples', 'recorded_at', "
             "if_not_exists => TRUE, migrate_data => TRUE)"

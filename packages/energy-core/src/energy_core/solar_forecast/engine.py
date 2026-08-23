@@ -10,7 +10,6 @@ from energy_core.solar_forecast.correction import SolarForecastCorrectionEngine
 from energy_core.solar_forecast.physical import baseline_energy_kwh, baseline_power_w
 from energy_core.solar_forecast.types import (
     MODEL_VERSION,
-    ModelState,
     SitePerformanceProfile,
     SolarForecast,
     SolarForecastModelProfile,
@@ -111,15 +110,23 @@ class SolarForecastEngine:
         quality = self._confidence.quality_from_confidence(agg_conf)
 
         today_pts = [p for p in forecast_points if p.timestamp.astimezone(tz).date() == local_today]
-        tomorrow_pts = [p for p in forecast_points if p.timestamp.astimezone(tz).date() == local_tomorrow]
+        tomorrow_pts = [
+            p for p in forecast_points if p.timestamp.astimezone(tz).date() == local_tomorrow
+        ]
         future_today = [p for p in today_pts if p.timestamp >= now]
 
         raw_today = sum(baseline_energy_kwh(p.baseline_power_w) for p in today_pts)
-        raw_tomorrow = sum(baseline_energy_kwh(p.baseline_power_w) for p in tomorrow_pts) if tomorrow_pts else None
+        raw_tomorrow = (
+            sum(baseline_energy_kwh(p.baseline_power_w) for p in tomorrow_pts)
+            if tomorrow_pts
+            else None
+        )
 
         expected_today = sum(p.expected_energy_kwh for p in today_pts)
         remaining_today = sum(p.expected_energy_kwh for p in future_today)
-        expected_tomorrow = sum(p.expected_energy_kwh for p in tomorrow_pts) if tomorrow_pts else None
+        expected_tomorrow = (
+            sum(p.expected_energy_kwh for p in tomorrow_pts) if tomorrow_pts else None
+        )
 
         lower_today = sum(baseline_energy_kwh(p.lower_bound_power_w) for p in today_pts)
         upper_today = sum(baseline_energy_kwh(p.upper_bound_power_w) for p in today_pts)

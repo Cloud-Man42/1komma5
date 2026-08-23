@@ -69,6 +69,8 @@ def test_no_migration_hardcodes_the_postgres_now_function():
     """sa.func.now() renders per dialect; sa.text("now()") is passed through verbatim."""
     literal_now = re.compile(r"""text\(\s*["']now\(\)["']\s*\)""")
     offenders = [
-        path.name for path in sorted(VERSIONS_DIR.glob("*.py")) if literal_now.search(path.read_text())
+        path.name
+        for path in sorted(VERSIONS_DIR.glob("*.py"))
+        if literal_now.search(path.read_text())
     ]
     assert offenders == []

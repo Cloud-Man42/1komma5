@@ -1,9 +1,8 @@
 """Tests for stale data confidence and session resume (I–J)."""
 
 import pytest
-
 from energy_core.ev_accounting.attribution import EnergyAttributionEngine
-from energy_core.ev_accounting.models import ChargerSessionState, SiteEnergySample
+from energy_core.ev_accounting.models import SiteEnergySample
 from energy_core.ev_accounting.session_service import EVSessionService
 
 

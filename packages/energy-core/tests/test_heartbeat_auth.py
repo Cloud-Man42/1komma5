@@ -4,7 +4,6 @@ import time
 from unittest.mock import patch
 
 import pytest
-
 from energy_core.heartbeat_auth import (
     HeartbeatAuthError,
     fetch_bearer_token,

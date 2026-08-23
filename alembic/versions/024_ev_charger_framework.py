@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "024_ev_charger_framework"
@@ -16,15 +17,29 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("ev_chargers", sa.Column("manufacturer_id", sa.String(length=64), nullable=True))
     op.add_column("ev_chargers", sa.Column("model_id", sa.String(length=64), nullable=True))
-    op.add_column("ev_chargers", sa.Column("integration_method", sa.String(length=64), nullable=True))
-    op.add_column("ev_chargers", sa.Column("external_charger_id", sa.String(length=128), nullable=True))
+    op.add_column(
+        "ev_chargers", sa.Column("integration_method", sa.String(length=64), nullable=True)
+    )
+    op.add_column(
+        "ev_chargers", sa.Column("external_charger_id", sa.String(length=128), nullable=True)
+    )
     op.add_column("ev_chargers", sa.Column("connection_settings", sa.Text(), nullable=True))
     op.add_column(
         "ev_chargers",
-        sa.Column("connection_status", sa.String(length=32), nullable=False, server_default="NOT_CONFIGURED"),
+        sa.Column(
+            "connection_status",
+            sa.String(length=32),
+            nullable=False,
+            server_default="NOT_CONFIGURED",
+        ),
     )
-    op.add_column("ev_chargers", sa.Column("last_connection_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("ev_chargers", sa.Column("last_connection_test_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "ev_chargers", sa.Column("last_connection_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "ev_chargers",
+        sa.Column("last_connection_test_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
     bind = op.get_bind()
     rows = bind.execute(
@@ -36,7 +51,9 @@ def upgrade() -> None:
     for row in rows:
         manufacturer_id = _manufacturer_id(row.manufacturer)
         model_id = _model_id(row.model)
-        integration_method = "CHARGE_AMPS_CLOUD" if row.control_source == "chargeamp" else row.control_source
+        integration_method = (
+            "CHARGE_AMPS_CLOUD" if row.control_source == "chargeamp" else row.control_source
+        )
         settings = {}
         if row.chargeamp_charger_id:
             settings["charger_id"] = row.chargeamp_charger_id

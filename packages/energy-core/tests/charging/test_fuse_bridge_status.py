@@ -53,6 +53,8 @@ def test_bridge_status_uses_energy_grid_import_for_fuse():
         timestamp=datetime.now(UTC),
         grid_import_w=9000.0,
     )
-    status = bridge_status_from_charger(_charger(max_current_a=16.0, phases=3), site=_site(), energy=energy)
+    status = bridge_status_from_charger(
+        _charger(max_current_a=16.0, phases=3), site=_site(), energy=energy
+    )
     assert status.fuse_headroom_a is not None
     assert status.fuse_headroom_a < 23.0

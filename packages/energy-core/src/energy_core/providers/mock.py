@@ -48,8 +48,15 @@ class MockHeartbeatProvider:
 
         akarp_solar_peak = 8500.0
         akarp_base_load = 1200.0
-        akarp_solar = max(0.0, akarp_solar_peak * _diurnal_factor(hour, peak_hour=13.5) + noise(400))
-        akarp_consumption = max(200.0, akarp_base_load + 600 * (1 - _diurnal_factor(hour, peak_hour=8.0, width=3.0)) + noise(150))
+        akarp_solar = max(
+            0.0, akarp_solar_peak * _diurnal_factor(hour, peak_hour=13.5) + noise(400)
+        )
+        akarp_consumption = max(
+            200.0,
+            akarp_base_load
+            + 600 * (1 - _diurnal_factor(hour, peak_hour=8.0, width=3.0))
+            + noise(150),
+        )
         akarp_net = akarp_consumption - akarp_solar
         akarp_import = max(0.0, akarp_net + noise(80)) if akarp_net > 0 else noise(40)
         akarp_export = max(0.0, -akarp_net + noise(80)) if akarp_net < 0 else noise(40)
@@ -60,14 +67,23 @@ class MockHeartbeatProvider:
 
         summer_solar_peak = 6200.0
         summer_base_load = 450.0
-        summer_solar = max(0.0, summer_solar_peak * _diurnal_factor(hour, peak_hour=12.5, width=4.5) + noise(300))
-        summer_consumption = max(100.0, summer_base_load + 250 * (1 - _diurnal_factor(hour, peak_hour=19.0, width=2.5)) + noise(80))
+        summer_solar = max(
+            0.0, summer_solar_peak * _diurnal_factor(hour, peak_hour=12.5, width=4.5) + noise(300)
+        )
+        summer_consumption = max(
+            100.0,
+            summer_base_load
+            + 250 * (1 - _diurnal_factor(hour, peak_hour=19.0, width=2.5))
+            + noise(80),
+        )
         summer_net = summer_consumption - summer_solar
         summer_import = max(0.0, summer_net + noise(60)) if summer_net > 0 else noise(30)
         summer_export = max(0.0, -summer_net + noise(60)) if summer_net < 0 else noise(30)
         if summer_import > 0 and summer_export > 0:
             summer_export = 0.0
-        summer_battery_soc = min(100.0, max(10.0, 40 + 45 * _diurnal_factor(hour, peak_hour=14.0) + noise(4)))
+        summer_battery_soc = min(
+            100.0, max(10.0, 40 + 45 * _diurnal_factor(hour, peak_hour=14.0) + noise(4))
+        )
         summer_battery_power = (summer_solar - summer_consumption) * 0.25 + noise(150)
 
         return [

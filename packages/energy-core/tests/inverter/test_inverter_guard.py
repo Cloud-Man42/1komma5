@@ -1,8 +1,11 @@
 """Tests for inverter read-only guard."""
 
 import pytest
-
-from energy_core.inverter.guard import InverterControlForbiddenError, assert_inverter_read_only, guard_inverter_client
+from energy_core.inverter.guard import (
+    InverterControlForbiddenError,
+    assert_inverter_read_only,
+    guard_inverter_client,
+)
 
 
 def test_assert_inverter_read_only_blocks_write_operations():
@@ -31,8 +34,8 @@ def test_guard_inverter_client_blocks_sync_writes():
 
 
 def test_virtual_evse_modules_do_not_import_modbus():
-    import energy_core.virtual_evse.reporter as reporter
     import energy_core.virtual_evse.semp_payloads as payloads
+    from energy_core.virtual_evse import reporter
 
     for module in (reporter, payloads):
         source = module.__file__ or ""

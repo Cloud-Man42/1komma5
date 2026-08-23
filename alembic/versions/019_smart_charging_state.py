@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "019_smart_charging_state"
 down_revision = "018_ev_energy_accounting"
@@ -13,14 +13,22 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ev_chargers", sa.Column("smart_charging_state", sa.String(length=32), nullable=True))
+    op.add_column(
+        "ev_chargers", sa.Column("smart_charging_state", sa.String(length=32), nullable=True)
+    )
     op.add_column("ev_chargers", sa.Column("last_requested_current_a", sa.Float(), nullable=True))
     op.add_column("ev_chargers", sa.Column("last_configured_current_a", sa.Float(), nullable=True))
-    op.add_column("ev_chargers", sa.Column("last_actual_charging_current_a", sa.Float(), nullable=True))
+    op.add_column(
+        "ev_chargers", sa.Column("last_actual_charging_current_a", sa.Float(), nullable=True)
+    )
     op.add_column("ev_chargers", sa.Column("last_actual_power_w", sa.Float(), nullable=True))
     op.add_column("ev_chargers", sa.Column("externally_limited", sa.Boolean(), nullable=True))
-    op.add_column("ev_chargers", sa.Column("last_start_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("ev_chargers", sa.Column("last_stop_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "ev_chargers", sa.Column("last_start_at", sa.DateTime(timezone=True), nullable=True)
+    )
+    op.add_column(
+        "ev_chargers", sa.Column("last_stop_at", sa.DateTime(timezone=True), nullable=True)
+    )
     op.add_column(
         "ev_chargers",
         sa.Column("start_delay_seconds", sa.Integer(), nullable=False, server_default="120"),
@@ -39,11 +47,15 @@ def upgrade() -> None:
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("temporary_grid_import_allowance_w", sa.Float(), nullable=False, server_default="800"),
+        sa.Column(
+            "temporary_grid_import_allowance_w", sa.Float(), nullable=False, server_default="800"
+        ),
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("temporary_grid_import_seconds", sa.Integer(), nullable=False, server_default="180"),
+        sa.Column(
+            "temporary_grid_import_seconds", sa.Integer(), nullable=False, server_default="180"
+        ),
     )
     op.add_column(
         "ev_chargers",
@@ -51,19 +63,30 @@ def upgrade() -> None:
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("minimum_current_change_interval_seconds", sa.Integer(), nullable=False, server_default="30"),
+        sa.Column(
+            "minimum_current_change_interval_seconds",
+            sa.Integer(),
+            nullable=False,
+            server_default="30",
+        ),
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("max_current_increase_per_step_a", sa.Float(), nullable=False, server_default="1"),
+        sa.Column(
+            "max_current_increase_per_step_a", sa.Float(), nullable=False, server_default="1"
+        ),
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("max_current_decrease_per_step_a", sa.Float(), nullable=False, server_default="2"),
+        sa.Column(
+            "max_current_decrease_per_step_a", sa.Float(), nullable=False, server_default="2"
+        ),
     )
     op.add_column(
         "ev_chargers",
-        sa.Column("max_automatic_starts_per_hour", sa.Integer(), nullable=False, server_default="4"),
+        sa.Column(
+            "max_automatic_starts_per_hour", sa.Integer(), nullable=False, server_default="4"
+        ),
     )
 
 

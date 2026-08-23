@@ -1,9 +1,6 @@
 """Tests for Charge Amps config and charging readiness."""
 
-import os
-
 import pytest
-
 from energy_core.chargers.chargeamps_config import (
     assert_chargeamps_production_safe,
     build_chargeamps_connection_info,
@@ -72,7 +69,9 @@ def test_readiness_reports_missing_charger_id(monkeypatch):
     monkeypatch.setenv("CHARGEAMPS_EMAIL", "user@example.com")
     monkeypatch.setenv("CHARGEAMPS_PASSWORD", "pass")
 
-    site = SiteModel(id=1, slug="akarp", name="Åkarp", timezone="Europe/Stockholm", external_system_id="sys-1")
+    site = SiteModel(
+        id=1, slug="akarp", name="Åkarp", timezone="Europe/Stockholm", external_system_id="sys-1"
+    )
     charger = EvChargerModel(
         id=7,
         site_id=1,

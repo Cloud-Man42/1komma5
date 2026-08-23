@@ -46,7 +46,9 @@ class ConsumptionForecastProvider:
             if local.month == current_month or len(buckets) < 200:
                 from energy_core.solar_forecast.historical import actual_energy_kwh
 
-                hour_consumption.setdefault(local.hour, []).append(actual_energy_kwh(b.avg_consumption_w))
+                hour_consumption.setdefault(local.hour, []).append(
+                    actual_energy_kwh(b.avg_consumption_w)
+                )
 
         if not hour_consumption:
             return None

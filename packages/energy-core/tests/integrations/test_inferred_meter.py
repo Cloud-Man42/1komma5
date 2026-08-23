@@ -21,7 +21,9 @@ def _status(**kwargs) -> ArcticSpaStatus:
 
 
 def test_pump_and_heater_power_summed():
-    meter = InferredArcticSpaMeter(profiles=SpaPowerProfiles(heater_w=3000, pump_low_w=150, pump_high_w=400))
+    meter = InferredArcticSpaMeter(
+        profiles=SpaPowerProfiles(heater_w=3000, pump_low_w=150, pump_high_w=400)
+    )
     sample = meter.estimate_sample(
         _status(pump1="high"),
         prev_status=None,

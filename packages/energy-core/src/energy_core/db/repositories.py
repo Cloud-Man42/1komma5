@@ -632,8 +632,8 @@ class EnergyReadingRepository:
             if timestamp.tzinfo is None:
                 timestamp = timestamp.replace(tzinfo=UTC)
             if row.all_in_price_sek_kwh is not None:
-                prices[timestamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)] = float(
-                    row.all_in_price_sek_kwh
+                prices[timestamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)] = (
+                    float(row.all_in_price_sek_kwh)
                 )
 
         zone = ZoneInfo(timezone)

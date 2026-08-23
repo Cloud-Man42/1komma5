@@ -31,9 +31,9 @@ from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
+from energy_core.energy.state import EnergyState
 from energy_core.heartbeat.market_prices import parse_market_prices
 from energy_core.heartbeat_client_factory import create_heartbeat_client
-from energy_core.energy.state import EnergyState
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -226,7 +226,9 @@ async def _compute_solar(session: AsyncSession, site) -> DashboardSolarSection:
         _cache_set(site.slug, "solar", section)
         return section
 
-    confidence_pct = round(float(forecast.confidence or 0) * 100, 1) if forecast.confidence is not None else None
+    confidence_pct = (
+        round(float(forecast.confidence or 0) * 100, 1) if forecast.confidence is not None else None
+    )
     section = DashboardSolarSection(
         expected_today_kwh=round(float(forecast.expected_today_kwh or 0), 1),
         remaining_kwh=round(float(forecast.remaining_today_kwh or 0), 1),
@@ -257,7 +259,11 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
             ev_actual_power_w=balance.heartbeat_observed_ev_power_w,
         )
     status_record = bridge_status_from_charger(charger, site=site, energy=energy)
-    power_w = status_record.actual_power_w or (energy.ev_actual_power_w if energy else None) or charger.last_actual_power_w
+    power_w = (
+        status_record.actual_power_w
+        or (energy.ev_actual_power_w if energy else None)
+        or charger.last_actual_power_w
+    )
     charging = (power_w or 0) >= 25
 
     return DashboardEvSection(
@@ -269,7 +275,9 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
     )
 
 
-async def _fetch_price_forecast(session: AsyncSession, site) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
+async def _fetch_price_forecast(
+    session: AsyncSession, site
+) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
     if not site.external_system_id:
         return None, ()
     client = await create_heartbeat_client(session)
@@ -289,8 +297,7 @@ async def _fetch_price_forecast(session: AsyncSession, site) -> tuple[float | No
     except Exception:
         return None, ()
     forecast = tuple(
-        (point.timestamp, point.all_in_eur_kwh or point.spot_eur_kwh)
-        for point in parsed.points
+        (point.timestamp, point.all_in_eur_kwh or point.spot_eur_kwh) for point in parsed.points
     )
     return parsed.current_price_eur_kwh, forecast
 

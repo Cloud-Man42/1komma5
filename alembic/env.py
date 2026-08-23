@@ -2,13 +2,13 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from alembic import context
+from energy_core.config import get_settings
+from energy_core.db.models import Base
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from energy_core.config import get_settings
-from energy_core.db.models import Base
+from alembic import context
 
 config = context.config
 if config.config_file_name is not None:

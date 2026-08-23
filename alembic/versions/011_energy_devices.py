@@ -1,21 +1,24 @@
 """Add energy_devices table for Modbus inverter configuration."""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "011_energy_devices"
-down_revision: Union[str, None] = "010_ev_bridge_cycles"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "010_ev_bridge_cycles"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
     op.create_table(
         "energy_devices",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("name", sa.String(length=128), nullable=False),
         sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("protocol", sa.String(length=16), nullable=False, server_default="modbus-tcp"),
@@ -24,7 +27,9 @@ def upgrade() -> None:
         sa.Column("unit_id", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("manufacturer", sa.String(length=64), nullable=False, server_default="Sungrow"),
         sa.Column("model", sa.String(length=64), nullable=False, server_default="SH10RT"),
-        sa.Column("register_profile", sa.String(length=32), nullable=False, server_default="hybrid_sh10rt"),
+        sa.Column(
+            "register_profile", sa.String(length=32), nullable=False, server_default="hybrid_sh10rt"
+        ),
         sa.Column("poll_interval_ms", sa.Integer(), nullable=False, server_default="3000"),
         sa.Column("stale_timeout_s", sa.Integer(), nullable=False, server_default="120"),
         sa.Column("merge_mode", sa.String(length=32), nullable=False, server_default="complement"),

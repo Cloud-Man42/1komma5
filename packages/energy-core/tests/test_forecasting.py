@@ -5,7 +5,9 @@ from energy_core.db.repositories import FinancialStat
 from energy_core.forecasting import build_year_forecast
 
 
-def _stat(day: str, *, solar: float = 10, battery: float = 2, exported: float = 3, imported: float = 4):
+def _stat(
+    day: str, *, solar: float = 10, battery: float = 2, exported: float = 3, imported: float = 4
+):
     return FinancialStat(
         period_start=day,
         solar_self_consumed_kwh=solar,

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from app.api.energy_balance_helpers import snapshot_to_response
 from app.deps import get_db_session
 from app.schemas import (
+    ChargerConnectionTestResponse,
     EnergyBalanceHistoryResponse,
     EnergyBalanceResponse,
     EnergyReasoningResponse,
@@ -15,31 +16,30 @@ from app.schemas import (
     EvChargerResponse,
     EvChargerUpdateRequest,
     EvChargingSavingsResponse,
-    ChargerConnectionTestResponse,
     SolarChargingPlanResponse,
     VirtualEvseStatusResponse,
 )
+from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, get_model
+from energy_core.chargers.framework.factory import ChargerAdapterFactory
+from energy_core.chargers.framework.legacy_bridge import LegacyControlBridge
+from energy_core.chargers.framework.meter_factory import MeterReaderFactory
+from energy_core.chargers.framework.models import ChargerConfiguration
 from energy_core.charging.engine import bridge_status_from_charger
-from energy_core.charging.reasoning import load_energy_reasoning_for_charger
-from energy_core.energy.state import EnergyState
-from energy_core.virtual_evse.from_charger import virtual_evse_state_from_charger
-from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.charging.override import (
     ALLOWED_OVERRIDE_HOURS,
     override_active,
     override_until_from_hours,
 )
+from energy_core.charging.reasoning import load_energy_reasoning_for_charger
 from energy_core.charging.savings import compute_charging_savings
+from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.config import get_settings
-from energy_core.chargers.framework.factory import ChargerAdapterFactory, configuration_from_model
-from energy_core.chargers.framework.legacy_bridge import LegacyControlBridge
-from energy_core.chargers.framework.meter_factory import MeterReaderFactory
-from energy_core.chargers.framework.models import ChargerConfiguration
-from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, get_model
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository, SiteEnergyConfigRepository
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
+from energy_core.energy.state import EnergyState
 from energy_core.heartbeat_client import CHARGING_MODES
+from energy_core.virtual_evse.from_charger import virtual_evse_state_from_charger
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,7 +197,9 @@ def _capabilities_payload(caps) -> dict[str, object]:
     }
 
 
-def _framework_defaults(payload: EvChargerCreateRequest | EvChargerUpdateRequest) -> dict[str, object]:
+def _framework_defaults(
+    payload: EvChargerCreateRequest | EvChargerUpdateRequest,
+) -> dict[str, object]:
     manufacturer_id = getattr(payload, "manufacturer_id", None)
     model_id = getattr(payload, "model_id", None)
     integration_method = getattr(payload, "integration_method", None)
@@ -207,9 +209,15 @@ def _framework_defaults(payload: EvChargerCreateRequest | EvChargerUpdateRequest
     model_id = model_id or "halo"
     integration_method = integration_method or CHARGE_AMPS_CLOUD
     catalog_model = get_model(manufacturer_id, model_id)
-    manufacturer = getattr(payload, "manufacturer", None) or (catalog_model and catalog_model.manufacturer_id) or "ChargeAmps"
+    manufacturer = (
+        getattr(payload, "manufacturer", None)
+        or (catalog_model and catalog_model.manufacturer_id)
+        or "ChargeAmps"
+    )
     model = getattr(payload, "model", None) or (catalog_model and catalog_model.name) or "Halo"
-    control_source = "chargeamp" if integration_method == CHARGE_AMPS_CLOUD else integration_method.lower()
+    control_source = (
+        "chargeamp" if integration_method == CHARGE_AMPS_CLOUD else integration_method.lower()
+    )
     return {
         "manufacturer_id": manufacturer_id,
         "model_id": model_id,
@@ -252,10 +260,16 @@ async def list_ev_chargers(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
     chargers = await repo.list_for_site(site.id)
-    return [await _enrich_charger(session, charger, slug, include_power=True) for charger in chargers]
+    return [
+        await _enrich_charger(session, charger, slug, include_power=True) for charger in chargers
+    ]
 
 
-@router.post("/sites/{slug}/ev-chargers", response_model=EvChargerResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/sites/{slug}/ev-chargers",
+    response_model=EvChargerResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_ev_charger(
     slug: str,
     payload: EvChargerCreateRequest,
@@ -269,7 +283,9 @@ async def create_ev_charger(
     framework = _framework_defaults(payload)
     control_source = framework.get("control_source", payload.control_source)
     if control_source not in ("chargeamp",) and not payload.integration_method:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid control_source")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid control_source"
+        )
 
     external_id = payload.external_charger_id or payload.chargeamp_charger_id
     charger = await repo.create(
@@ -308,7 +324,8 @@ async def create_ev_charger(
         temporary_grid_import_allowance_w=payload.temporary_grid_import_allowance_w or 800.0,
         temporary_grid_import_seconds=payload.temporary_grid_import_seconds or 180,
         grid_deadband_w=payload.grid_deadband_w or 300.0,
-        minimum_current_change_interval_seconds=payload.minimum_current_change_interval_seconds or 30,
+        minimum_current_change_interval_seconds=payload.minimum_current_change_interval_seconds
+        or 30,
         max_current_increase_per_step_a=payload.max_current_increase_per_step_a or 1.0,
         max_current_decrease_per_step_a=payload.max_current_decrease_per_step_a or 2.0,
         max_automatic_starts_per_hour=payload.max_automatic_starts_per_hour or 4,
@@ -500,12 +517,12 @@ async def sync_ev_chargers_from_heartbeat(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
     wallbox_by_ev = {
-        str(box.get("assignedEvId")): box
-        for box in wallboxes
-        if box.get("assignedEvId")
+        str(box.get("assignedEvId")): box for box in wallboxes if box.get("assignedEvId")
     }
 
-    existing = {c.heartbeat_ev_id: c for c in await repo.list_for_site(site.id) if c.heartbeat_ev_id}
+    existing = {
+        c.heartbeat_ev_id: c for c in await repo.list_for_site(site.id) if c.heartbeat_ev_id
+    }
     for ev in evs:
         ev_id = str(ev.get("id", ""))
         if not ev_id:
@@ -562,7 +579,9 @@ async def control_ev_charger(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EV charger not found")
 
     if payload.charging_mode and payload.charging_mode not in CHARGING_MODE_VALUES:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid charging_mode")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid charging_mode"
+        )
 
     clear_override = payload.charging_mode == "PAUSED"
     await repo.update(
@@ -683,7 +702,9 @@ async def get_ev_charger_bridge_status(
         phase_current_l3_a=status_record.phase_current_l3_a,
         sungrow_fresh=balance.sungrow_fresh if balance else None,
         sungrow_telemetry_age_seconds=balance.sungrow_telemetry_age_seconds if balance else None,
-        energy_balance_status=balance.status if balance and balance.status != "UNAVAILABLE" else None,
+        energy_balance_status=balance.status
+        if balance and balance.status != "UNAVAILABLE"
+        else None,
         energy_balance_alignment_delta_seconds=balance.alignment_delta_seconds if balance else None,
         energy_balance_flags=balance.flags if balance else [],
     )
@@ -863,9 +884,7 @@ async def get_virtual_evse_status(
     balance = snapshot_to_response(latest, charger_id=charger_id) if latest else None
 
     state = virtual_evse_state_from_charger(charger)
-    heartbeat_detected = bool(
-        balance and balance.heartbeat_observed_ev_power_w is not None
-    )
+    heartbeat_detected = bool(balance and balance.heartbeat_observed_ev_power_w is not None)
     if state is not None:
         state = type(state)(
             device_id=state.device_id,

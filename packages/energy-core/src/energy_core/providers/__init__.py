@@ -1,3 +1,6 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from energy_core.config import HeartbeatProviderKind, Settings
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.models import SiteModel
@@ -9,8 +12,6 @@ from energy_core.providers.onekommafive import (
     OneKommaFiveHeartbeatProvider,
     SiteRuntimeInfo,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def create_heartbeat_provider_from_db(session: AsyncSession) -> HeartbeatProvider:
@@ -39,9 +40,7 @@ async def create_heartbeat_provider_from_db(session: AsyncSession) -> HeartbeatP
         password=password,
         api_token=api_token,
         site_system_ids={
-            site.slug: site.external_system_id
-            for site in sites
-            if site.external_system_id
+            site.slug: site.external_system_id for site in sites if site.external_system_id
         },
         site_info={
             site.slug: SiteRuntimeInfo(

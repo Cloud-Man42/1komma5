@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class MockChargeAmpsController:
-    def __init__(self, charger_id: str, *, connected: bool = True, vehicle_connected: bool = True) -> None:
+    def __init__(
+        self, charger_id: str, *, connected: bool = True, vehicle_connected: bool = True
+    ) -> None:
         self.charger_id = charger_id
         self._connected = connected
         self._vehicle_connected = vehicle_connected

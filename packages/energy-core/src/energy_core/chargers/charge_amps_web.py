@@ -193,7 +193,9 @@ class ChargeAmpsWebController:
         }
         url = f"{CHARGEAMPS_WEB_BASE}{path}"
         async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.request(method, url, headers=headers, params=params, json=json_body)
+            response = await client.request(
+                method, url, headers=headers, params=params, json=json_body
+            )
             response.raise_for_status()
             if response.status_code == 204 or not response.content:
                 return {}

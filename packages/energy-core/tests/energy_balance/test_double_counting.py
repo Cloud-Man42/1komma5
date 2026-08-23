@@ -53,11 +53,15 @@ def _scenario(*, load: float, halo: float, heartbeat_home: float):
 
 def test_double_counting_suspected():
     engine = EnergyBalanceEngine(double_counting_tolerance_w=800)
-    result = engine.calculate(_scenario(load=12000, halo=10000, heartbeat_home=22000), load_includes_ev_charger=True)
+    result = engine.calculate(
+        _scenario(load=12000, halo=10000, heartbeat_home=22000), load_includes_ev_charger=True
+    )
     assert result.status == EnergyBalanceStatus.POSSIBLE_DOUBLE_COUNTING
 
 
 def test_no_double_counting():
     engine = EnergyBalanceEngine(double_counting_tolerance_w=800)
-    result = engine.calculate(_scenario(load=12000, halo=10000, heartbeat_home=12000), load_includes_ev_charger=True)
+    result = engine.calculate(
+        _scenario(load=12000, halo=10000, heartbeat_home=12000), load_includes_ev_charger=True
+    )
     assert result.status == EnergyBalanceStatus.OK

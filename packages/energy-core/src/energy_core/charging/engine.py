@@ -23,8 +23,8 @@ from energy_core.charging.models import BridgeStatus, ChargingDecision
 from energy_core.charging.optimizer import EvChargingOptimizer
 from energy_core.charging.override import override_active
 from energy_core.charging.policy import PRICE_MODES, normalized_mode
-from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.charging.signal_filter import EnergySignalFilter
+from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.charging.state_machine import (
     SmartChargingRuntime,
     evaluate_smart_charging,
@@ -89,7 +89,9 @@ class SmartChargingEngine:
         await session.commit()
         return processed
 
-    async def get_bridge_status(self, charger: EvChargerModel, site: SiteModel | None = None) -> BridgeStatus:
+    async def get_bridge_status(
+        self, charger: EvChargerModel, site: SiteModel | None = None
+    ) -> BridgeStatus:
         runtime = self._runtime.get(charger.id)
         if runtime and runtime.last_decision:
             return self._bridge_status_from_runtime(charger, runtime, site=site)
@@ -136,7 +138,9 @@ class SmartChargingEngine:
 
         solar_plan = None
         if normalized_mode(mode) not in PRICE_MODES:
-            solar_plan = await self._build_solar_plan(session, site, charger, energy, config, now=now)
+            solar_plan = await self._build_solar_plan(
+                session, site, charger, energy, config, now=now
+            )
 
         optimizer_target = runtime.optimizer.optimize_target(
             energy,
@@ -161,7 +165,9 @@ class SmartChargingEngine:
             adapter_status = await adapter.get_status()
             halo_connected = adapter_status.connected
             runtime.halo_connected = adapter_status.connected
-            vehicle_connected = adapter_status.vehicle_connected or (meter.vehicle_connected if meter else False)
+            vehicle_connected = adapter_status.vehicle_connected or (
+                meter.vehicle_connected if meter else False
+            )
             runtime.vehicle_connected = vehicle_connected
             is_charging = adapter_status.charging or (meter.is_charging if meter else False)
             if configured_current is None and adapter_status.current_limit_a is not None:
@@ -180,7 +186,9 @@ class SmartChargingEngine:
                 runtime.halo_connected = adapter_status.connected
                 meter = await self._read_meter(charger)
                 runtime.last_meter = meter
-                vehicle_connected = adapter_status.vehicle_connected or (meter.vehicle_connected if meter else False)
+                vehicle_connected = adapter_status.vehicle_connected or (
+                    meter.vehicle_connected if meter else False
+                )
                 runtime.vehicle_connected = vehicle_connected
                 is_charging = adapter_status.charging or (meter.is_charging if meter else False)
                 if configured_current is None and adapter_status.current_limit_a is not None:
@@ -227,7 +235,9 @@ class SmartChargingEngine:
                 adapter,
                 anti_flapping=runtime.anti_flapping,
                 anti_config=AntiFlappingConfig(
-                    min_change_interval_seconds=float(charger.minimum_current_change_interval_seconds),
+                    min_change_interval_seconds=float(
+                        charger.minimum_current_change_interval_seconds
+                    ),
                     current_hysteresis_a=charger.current_hysteresis_a,
                 ),
             )
@@ -325,9 +335,15 @@ class SmartChargingEngine:
             self._runtime[charger.id] = runtime
 
         if not runtime.restored:
-            if runtime.anti_flapping.last_applied_current_a is None and charger.last_applied_current_a is not None:
+            if (
+                runtime.anti_flapping.last_applied_current_a is None
+                and charger.last_applied_current_a is not None
+            ):
                 runtime.anti_flapping.last_applied_current_a = charger.last_applied_current_a
-            if runtime.anti_flapping.last_command_current_a is None and charger.last_requested_current_a is not None:
+            if (
+                runtime.anti_flapping.last_command_current_a is None
+                and charger.last_requested_current_a is not None
+            ):
                 runtime.anti_flapping.last_command_current_a = charger.last_requested_current_a
             since = datetime.now(UTC) - timedelta(hours=1)
             cycle_repo = EvBridgeCycleRepository(session)
@@ -358,19 +374,35 @@ class SmartChargingEngine:
         decision = runtime.last_decision
         energy = runtime.last_energy_state
         meter = runtime.last_meter
-        state_value = runtime.smart_runtime.state.value if runtime.smart_runtime else charger.smart_charging_state
-        externally_limited = runtime.smart_runtime.externally_limited if runtime.smart_runtime else bool(charger.externally_limited)
+        state_value = (
+            runtime.smart_runtime.state.value
+            if runtime.smart_runtime
+            else charger.smart_charging_state
+        )
+        externally_limited = (
+            runtime.smart_runtime.externally_limited
+            if runtime.smart_runtime
+            else bool(charger.externally_limited)
+        )
         return BridgeStatus(
             charger_id=charger.id,
             bridge_enabled=charger.bridge_enabled,
             charging_mode=charger.charging_mode or "SMART_CHARGE",
-            active_policy=decision.policy_mode if decision else (charger.charging_mode or "SMART_CHARGE"),
+            active_policy=decision.policy_mode
+            if decision
+            else (charger.charging_mode or "SMART_CHARGE"),
             ev_target_power_w=energy.ev_target_power_w if energy else None,
-            requested_current_a=runtime.smart_runtime.requested_current_a if runtime.smart_runtime else charger.last_requested_current_a,
+            requested_current_a=runtime.smart_runtime.requested_current_a
+            if runtime.smart_runtime
+            else charger.last_requested_current_a,
             applied_current_a=charger.last_applied_current_a,
             previous_current_a=runtime.anti_flapping.last_command_current_a,
-            configured_current_a=meter.configured_current_a if meter else charger.last_configured_current_a,
-            actual_charging_current_a=meter.actual_charging_current_a if meter else charger.last_actual_charging_current_a,
+            configured_current_a=meter.configured_current_a
+            if meter
+            else charger.last_configured_current_a,
+            actual_charging_current_a=meter.actual_charging_current_a
+            if meter
+            else charger.last_actual_charging_current_a,
             actual_power_w=meter.power_w if meter else charger.last_actual_power_w,
             smart_charging_state=state_value,
             externally_limited=externally_limited,
@@ -386,18 +418,30 @@ class SmartChargingEngine:
             ),
             last_heartbeat_data_at=charger.last_heartbeat_data_at,
             last_bridge_run_at=charger.last_bridge_run_at,
-            halo_connected=runtime.halo_connected if runtime.halo_connected is not None else charger.last_halo_connected,
-            vehicle_connected=runtime.vehicle_connected if runtime.vehicle_connected is not None else charger.last_vehicle_connected,
+            halo_connected=runtime.halo_connected
+            if runtime.halo_connected is not None
+            else charger.last_halo_connected,
+            vehicle_connected=runtime.vehicle_connected
+            if runtime.vehicle_connected is not None
+            else charger.last_vehicle_connected,
             decision_reason=decision.reason if decision else charger.last_charging_reason,
             discovery_hints=energy.raw_field_hints if energy else (),
             stale=bool(energy.stale) if energy else False,
             override_active=override_active(charger.override_until),
             override_until=charger.override_until,
-            last_error_code=runtime.last_error_code if runtime.last_error_code else charger.last_charger_error_code,
+            last_error_code=runtime.last_error_code
+            if runtime.last_error_code
+            else charger.last_charger_error_code,
             last_charging_action=charger.last_charging_action,
-            phase_current_l1_a=meter.phase_current_l1_a if meter else (energy.phase_current_l1_a if energy else None),
-            phase_current_l2_a=meter.phase_current_l2_a if meter else (energy.phase_current_l2_a if energy else None),
-            phase_current_l3_a=meter.phase_current_l3_a if meter else (energy.phase_current_l3_a if energy else None),
+            phase_current_l1_a=meter.phase_current_l1_a
+            if meter
+            else (energy.phase_current_l1_a if energy else None),
+            phase_current_l2_a=meter.phase_current_l2_a
+            if meter
+            else (energy.phase_current_l2_a if energy else None),
+            phase_current_l3_a=meter.phase_current_l3_a
+            if meter
+            else (energy.phase_current_l3_a if energy else None),
         )
 
     async def _persist_cycle(
@@ -444,7 +488,9 @@ class SmartChargingEngine:
             current_price=energy.electricity_price_eur_kwh,
         )
 
-    async def _list_active_chargers(self, session: AsyncSession) -> list[tuple[EvChargerModel, SiteModel]]:
+    async def _list_active_chargers(
+        self, session: AsyncSession
+    ) -> list[tuple[EvChargerModel, SiteModel]]:
         result = await session.execute(
             select(EvChargerModel, SiteModel)
             .join(SiteModel, EvChargerModel.site_id == SiteModel.id)
@@ -453,7 +499,11 @@ class SmartChargingEngine:
         active: list[tuple[EvChargerModel, SiteModel]] = []
         for charger, site in result.all():
             if charger.integration_method or charger.control_source == "chargeamp":
-                if charger.external_charger_id or charger.chargeamp_charger_id or charger.integration_method:
+                if (
+                    charger.external_charger_id
+                    or charger.chargeamp_charger_id
+                    or charger.integration_method
+                ):
                     active.append((charger, site))
         return active
 
@@ -546,7 +596,9 @@ def _charging_config(charger: EvChargerModel, site: SiteModel) -> ChargingConfig
         temporary_grid_import_allowance_w=charger.temporary_grid_import_allowance_w,
         temporary_grid_import_seconds=float(charger.temporary_grid_import_seconds),
         grid_deadband_w=charger.grid_deadband_w,
-        minimum_current_change_interval_seconds=float(charger.minimum_current_change_interval_seconds),
+        minimum_current_change_interval_seconds=float(
+            charger.minimum_current_change_interval_seconds
+        ),
         max_current_increase_per_step_a=charger.max_current_increase_per_step_a,
         max_current_decrease_per_step_a=charger.max_current_decrease_per_step_a,
         max_automatic_starts_per_hour=charger.max_automatic_starts_per_hour,
@@ -557,7 +609,9 @@ def _apply_local_prefs(charger: EvChargerModel, energy: EnergyState) -> EnergySt
     mode = charger.charging_mode or energy.heartbeat_charging_mode or "SMART_CHARGE"
     mode_upper = str(mode).upper()
     smart_active = mode_upper in {"SMART_CHARGE", "SMART", "PRICE_CHARGE", "PRICE"}
-    target_soc = charger.target_soc_pct / 100.0 if charger.target_soc_pct is not None else energy.target_soc
+    target_soc = (
+        charger.target_soc_pct / 100.0 if charger.target_soc_pct is not None else energy.target_soc
+    )
     return replace(
         energy,
         heartbeat_charging_mode=mode,
@@ -582,5 +636,7 @@ async def _clamp_config_to_capabilities(config: ChargingConfig, adapter) -> Char
         config,
         max_current_a=min(config.max_current_a, capabilities.max_current_a),
         min_current_a=max(config.min_current_a, capabilities.min_current_a),
-        phases=capabilities.phases if capabilities.phases and capabilities.phases > 0 else config.phases,
+        phases=capabilities.phases
+        if capabilities.phases and capabilities.phases > 0
+        else config.phases,
     )

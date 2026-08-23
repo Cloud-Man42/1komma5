@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from energy_core.ev_accounting.constants import ATTRIBUTION_TOLERANCE_FRACTION, ATTRIBUTION_TOLERANCE_KWH
+from energy_core.ev_accounting.constants import (
+    ATTRIBUTION_TOLERANCE_FRACTION,
+    ATTRIBUTION_TOLERANCE_KWH,
+)
 from energy_core.ev_accounting.models import (
     AttributionResult,
     BatteryDischargeSplit,
@@ -45,7 +48,9 @@ class EnergyAttributionEngine:
         solar_battery = 0.0
         grid_battery = 0.0
         if battery_discharge is not None and remaining > 0 and sample.battery_discharge_kwh > 0:
-            discharge_to_ev = min(remaining, battery_discharge.solar_kwh + battery_discharge.grid_kwh)
+            discharge_to_ev = min(
+                remaining, battery_discharge.solar_kwh + battery_discharge.grid_kwh
+            )
             if battery_discharge.solar_kwh + battery_discharge.grid_kwh > 0:
                 total_discharge = battery_discharge.solar_kwh + battery_discharge.grid_kwh
                 solar_battery = discharge_to_ev * (battery_discharge.solar_kwh / total_discharge)
@@ -81,7 +86,9 @@ class EnergyAttributionEngine:
             attribution = _scale_attribution(attribution, ev_kwh)
             confidence = min(confidence, 0.7)
 
-        return AttributionResult(attribution=attribution, confidence=confidence, data_quality=quality)
+        return AttributionResult(
+            attribution=attribution, confidence=confidence, data_quality=quality
+        )
 
 
 def _within_tolerance(attributed: float, target: float) -> bool:

@@ -11,11 +11,17 @@ def test_web_connector_detects_preparing():
 
 
 def test_web_connector_detects_is_charging_flag():
-    assert vehicle_connected_from_web_connector({"ocppStatus": "Available", "isCharging": True}) is True
+    assert (
+        vehicle_connected_from_web_connector({"ocppStatus": "Available", "isCharging": True})
+        is True
+    )
 
 
 def test_external_connector_detects_ev_connected_flag():
-    assert vehicle_connected_from_external_connector({"status": "Available", "evConnected": True}) is True
+    assert (
+        vehicle_connected_from_external_connector({"status": "Available", "evConnected": True})
+        is True
+    )
 
 
 def test_external_connector_ignores_available_without_signals():
@@ -23,4 +29,7 @@ def test_external_connector_ignores_available_without_signals():
 
 
 def test_web_connector_detects_voltage_presence():
-    assert vehicle_connected_from_web_connector({"ocppStatus": "Unavailable", "voltage1": 230.0}) is True
+    assert (
+        vehicle_connected_from_web_connector({"ocppStatus": "Unavailable", "voltage1": 230.0})
+        is True
+    )

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from energy_core.heartbeat_client import HeartbeatClient, HeartbeatCredentials
 
 

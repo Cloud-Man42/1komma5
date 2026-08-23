@@ -93,12 +93,12 @@ def test_confidence_adjustment() -> None:
 
 @pytest.mark.asyncio
 async def test_load_solar_charging_plan_returns_none_without_deadline():
+    from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
     from energy_core.config import Settings
+    from energy_core.db.ev_charger_repo import EvChargerRepository
     from energy_core.db.models import Base
     from energy_core.db.repositories import SiteRepository
-    from energy_core.db.ev_charger_repo import EvChargerRepository
     from energy_core.db.session import create_engine, create_session_factory
-    from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 
     settings = Settings(_env_file=None, APP_ENV="test", DATABASE_URL="sqlite+aiosqlite:///:memory:")
     engine = create_engine(settings)
@@ -124,12 +124,12 @@ async def test_load_solar_charging_plan_returns_none_without_deadline():
 
 @pytest.mark.asyncio
 async def test_load_solar_charging_plan_without_forecast():
+    from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
     from energy_core.config import Settings
+    from energy_core.db.ev_charger_repo import EvChargerRepository
     from energy_core.db.models import Base
     from energy_core.db.repositories import SiteRepository
-    from energy_core.db.ev_charger_repo import EvChargerRepository
     from energy_core.db.session import create_engine, create_session_factory
-    from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 
     settings = Settings(_env_file=None, APP_ENV="test", DATABASE_URL="sqlite+aiosqlite:///:memory:")
     engine = create_engine(settings)

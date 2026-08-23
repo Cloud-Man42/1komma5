@@ -21,7 +21,7 @@ def cloud_variability(points_cloud: list[float | None]) -> float:
         return 0.5
     mean = sum(values) / len(values)
     variance = sum((v - mean) ** 2 for v in values) / len(values)
-    return min(1.0, (variance ** 0.5) / 50.0)
+    return min(1.0, (variance**0.5) / 50.0)
 
 
 def horizon_penalty(hours_ahead: float) -> float:

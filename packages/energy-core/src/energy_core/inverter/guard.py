@@ -28,7 +28,11 @@ _FORBIDDEN_WRITE_NAMES = frozenset(
 def assert_inverter_read_only(*, operation: str) -> None:
     """Block inverter write/control operations in Phase 1."""
     normalized = operation.strip().lower()
-    if normalized in _FORBIDDEN_WRITE_NAMES or normalized.startswith("write_") or normalized.startswith("set_"):
+    if (
+        normalized in _FORBIDDEN_WRITE_NAMES
+        or normalized.startswith("write_")
+        or normalized.startswith("set_")
+    ):
         raise InverterControlForbiddenError(
             f"Inverter control '{operation}' is forbidden in Phase 1 (read-only telemetry only)."
         )

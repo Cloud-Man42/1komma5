@@ -33,14 +33,19 @@ def snapshot_to_response(
 
     payload = stored.payload
     recorded_raw = payload.get("recorded_at")
-    recorded_at = datetime.fromisoformat(recorded_raw) if isinstance(recorded_raw, str) else stored.recorded_at
+    recorded_at = (
+        datetime.fromisoformat(recorded_raw)
+        if isinstance(recorded_raw, str)
+        else stored.recorded_at
+    )
 
     return EnergyBalanceResponse(
         charger_id=charger_id,
         recorded_at=recorded_at,
         status=stored.status,
         flags=stored.flags,
-        inverter_display_name=payload.get("inverter_display_name") or "Sungrow Hybrid Inverter SH10",
+        inverter_display_name=payload.get("inverter_display_name")
+        or "Sungrow Hybrid Inverter SH10",
         sungrow_pv_power_w=payload.get("sungrow_pv_power_w"),
         sungrow_load_power_w=payload.get("sungrow_load_power_w"),
         sungrow_grid_import_w=payload.get("sungrow_grid_import_w"),

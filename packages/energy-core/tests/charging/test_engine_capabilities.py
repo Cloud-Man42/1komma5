@@ -3,10 +3,8 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 from energy_core.charging.config import ChargingConfig
 from energy_core.charging.engine import _clamp_config_to_capabilities
-from energy_core.chargers.capabilities import ChargerCapabilities
 
 
 @pytest.mark.asyncio

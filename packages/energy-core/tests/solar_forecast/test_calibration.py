@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-
 from energy_core.config import Settings
 from energy_core.solar_forecast.calibration import (
     build_model_profile,
@@ -18,7 +17,6 @@ from energy_core.solar_forecast.calibration import (
 from energy_core.solar_forecast.types import (
     MODEL_VERSION,
     ModelState,
-    SolarForecastModelProfile,
     SolarForecastObservation,
     resolve_model_state,
 )
@@ -99,20 +97,28 @@ def test_extreme_outlier_does_not_swing_correction_factor():
     stable = [_obs(i, actual=35, raw=40, corrected=35) for i in range(20)]
     outlier = _obs(21, actual=5, raw=40, corrected=35)
     all_obs = stable + [outlier]
-    factor_with = compute_correction_factor(all_obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC))
-    factor_without = compute_correction_factor(stable, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC))
+    factor_with = compute_correction_factor(
+        all_obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC)
+    )
+    factor_without = compute_correction_factor(
+        stable, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC)
+    )
     assert abs(factor_with - factor_without) < 0.05
 
 
 def test_systematic_overforecast_corrects_down():
     obs = [_obs(i, actual=36, raw=40, corrected=40) for i in range(15)]
-    factor = compute_correction_factor(obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC))
+    factor = compute_correction_factor(
+        obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC)
+    )
     assert factor < 1.0
 
 
 def test_systematic_underforecast_corrects_up():
     obs = [_obs(i, actual=44, raw=40, corrected=40) for i in range(15)]
-    factor = compute_correction_factor(obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC))
+    factor = compute_correction_factor(
+        obs, previous_factor=1.0, now=datetime(2026, 7, 1, tzinfo=UTC)
+    )
     assert factor > 1.0
 
 

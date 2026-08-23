@@ -5,7 +5,12 @@ from energy_core.charging.state_machine import SmartChargingState
 
 
 def test_externally_limited_label():
-    assert display_status_sv(state=SmartChargingState.CHARGING_STABLE, reason="cheap_now", externally_limited=True) == "Externt begränsad"
+    assert (
+        display_status_sv(
+            state=SmartChargingState.CHARGING_STABLE, reason="cheap_now", externally_limited=True
+        )
+        == "Externt begränsad"
+    )
 
 
 def test_reason_label_smart_wait():
@@ -16,8 +21,14 @@ def test_reason_label_smart_wait():
 
 
 def test_reason_label_quick_charge():
-    assert display_status_sv(state=None, reason="quick_charge", externally_limited=False) == "Snabbladdning"
+    assert (
+        display_status_sv(state=None, reason="quick_charge", externally_limited=False)
+        == "Snabbladdning"
+    )
 
 
 def test_state_label_reducing():
-    assert display_status_sv(state=SmartChargingState.REDUCING, reason=None, externally_limited=False) == "Minskar laddström"
+    assert (
+        display_status_sv(state=SmartChargingState.REDUCING, reason=None, externally_limited=False)
+        == "Minskar laddström"
+    )

@@ -15,7 +15,6 @@ from energy_core.db.solar_forecast_repo import SolarForecastRepository
 from energy_core.solar_forecast.constants import PLANNING_FACTORS
 from energy_core.solar_forecast.types import ForecastQuality, SolarChargingPlan, SolarForecast
 
-
 # Planned solar below this is too small to be worth deferring grid charging for.
 MIN_USEFUL_SOLAR_KWH = 1.5
 
@@ -137,8 +136,7 @@ def build_solar_charging_plan(
         reason = "solar_forecast_wait"
     else:
         explanation = (
-            "För lite solöverskott väntas innan deadline — "
-            "nätladdning planeras vid billiga timmar."
+            "För lite solöverskott väntas innan deadline — nätladdning planeras vid billiga timmar."
         )
         if cheapest_window:
             explanation += f" Billigaste nät-fönster: {cheapest_window}."
@@ -195,7 +193,9 @@ def charging_config_from_models(charger: EvChargerModel, site: SiteModel) -> Cha
         temporary_grid_import_allowance_w=charger.temporary_grid_import_allowance_w,
         temporary_grid_import_seconds=float(charger.temporary_grid_import_seconds),
         grid_deadband_w=charger.grid_deadband_w,
-        minimum_current_change_interval_seconds=float(charger.minimum_current_change_interval_seconds),
+        minimum_current_change_interval_seconds=float(
+            charger.minimum_current_change_interval_seconds
+        ),
         max_current_increase_per_step_a=charger.max_current_increase_per_step_a,
         max_current_decrease_per_step_a=charger.max_current_decrease_per_step_a,
         max_automatic_starts_per_hour=charger.max_automatic_starts_per_hour,

@@ -1,13 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.deps import get_db_session, get_site_repository
 from app.schemas import MarketPricePointResponse, MarketPricesResponse
 from energy_core.db.repositories import SiteRepository
 from energy_core.heartbeat.market_prices import parse_market_prices
 from energy_core.heartbeat_client_factory import create_heartbeat_client
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["prices"])
 
@@ -55,7 +54,9 @@ async def get_site_market_prices(
             resolution=resolution,
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch market prices: {exc}") from exc
+        raise HTTPException(
+            status_code=502, detail=f"Failed to fetch market prices: {exc}"
+        ) from exc
 
     parsed = parse_market_prices(raw)
     return MarketPricesResponse(

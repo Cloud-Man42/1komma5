@@ -1,4 +1,5 @@
 """Quick read-only integration check for Charge Amps web API."""
+
 import asyncio
 import os
 

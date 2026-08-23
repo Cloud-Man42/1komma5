@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "021_solar_forecast_v2"
 down_revision = "020_solar_forecast_engine"
@@ -15,7 +15,9 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "solar_forecast_observations",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("forecast_date", sa.Date(), primary_key=True),
         sa.Column("forecast_generated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("forecast_kwh_raw", sa.Float(), nullable=True),
@@ -41,15 +43,27 @@ def upgrade() -> None:
         sa.Column("data_completeness_pct", sa.Float(), nullable=True),
         sa.Column("training_eligible", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("exclusion_reason", sa.String(length=64), nullable=True),
-        sa.Column("model_version", sa.String(length=32), nullable=False, server_default="solar-forecast-v2"),
+        sa.Column(
+            "model_version",
+            sa.String(length=32),
+            nullable=False,
+            server_default="solar-forecast-v2",
+        ),
         sa.Column("site_configuration_version", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
     )
     op.create_table(
         "solar_forecast_model_profiles",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("model_version", sa.String(length=32), nullable=False, server_default="solar-forecast-v2"),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
+        sa.Column(
+            "model_version",
+            sa.String(length=32),
+            nullable=False,
+            server_default="solar-forecast-v2",
+        ),
         sa.Column("historical_samples", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("model_state", sa.String(length=32), nullable=False, server_default="NO_DATA"),
         sa.Column("mape_7d", sa.Float(), nullable=True),
@@ -78,7 +92,9 @@ def upgrade() -> None:
     op.create_table(
         "solar_arrays",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("name", sa.String(length=128), nullable=False, server_default="Main"),
         sa.Column("capacity_kwp", sa.Float(), nullable=False),
         sa.Column("azimuth_degrees", sa.Float(), nullable=False, server_default="180"),
@@ -87,7 +103,9 @@ def upgrade() -> None:
     op.create_index("ix_solar_arrays_site_id", "solar_arrays", ["site_id"])
     op.create_table(
         "solar_site_configuration_versions",
-        sa.Column("site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+        sa.Column(
+            "site_id", sa.Integer(), sa.ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True
+        ),
         sa.Column("version", sa.Integer(), primary_key=True),
         sa.Column("effective_from", sa.DateTime(timezone=True), nullable=False),
         sa.Column("config_snapshot_json", sa.Text(), nullable=False, server_default="{}"),

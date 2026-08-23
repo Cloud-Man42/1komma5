@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from energy_core.providers.onekommafive import (
     HeartbeatRuntimeConfig,
     OneKommaFiveHeartbeatProvider,
@@ -30,9 +29,7 @@ def _runtime(**kwargs) -> HeartbeatRuntimeConfig:
 
 @pytest.mark.asyncio
 async def test_onekommafive_provider_returns_empty_without_credentials():
-    provider = OneKommaFiveHeartbeatProvider(
-        _runtime(username="", password="", api_token="")
-    )
+    provider = OneKommaFiveHeartbeatProvider(_runtime(username="", password="", api_token=""))
     readings = await provider.fetch_readings()
     assert readings == []
 

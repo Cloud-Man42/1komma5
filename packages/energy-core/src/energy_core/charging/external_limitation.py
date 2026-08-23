@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
-
+from datetime import datetime
 
 EXTERNAL_LIMIT_TOLERANCE_A = 1.0
 EXTERNAL_LIMIT_STABLE_SECONDS = 45.0
@@ -30,7 +29,9 @@ class ExternalLimitationTracker:
             self.limited_since = None
             return False
 
-        reference = configured_current_a if configured_current_a is not None else requested_current_a
+        reference = (
+            configured_current_a if configured_current_a is not None else requested_current_a
+        )
         if reference - actual_charging_current_a < EXTERNAL_LIMIT_TOLERANCE_A:
             self.limited_since = None
             return False

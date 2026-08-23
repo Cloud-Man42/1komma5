@@ -42,12 +42,17 @@ def weather_condition_bucket(cloud_cover_avg: float | None) -> str:
 
 def is_outlier_ratio(ratio: float, settings: Settings | None = None) -> bool:
     cfg = settings or get_settings()
-    return ratio < cfg.solar_forecast_outlier_ratio_min or ratio > cfg.solar_forecast_outlier_ratio_max
+    return (
+        ratio < cfg.solar_forecast_outlier_ratio_min or ratio > cfg.solar_forecast_outlier_ratio_max
+    )
 
 
 def clamp_correction_factor(value: float, settings: Settings | None = None) -> float:
     cfg = settings or get_settings()
-    return max(cfg.solar_forecast_correction_factor_min, min(cfg.solar_forecast_correction_factor_max, value))
+    return max(
+        cfg.solar_forecast_correction_factor_min,
+        min(cfg.solar_forecast_correction_factor_max, value),
+    )
 
 
 def compute_mae(
@@ -135,7 +140,9 @@ def compute_benchmark(observations: list[SolarForecastObservation]) -> Benchmark
     improvement = None
     if raw_mae is not None and corrected_mae is not None and raw_mae > 0:
         improvement = (raw_mae - corrected_mae) / raw_mae * 100.0
-    return BenchmarkMetrics(raw_mae=raw_mae, corrected_mae=corrected_mae, improvement_pct=improvement)
+    return BenchmarkMetrics(
+        raw_mae=raw_mae, corrected_mae=corrected_mae, improvement_pct=improvement
+    )
 
 
 def _weighted_ratios(
@@ -151,7 +158,10 @@ def _weighted_ratios(
             continue
         if obs.actual_kwh is None or obs.forecast_kwh_raw is None or obs.forecast_kwh_raw <= 0:
             continue
-        if obs.data_completeness_pct is not None and obs.data_completeness_pct < cfg.solar_forecast_min_data_completeness_pct:
+        if (
+            obs.data_completeness_pct is not None
+            and obs.data_completeness_pct < cfg.solar_forecast_min_data_completeness_pct
+        ):
             continue
         ratio = obs.actual_kwh / obs.forecast_kwh_raw
         if is_outlier_ratio(ratio, cfg):
@@ -213,7 +223,9 @@ def compute_confidence_score(
         return None
 
     cfg = settings or get_settings()
-    sample_score = min(100.0, profile.historical_samples / cfg.solar_forecast_min_samples_mature * 100.0)
+    sample_score = min(
+        100.0, profile.historical_samples / cfg.solar_forecast_min_samples_mature * 100.0
+    )
 
     mape_score = 50.0
     if profile.mape_30d is not None:
@@ -232,7 +244,13 @@ def compute_confidence_score(
         deviation = abs(profile.correction_factor - 1.0)
         stability = max(50.0, 100.0 - deviation * 100.0)
 
-    score = sample_score * 0.35 + mape_score * 0.25 + mae_score * 0.15 + bias_score * 0.15 + stability * 0.10
+    score = (
+        sample_score * 0.35
+        + mape_score * 0.25
+        + mae_score * 0.15
+        + bias_score * 0.15
+        + stability * 0.10
+    )
     return round(min(100.0, max(0.0, score)), 1)
 
 
@@ -264,7 +282,10 @@ def build_model_profile(
     state = resolve_model_state(historical_samples, cfg)
 
     def metrics_publishable() -> bool:
-        return state not in (ModelState.NO_DATA, ModelState.LEARNING) and historical_samples >= min_for_metrics
+        return (
+            state not in (ModelState.NO_DATA, ModelState.LEARNING)
+            and historical_samples >= min_for_metrics
+        )
 
     def gated(value: float | None, count: int) -> float | None:
         if not metrics_publishable() or count < 1:
@@ -327,7 +348,9 @@ def build_model_profile(
     return profile
 
 
-def metrics_insufficient(profile: SolarForecastModelProfile, settings: Settings | None = None) -> bool:
+def metrics_insufficient(
+    profile: SolarForecastModelProfile, settings: Settings | None = None
+) -> bool:
     cfg = settings or get_settings()
     if profile.model_state == ModelState.NO_DATA or profile.historical_samples <= 0:
         return True

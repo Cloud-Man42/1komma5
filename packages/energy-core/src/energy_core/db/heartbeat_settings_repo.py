@@ -115,7 +115,9 @@ class HeartbeatSettingsRepository:
             for site in sites
         ]
 
-    async def update_site_system_id(self, slug: str, external_system_id: str | None) -> SiteHeartbeatMapping:
+    async def update_site_system_id(
+        self, slug: str, external_system_id: str | None
+    ) -> SiteHeartbeatMapping:
         from sqlalchemy import select
 
         site = await self._session.scalar(select(SiteModel).where(SiteModel.slug == slug))

@@ -121,7 +121,9 @@ async def get_historical_energy(
         if record.year == year
     ]
     if not records:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Historical year not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Historical year not found"
+        )
     return HistoricalEnergyYearResponse(
         slug=slug,
         year=year,
@@ -149,10 +151,7 @@ async def list_sites(
     repo: EnergyReadingRepository = Depends(get_reading_repository),
 ) -> list[SiteResponse]:
     sites = await repo.list_sites_with_latest()
-    return [
-        _site_response(site, site.latest_reading)
-        for site in sites
-    ]
+    return [_site_response(site, site.latest_reading) for site in sites]
 
 
 @router.post("/sites", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)

@@ -2,9 +2,8 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from helpers import enable_solar_config, seed_readings, seed_recent_readings
 from energy_core.solar_forecast.types import WeatherForecast, WeatherForecastPoint
+from helpers import enable_solar_config, seed_readings, seed_recent_readings
 
 
 def _sample_weather(site_id: int = 1) -> WeatherForecast:

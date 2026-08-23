@@ -1,6 +1,6 @@
-import pytest
 from datetime import UTC, datetime
 
+import pytest
 from energy_core.config import Settings
 from energy_core.db.models import Base
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository

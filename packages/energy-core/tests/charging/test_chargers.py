@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from energy_core.chargers.base import ChargerStatus
 from energy_core.chargers.charge_amps import (
     ChargeAmpsExternalController,
@@ -60,7 +59,9 @@ async def test_build_chargeamps_controller_uses_web_provider(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_build_chargeamps_controller_prefers_external_when_charger_api_key_present(monkeypatch):
+async def test_build_chargeamps_controller_prefers_external_when_charger_api_key_present(
+    monkeypatch,
+):
     monkeypatch.setenv("CHARGEAMPS_PROVIDER", "web")
     monkeypatch.setenv("CHARGEAMPS_EMAIL", "user@example.com")
     monkeypatch.setenv("CHARGEAMPS_PASSWORD", "secret")
@@ -85,7 +86,9 @@ async def test_build_chargeamps_controller_uses_external_when_api_key_present(mo
 
 @pytest.mark.asyncio
 async def test_web_get_status_parses_connector():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     payload = {
         "ip": "80.208.66.224",
         "connectors": [
@@ -110,7 +113,9 @@ async def test_web_get_status_parses_connector():
 
 @pytest.mark.asyncio
 async def test_web_get_status_ignores_placeholder_default_nfc_tag():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     payload = {
         "ip": "80.208.66.224",
         "connectors": [
@@ -133,7 +138,9 @@ async def test_web_get_status_ignores_placeholder_default_nfc_tag():
 
 @pytest.mark.asyncio
 async def test_web_get_status_preparing_means_vehicle_connected():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     payload = {
         "ip": "80.208.66.224",
         "connectors": [
@@ -154,7 +161,9 @@ async def test_web_get_status_preparing_means_vehicle_connected():
 
 @pytest.mark.asyncio
 async def test_web_set_current_limit_calls_updateusersettings():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     request = AsyncMock(return_value={})
     with patch.object(controller, "_request", request):
         await controller.set_current_limit(10.0)
@@ -168,7 +177,9 @@ async def test_web_set_current_limit_calls_updateusersettings():
 
 @pytest.mark.asyncio
 async def test_web_start_charging_uses_default_rfid_tag():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     request = AsyncMock(return_value={})
     controller._default_rfid_tag = "654321"
     idle_status = ChargerStatus(
@@ -177,8 +188,9 @@ async def test_web_start_charging_uses_default_rfid_tag():
         current_limit_a=16.0,
         charging=False,
     )
-    with patch.object(controller, "get_status", AsyncMock(return_value=idle_status)), patch.object(
-        controller, "_request", request
+    with (
+        patch.object(controller, "get_status", AsyncMock(return_value=idle_status)),
+        patch.object(controller, "_request", request),
     ):
         await controller.start_charging()
 
@@ -191,7 +203,9 @@ async def test_web_start_charging_uses_default_rfid_tag():
 
 @pytest.mark.asyncio
 async def test_web_start_charging_skips_remotestart_when_already_charging():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     request = AsyncMock(return_value={})
     charging_status = ChargerStatus(
         connected=True,
@@ -199,8 +213,9 @@ async def test_web_start_charging_skips_remotestart_when_already_charging():
         current_limit_a=16.0,
         charging=True,
     )
-    with patch.object(controller, "get_status", AsyncMock(return_value=charging_status)), patch.object(
-        controller, "_request", request
+    with (
+        patch.object(controller, "get_status", AsyncMock(return_value=charging_status)),
+        patch.object(controller, "_request", request),
     ):
         await controller.start_charging()
 
@@ -209,7 +224,9 @@ async def test_web_start_charging_skips_remotestart_when_already_charging():
 
 @pytest.mark.asyncio
 async def test_web_start_charging_fetches_rfid_when_default_is_placeholder():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     request_json = AsyncMock(
         side_effect=[
             [{"id": "0474F0F2636B81", "active": True}],
@@ -222,9 +239,11 @@ async def test_web_start_charging_fetches_rfid_when_default_is_placeholder():
         current_limit_a=16.0,
         charging=False,
     )
-    with patch.object(controller, "get_status", AsyncMock(return_value=idle_status)), patch.object(
-        controller, "_request_json", request_json
-    ), patch.object(controller, "_request", request):
+    with (
+        patch.object(controller, "get_status", AsyncMock(return_value=idle_status)),
+        patch.object(controller, "_request_json", request_json),
+        patch.object(controller, "_request", request),
+    ):
         await controller.start_charging()
 
     request_json.assert_awaited_once_with(
@@ -254,11 +273,20 @@ def test_valid_rfid_tag_rejects_placeholder(value, expected):
 
 @pytest.mark.asyncio
 async def test_web_stop_charging_sets_zero_current_without_remotestop_when_idle():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
     request = AsyncMock(
         return_value={
             "ip": "80.208.66.224",
-            "connectors": [{"connectorId": 1, "isCharging": False, "ocppStatus": "Available", "userCurrent": 16.0}],
+            "connectors": [
+                {
+                    "connectorId": 1,
+                    "isCharging": False,
+                    "ocppStatus": "Available",
+                    "userCurrent": 16.0,
+                }
+            ],
         }
     )
     with patch.object(controller, "_request", request):
@@ -271,8 +299,12 @@ async def test_web_stop_charging_sets_zero_current_without_remotestop_when_idle(
 
 @pytest.mark.asyncio
 async def test_web_login_failure_raises():
-    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
-    response = httpx.Response(401, request=httpx.Request("POST", "https://my.charge.space/api/auth/login"))
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="user@example.com", password="secret", use_mock=False
+    )
+    response = httpx.Response(
+        401, request=httpx.Request("POST", "https://my.charge.space/api/auth/login")
+    )
     with patch(
         "energy_core.chargers.charge_amps_web.httpx.AsyncClient",
     ) as client_cls:
@@ -280,7 +312,9 @@ async def test_web_login_failure_raises():
         client.__aenter__.return_value = client
         client.__aexit__.return_value = None
         client.post = AsyncMock(
-            side_effect=httpx.HTTPStatusError("unauthorized", request=response.request, response=response)
+            side_effect=httpx.HTTPStatusError(
+                "unauthorized", request=response.request, response=response
+            )
         )
         client_cls.return_value = client
 
@@ -309,10 +343,13 @@ async def test_external_controller_uses_web_vehicle_status_fallback(monkeypatch)
         current_limit_a=16.0,
         charging=False,
     )
-    with patch.object(controller._adapter, "get_status", AsyncMock(return_value=external_status)), patch.object(
-        controller._web_status,
-        "get_status",
-        AsyncMock(return_value=web_status),
+    with (
+        patch.object(controller._adapter, "get_status", AsyncMock(return_value=external_status)),
+        patch.object(
+            controller._web_status,
+            "get_status",
+            AsyncMock(return_value=web_status),
+        ),
     ):
         status = await controller.get_status()
     assert status.vehicle_connected is True
@@ -369,11 +406,14 @@ async def test_external_stop_charging_keeps_evse_enabled():
         "maxCurrent": 16.0,
     }
     update = AsyncMock(return_value={})
-    with patch.object(
-        controller._adapter._client,
-        "get_connector_settings",
-        AsyncMock(return_value=dict(settings_payload)),
-    ), patch.object(controller._adapter._client, "update_connector_settings", update):
+    with (
+        patch.object(
+            controller._adapter._client,
+            "get_connector_settings",
+            AsyncMock(return_value=dict(settings_payload)),
+        ),
+        patch.object(controller._adapter._client, "update_connector_settings", update),
+    ):
         await controller.stop_charging()
 
     assert update.await_args.args[0]["mode"] == "On"

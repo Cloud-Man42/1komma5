@@ -1,4 +1,5 @@
 """Dump HeartBeat EV/charger details for a site."""
+
 import asyncio
 import json
 import sys
@@ -25,7 +26,9 @@ async def main() -> None:
         print("EMS", json.dumps(ems, indent=2)[:2000])
         print("EVS", json.dumps(evs, indent=2)[:4000])
         print("BOXES", json.dumps(boxes, indent=2)[:4000])
-        ev_agg = overview.get("evChargersAggregated") or (overview.get("liveHeroView") or {}).get("evChargersAggregated")
+        ev_agg = overview.get("evChargersAggregated") or (overview.get("liveHeroView") or {}).get(
+            "evChargersAggregated"
+        )
         print("EV_AGG", json.dumps(ev_agg, indent=2)[:1000])
 
 

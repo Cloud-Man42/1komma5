@@ -1,10 +1,9 @@
 from collections.abc import AsyncGenerator
 
-from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from energy_core.config import Settings
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 _settings: Settings | None = None
@@ -36,6 +35,8 @@ def get_site_repository(session: AsyncSession = Depends(get_db_session)) -> Site
     return SiteRepository(session)
 
 
-def get_reading_repository(session: AsyncSession = Depends(get_db_session)) -> EnergyReadingRepository:
+def get_reading_repository(
+    session: AsyncSession = Depends(get_db_session),
+) -> EnergyReadingRepository:
     settings = get_app_settings()
     return EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)

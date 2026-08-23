@@ -30,7 +30,9 @@ class UnsupportedChargerAdapter:
         self._integration_method = integration_method
         model = get_model(manufacturer_id, model_id)
         method = get_integration_method(integration_method)
-        self._capabilities = model.capabilities if model else ChargerCapabilities(can_read_status=False)
+        self._capabilities = (
+            model.capabilities if model else ChargerCapabilities(can_read_status=False)
+        )
         self._message = (
             f"Integration {integration_method} for {manufacturer_id}/{model_id} "
             f"is not implemented yet ({method.implementation_status if method else 'UNSUPPORTED'})."

@@ -3,14 +3,15 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from energy_core.chargers.charge_amps_web import ChargeAmpsWebController
 from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
 
 
 @pytest.mark.asyncio
 async def test_web_meter_snapshot_parses_cumulative_kwh():
-    controller = ChargeAmpsWebController("2106037142M", email="u@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="u@example.com", password="secret", use_mock=False
+    )
     payload = {
         "ip": "1.2.3.4",
         "connectors": [
@@ -36,7 +37,9 @@ async def test_web_meter_snapshot_parses_cumulative_kwh():
 
 @pytest.mark.asyncio
 async def test_web_meter_detects_preparing_as_vehicle_connected():
-    controller = ChargeAmpsWebController("2106037142M", email="u@example.com", password="secret", use_mock=False)
+    controller = ChargeAmpsWebController(
+        "2106037142M", email="u@example.com", password="secret", use_mock=False
+    )
     payload = {
         "ip": "1.2.3.4",
         "connectors": [

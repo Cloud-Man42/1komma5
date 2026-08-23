@@ -106,10 +106,14 @@ def _solar_geometry(ts: datetime, lat: float, lon: float) -> tuple[float, float]
     decl_rad = math.radians(decl)
     hour_angle = math.radians(15 * (hour - 12) + lon * 4 / 60)  # simplified
 
-    sin_elev = math.sin(lat_rad) * math.sin(decl_rad) + math.cos(lat_rad) * math.cos(decl_rad) * math.cos(hour_angle)
+    sin_elev = math.sin(lat_rad) * math.sin(decl_rad) + math.cos(lat_rad) * math.cos(
+        decl_rad
+    ) * math.cos(hour_angle)
     elevation = math.degrees(math.asin(max(-1.0, min(1.0, sin_elev))))
 
-    cos_az = (math.sin(decl_rad) - math.sin(lat_rad) * sin_elev) / max(math.cos(lat_rad) * math.cos(math.radians(elevation)), 1e-6)
+    cos_az = (math.sin(decl_rad) - math.sin(lat_rad) * sin_elev) / max(
+        math.cos(lat_rad) * math.cos(math.radians(elevation)), 1e-6
+    )
     azimuth = math.degrees(math.acos(max(-1.0, min(1.0, cos_az))))
     if hour_angle > 0:
         azimuth = 360 - azimuth

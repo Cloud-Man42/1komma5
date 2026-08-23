@@ -1,6 +1,9 @@
 """Tests for solar forecast azimuth conversion."""
 
-from energy_core.solar_forecast.azimuth import emic_azimuth_to_open_meteo, open_meteo_azimuth_to_emic
+from energy_core.solar_forecast.azimuth import (
+    emic_azimuth_to_open_meteo,
+    open_meteo_azimuth_to_emic,
+)
 
 
 def test_south_facing_conversion() -> None:

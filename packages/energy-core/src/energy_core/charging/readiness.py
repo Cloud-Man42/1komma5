@@ -79,7 +79,9 @@ def evaluate_charging_readiness(
                     )
                 )
         if site.main_fuse_a is None:
-            notes.append(f"{site.slug}/{charger.name}: huvudsäkring (main_fuse_a) saknas — säkringsskydd inaktivt.")
+            notes.append(
+                f"{site.slug}/{charger.name}: huvudsäkring (main_fuse_a) saknas — säkringsskydd inaktivt."
+            )
 
     ready = chargeamps.ready and active > 0 and not issues
     if active == 0:

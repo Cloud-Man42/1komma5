@@ -19,11 +19,7 @@ def upgrade() -> None:
     )
     op.execute(
         historical_energy.update()
-        .where(
-            historical_energy.c.source.in_(
-                ["E.ON Historik 2025", "E.ON Historik 2025 (bild)"]
-            )
-        )
+        .where(historical_energy.c.source.in_(["E.ON Historik 2025", "E.ON Historik 2025 (bild)"]))
         .values(source="Tibber Historik 2025 (bild)")
     )
 

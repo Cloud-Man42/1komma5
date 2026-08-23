@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock
 
 import pytest
-
 from energy_core.chargers.base import ChargerStatus
 from energy_core.chargers.errors import ChargerApiError
 from energy_core.charging.anti_flapping import AntiFlappingConfig, AntiFlappingState
@@ -11,7 +10,9 @@ from energy_core.charging.command_controller import ChargingCommandController
 from energy_core.charging.models import ChargingDecision
 
 
-def _decision(current: float, action: str = "set_current", reason: str = "test") -> ChargingDecision:
+def _decision(
+    current: float, action: str = "set_current", reason: str = "test"
+) -> ChargingDecision:
     return ChargingDecision(
         requested_current_a=current,
         applied_current_a=current,

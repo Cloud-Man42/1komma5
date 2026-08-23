@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision = "017_drop_bridge_mode"
 down_revision = "016_smart_charging_engine"

@@ -85,13 +85,13 @@ async def seed_recent_readings(
         now = datetime.now(UTC)
         zone = ZoneInfo(site.timezone)
         day_start = (
-            now.astimezone(zone)
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-            .astimezone(UTC)
+            now.astimezone(zone).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC)
         )
         timestamps = recent_reading_timestamps(now, day_start, len(samples), spacing=spacing)
         repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-        for recorded_at, (solar, consumption, imp, exp, soc) in zip(timestamps, samples, strict=True):
+        for recorded_at, (solar, consumption, imp, exp, soc) in zip(
+            timestamps, samples, strict=True
+        ):
             await repo.upsert_reading(
                 site.id,
                 NormalizedEnergyReading(

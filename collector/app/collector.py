@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
 from energy_core.config import get_settings
+from energy_core.consumer_accounting import ConsumerAccountingCoordinator
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.repositories import (
     EnergyReadingRepository,
@@ -17,12 +18,11 @@ from energy_core.db.repositories import (
     SiteRepository,
 )
 from energy_core.db.session import create_engine, create_session_factory
-from energy_core.ev_accounting import EVAccountingCoordinator
-from energy_core.consumer_accounting import ConsumerAccountingCoordinator
-from energy_core.integrations.arctic_spa.polling import ArcticSpaPollingService
 from energy_core.energy_balance.coordinator import EnergyBalanceCoordinator
+from energy_core.ev_accounting import EVAccountingCoordinator
 from energy_core.heartbeat.market_prices import parse_market_prices
 from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.arctic_spa.polling import ArcticSpaPollingService
 from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
@@ -85,7 +85,9 @@ class Collector:
         except Exception:
             logger.exception("Smart charging cycle failed")
 
-        logger.info("Stored %d readings, smart charging processed %d chargers", reading_count, bridge_count)
+        logger.info(
+            "Stored %d readings, smart charging processed %d chargers", reading_count, bridge_count
+        )
 
     async def _collect_market_prices(self, session, site_repo: SiteRepository) -> None:
         client = await create_heartbeat_client(session)
@@ -135,7 +137,9 @@ class Collector:
                 try:
                     live_overview = await client.fetch_live_overview(site.external_system_id)
                 except Exception:
-                    logger.exception("Failed to fetch live overview for EV accounting site %s", site.slug)
+                    logger.exception(
+                        "Failed to fetch live overview for EV accounting site %s", site.slug
+                    )
             total += await self._ev_accounting.process_site(
                 session,
                 site=site,
@@ -157,7 +161,9 @@ class Collector:
                 try:
                     live_overview = await client.fetch_live_overview(site.external_system_id)
                 except Exception:
-                    logger.exception("Failed to fetch live overview for energy balance site %s", site.slug)
+                    logger.exception(
+                        "Failed to fetch live overview for energy balance site %s", site.slug
+                    )
             chargers = await charger_repo.list_for_site(site.id)
             for charger in chargers:
                 if not charger.bridge_enabled and not charger.virtual_evse_enabled:

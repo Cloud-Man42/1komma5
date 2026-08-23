@@ -226,6 +226,8 @@ def price_allows_immediate_grid_charge(
     reference = now or datetime.now(UTC)
     if reference.tzinfo is None:
         reference = reference.replace(tzinfo=UTC)
-    slots = _hourly_slots(price_forecast, reference - timedelta(hours=1), reference + timedelta(hours=24))
+    slots = _hourly_slots(
+        price_forecast, reference - timedelta(hours=1), reference + timedelta(hours=24)
+    )
     average = _average_price(slots)
     return average is not None and _is_green_price(current_price, average)

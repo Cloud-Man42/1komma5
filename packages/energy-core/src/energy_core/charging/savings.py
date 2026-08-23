@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 
 from energy_core.charging.power_to_current import current_to_power_w
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRecord
@@ -51,7 +50,9 @@ def compute_charging_savings(
     intervals = 0
 
     for previous, current in zip(cycles, cycles[1:]):
-        interval = _charging_interval(previous, current, phases=phases, nominal_voltage_v=nominal_voltage_v)
+        interval = _charging_interval(
+            previous, current, phases=phases, nominal_voltage_v=nominal_voltage_v
+        )
         if interval is None:
             continue
         kwh, price = interval

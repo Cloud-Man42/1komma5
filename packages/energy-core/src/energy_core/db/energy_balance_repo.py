@@ -60,7 +60,9 @@ class SiteEnergyConfigRepository:
         if inverter_display_name is not None:
             row.inverter_display_name = inverter_display_name.strip() or row.inverter_display_name
         if physical_ev_charger_label is not None:
-            row.physical_ev_charger_label = physical_ev_charger_label.strip() or row.physical_ev_charger_label
+            row.physical_ev_charger_label = (
+                physical_ev_charger_label.strip() or row.physical_ev_charger_label
+            )
         if ev_vehicle_label is not None:
             row.ev_vehicle_label = ev_vehicle_label.strip() or row.ev_vehicle_label
         await self._session.flush()
@@ -113,7 +115,9 @@ class EnergyBalanceRepository:
             )
         )
 
-    async def get_latest(self, *, site_id: int, charger_id: int) -> StoredEnergyBalanceSnapshot | None:
+    async def get_latest(
+        self, *, site_id: int, charger_id: int
+    ) -> StoredEnergyBalanceSnapshot | None:
         result = await self._session.execute(
             select(EnergyBalanceSnapshotModel)
             .where(

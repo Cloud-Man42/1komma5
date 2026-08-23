@@ -88,7 +88,9 @@ class EnergyBalanceEngine:
                 sungrow_fresh=sungrow.fresh if sungrow else None,
                 sungrow_telemetry_age_seconds=sungrow.data_age_seconds if sungrow else None,
                 halo_power_w=halo.power_w if halo else None,
-                virtual_evse_reported_power_w=virtual_evse.reported_power_w if virtual_evse else None,
+                virtual_evse_reported_power_w=virtual_evse.reported_power_w
+                if virtual_evse
+                else None,
                 heartbeat_observed_ev_power_w=heartbeat.ev_actual_power_w if heartbeat else None,
                 heartbeat_home_consumption_w=heartbeat.home_consumption_w if heartbeat else None,
                 non_ev_house_load_w=None,
@@ -196,4 +198,6 @@ class EnergyBalanceEngine:
             expected_total = sungrow.load_power_w
         else:
             return False
-        return abs(heartbeat_total - expected_total - halo.power_w) < self._double_counting_tolerance_w
+        return (
+            abs(heartbeat_total - expected_total - halo.power_w) < self._double_counting_tolerance_w
+        )

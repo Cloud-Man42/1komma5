@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
-
 from energy_core.chargers.client import ChargeAmpsClient, sanitize_error_message
 from energy_core.chargers.errors import ChargerApiError
 
@@ -24,7 +23,9 @@ async def test_client_auth_failure_raises_auth_error():
         email="user@example.com",
         password="secret",
     )
-    response = httpx.Response(401, request=httpx.Request("POST", "https://eapi.charge.space/api/v5/auth/login"))
+    response = httpx.Response(
+        401, request=httpx.Request("POST", "https://eapi.charge.space/api/v5/auth/login")
+    )
     with patch("energy_core.chargers.client.httpx.AsyncClient") as client_cls:
         http = AsyncMock()
         http.__aenter__.return_value = http
@@ -49,12 +50,16 @@ async def test_client_rate_limit_retries():
     rate_limited = httpx.Response(
         429,
         headers={"Retry-After": "0"},
-        request=httpx.Request("GET", "https://eapi.charge.space/api/v5/chargepoints/2106037142M/status"),
+        request=httpx.Request(
+            "GET", "https://eapi.charge.space/api/v5/chargepoints/2106037142M/status"
+        ),
     )
     ok = httpx.Response(
         200,
         json={"connectorStatuses": [{"connectorId": 1, "status": "Available"}]},
-        request=httpx.Request("GET", "https://eapi.charge.space/api/v5/chargepoints/2106037142M/status"),
+        request=httpx.Request(
+            "GET", "https://eapi.charge.space/api/v5/chargepoints/2106037142M/status"
+        ),
     )
 
     with patch("energy_core.chargers.client.httpx.AsyncClient") as client_cls:

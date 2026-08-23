@@ -64,12 +64,18 @@ class ChargeAmpsMeterAdapter:
         self._external = external_client
 
     @classmethod
-    def from_controller(cls, controller: ChargeAmpsController, *, phases: int = 3) -> ChargeAmpsMeterAdapter:
+    def from_controller(
+        cls, controller: ChargeAmpsController, *, phases: int = 3
+    ) -> ChargeAmpsMeterAdapter:
         if isinstance(controller, ChargeAmpsWebController):
             return cls(controller.charger_id, web_controller=controller, phases=phases)
         external = getattr(controller, "_adapter", None)
         client = getattr(external, "_client", None) if external is not None else None
-        return cls(controller.charger_id if hasattr(controller, "charger_id") else "unknown", external_client=client, phases=phases)
+        return cls(
+            controller.charger_id if hasattr(controller, "charger_id") else "unknown",
+            external_client=client,
+            phases=phases,
+        )
 
     @classmethod
     def build(
@@ -153,7 +159,9 @@ class ChargeAmpsMeterAdapter:
             configured = _float_or_none(connector.get("currentCurrent"))
         actual_current = _max_phase_current(l1, l2, l3)
         power_w = _power_from_phases(l1, l2, l3, self._nominal_voltage_v, self._phases)
-        source = "meter" if cumulative is not None else ("power_estimate" if power_w else "unavailable")
+        source = (
+            "meter" if cumulative is not None else ("power_estimate" if power_w else "unavailable")
+        )
 
         return MeterSnapshot(
             recorded_at=now,
@@ -179,7 +187,9 @@ class ChargeAmpsMeterAdapter:
             connector.get("isCharging") or connector.get("is_charging")
         )
         vehicle_connected = vehicle_connected_from_external_connector(connector)
-        cumulative = _float_or_none(connector.get("totalConsumptionKwh") or connector.get("energyDelivered"))
+        cumulative = _float_or_none(
+            connector.get("totalConsumptionKwh") or connector.get("energyDelivered")
+        )
         return MeterSnapshot(
             recorded_at=now,
             cumulative_kwh=cumulative,
@@ -196,7 +206,9 @@ class ChargeAmpsMeterAdapter:
         )
 
 
-def session_energy_from_meter(start_kwh: float | None, stop_kwh: float | None) -> tuple[float | None, str]:
+def session_energy_from_meter(
+    start_kwh: float | None, stop_kwh: float | None
+) -> tuple[float | None, str]:
     """Return (session_kwh, quality) from cumulative meter delta."""
     if start_kwh is None or stop_kwh is None:
         return None, "INCOMPLETE"

@@ -113,7 +113,9 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
             if response.status_code == 429:
                 raise WeatherProviderRateLimitError("Open-Meteo rate limit exceeded")
             if response.status_code >= 500:
-                raise WeatherProviderUnavailableError(f"Open-Meteo server error: {response.status_code}")
+                raise WeatherProviderUnavailableError(
+                    f"Open-Meteo server error: {response.status_code}"
+                )
             response.raise_for_status()
             data = response.json()
             if "error" in data:

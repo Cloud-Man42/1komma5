@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 import pytest
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
 from energy_core.domain import NormalizedEnergyReading
-
 from helpers import seed_readings
 
 
@@ -269,10 +268,7 @@ async def test_historical_monthly_energy_calibrates_import_forecast(client):
 async def test_historical_monthly_energy_requires_every_month(client):
     ac, _, _ = client
     duplicate_months = {
-        "months": [
-            {"month": 1, "imported_kwh": 100}
-            for _ in range(12)
-        ],
+        "months": [{"month": 1, "imported_kwh": 100} for _ in range(12)],
     }
 
     response = await ac.put(

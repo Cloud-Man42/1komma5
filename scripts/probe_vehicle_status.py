@@ -1,12 +1,11 @@
 """Probe Charge Amps vehicle connection signals (no secrets logged)."""
+
 import asyncio
 import json
 import os
-import sys
 
 from energy_core.chargers.charge_amps import build_chargeamps_controller
 from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
-
 
 CHARGER_ID = os.getenv("CHARGEAMPS_PROBE_CHARGER_ID", "").strip()
 if not CHARGER_ID:
