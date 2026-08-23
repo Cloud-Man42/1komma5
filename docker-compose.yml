@@ -1,9 +1,12 @@
 services:
   caddy:
     image: caddy:2-alpine
+    # Only the host side of each publication is parameterized (GH-46). The
+    # container side stays fixed, so the Caddyfile and every service that
+    # reaches another over the compose network are unaffected by an override.
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
     volumes:

@@ -1,5 +1,20 @@
 UV ?= uv
 
+# Host ports the dev targets bind (GH-46). Each default is the value that
+# target bound before it became configurable, so a developer who sets nothing
+# sees no change; set the variable in the environment or on the command line
+# (`make backend-dev BACKEND_PORT=9001`) to move the port.
+#
+# `$(or $(strip ...),<default>)` rather than `?=`: GNU Make counts an exported
+# but empty `BACKEND_PORT=` as already set, so `?=` would leave it empty and
+# hand uvicorn a bare `--port` with no value. This form falls back for the
+# empty case as well as the unset one, matching the `${VAR:-default}` semantics
+# the compose files use for HTTP_PORT/HTTPS_PORT/POSTGRES_PORT.
+BACKEND_PORT := $(or $(strip $(BACKEND_PORT)),8000)
+# 3000 is `next dev`'s own default; FRONTEND_PORT reaches it through PORT,
+# which its `-p, --port` option reads (`next dev --help`).
+FRONTEND_PORT := $(or $(strip $(FRONTEND_PORT)),3000)
+
 # Module resolution for the workspace packages (energy_core, app.main, app.collector)
 # comes from the editable installs that `make install` (`uv sync --all-packages`) writes
 # into .venv as .pth files -- not from PYTHONPATH. Do not re-add a PYTHONPATH assignment
@@ -20,13 +35,13 @@ seed:
 	$(UV) run python scripts/seed.py
 
 backend-dev:
-	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
+	$(UV) run uvicorn app.main:app --reload --host 0.0.0.0 --port $(BACKEND_PORT) --app-dir backend
 
 collector-dev:
 	$(UV) run --directory collector python -m app
 
 frontend-dev:
-	cd frontend && npm run dev
+	cd frontend && PORT=$(FRONTEND_PORT) npm run dev
 
 test:
 	$(UV) run pytest
