@@ -1,0 +1,14 @@
+# Code owners for L0rdS474n/1komma5.
+#
+# One rule, because the repository has one maintainer who is also its only
+# collaborator. Adding per-directory rules that all name the same account would
+# be maintenance with no effect: GitHub applies the last matching pattern, and
+# every pattern would resolve to the same reviewer.
+#
+# What this file does today: GitHub requests a review from the account below on
+# every pull request. What it does not do: gate the merge. Branch protection on
+# `main` has "Require review from Code Owners" turned off, so the request is
+# advisory until that setting is enabled. See CONTRIBUTING.md for the full set
+# of protection rules currently in force.
+
+*       @L0rdS474n

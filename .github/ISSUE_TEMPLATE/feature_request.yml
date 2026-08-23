@@ -1,0 +1,86 @@
+name: Feature request
+description: Propose a change in behaviour, a new capability, or a piece of hardening.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposals are worked in milestones. `Runda 1 — kodgenomgång 2026-08-22`
+        is frozen; anything filed now is triaged into `Runda 2 — nya fynd`. See
+        [CONTRIBUTING.md](https://github.com/L0rdS474n/1komma5/blob/main/CONTRIBUTING.md).
+
+        A proposal that states its acceptance criteria can be implemented
+        directly. One that states only a wish needs a round trip first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >-
+        What is hard, slow, wrong or impossible today? Describe the situation,
+        not the solution, and give the evidence you have for it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should exist instead, concretely enough to be reviewed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >-
+        How would a reviewer know this is done? Given / When / Then is the
+        preferred shape, because it maps straight onto a test.
+      placeholder: |
+        Given a site with no configured charger
+        When the dashboard is opened
+        Then the charging card renders an empty state instead of a spinner
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where the change would land. Pick the closest match.
+      options:
+        - Backend API (backend/app/api)
+        - Collector (collector/)
+        - Frontend (frontend/)
+        - energy-core package (packages/energy-core)
+        - EV charger integration (chargers/)
+        - Spa integration
+        - Solar forecast
+        - Database / migrations (alembic)
+        - Build, Makefile or tooling
+        - CI (.github/workflows)
+        - Documentation
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >-
+        What else would solve the same problem, and why is this proposal better?
+        "Do nothing" is a legitimate alternative to weigh.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: I searched the open issues and this is not already tracked.
+          required: true
+        - label: This is one objective, not a bundle of unrelated changes.
+          required: true

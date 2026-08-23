@@ -1,0 +1,36 @@
+# Dependabot version updates for L0rdS474n/1komma5.
+#
+# Dependabot *security* updates are already enabled for this repository through
+# its settings and need no configuration file. This file adds scheduled
+# *version* updates, which do require one.
+#
+# Each `directory` points at the location the ecosystem's manifest actually
+# lives at in this tree, not at a conventional guess:
+#   - uv:             the workspace has one root `pyproject.toml` and one
+#                     `uv.lock` at the repository root; the members
+#                     (`packages/energy-core`, `backend`, `collector`) are
+#                     resolved through that single lockfile.
+#   - npm:            the only `package.json`/`package-lock.json` pair is in
+#                     `frontend/`.
+#   - github-actions: workflows are scanned under `.github/workflows/`
+#                     regardless of this value, so it stays at the root.
+#
+# `tests/test_dependabot_config.py` holds these paths to the real manifest
+# locations and rejects any `directory` that escapes the repository root.
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,0 +1,25 @@
+# Configuration for the issue chooser. This file is not itself a template.
+#
+# Blank issues stay enabled: the maintainer files measured findings that fit
+# neither form, and forcing those through a form would lose detail.
+blank_issues_enabled: true
+
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/L0rdS474n/1komma5/security/advisories/new
+    about: >-
+      Private vulnerability reporting is enabled for this repository. Use this
+      form instead of a public issue whenever credentials, authorization or
+      control of physical hardware are involved.
+
+  - name: Contribution guide
+    url: https://github.com/L0rdS474n/1komma5/blob/main/CONTRIBUTING.md
+    about: >-
+      Working setup and test commands, branch and commit conventions, the rules
+      protecting main, and how this fork tracks its upstream.
+
+  - name: Code of Conduct
+    url: https://github.com/L0rdS474n/1komma5/blob/main/CODE_OF_CONDUCT.md
+    about: >-
+      Expected behaviour in this project, and how to report conduct that falls
+      short of it.

@@ -1,0 +1,117 @@
+name: Bug report
+description: Something in EMIC behaves differently than it should, and you can show it.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security vulnerabilities.** If the defect exposes credentials,
+        bypasses authorization, or lets someone control hardware they should not
+        control, close this form and use the private channel in
+        [SECURITY.md](https://github.com/L0rdS474n/1komma5/blob/main/SECURITY.md)
+        instead.
+
+        Everything else: the more measured detail you give, the shorter the
+        round trip. Evidence beats description.
+
+  - type: checkboxes
+    id: not-a-vulnerability
+    attributes:
+      label: Confirmation
+      options:
+        - label: This is not a security vulnerability. I understand those are reported privately.
+          required: true
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: The observed behaviour, and the behaviour you expected instead.
+      placeholder: |
+        Expected: ...
+        Actual:   ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: >-
+        Numbered steps, starting from a clean clone where possible. Include the
+        exact command or HTTP request that triggers it.
+      placeholder: |
+        1. make install
+        2. make migrate && make seed
+        3. curl -s localhost:8000/api/sites/akarp/...
+        4. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where the defect shows up. Pick the closest match.
+      options:
+        - Backend API (backend/app/api)
+        - Collector (collector/)
+        - Frontend (frontend/)
+        - energy-core package (packages/energy-core)
+        - EV charger integration (chargers/)
+        - Spa integration
+        - Solar forecast
+        - Database / migrations (alembic)
+        - Build, Makefile or tooling
+        - CI (.github/workflows)
+        - Documentation
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: Commit or branch tested
+      description: >-
+        Output of `git rev-parse --short HEAD`, plus the branch name. This
+        repository is periodically rebased onto a rewritten upstream, so
+        "latest main" is not precise enough.
+      placeholder: "1550e8d on main"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >-
+        Python version, Node version, operating system, and whether you ran
+        natively or in Docker.
+      placeholder: |
+        python --version:
+        node --version:
+        OS:
+        Native or Docker:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, test output or traceback
+      description: >-
+        Paste the real output rather than summarising it. Redact tokens,
+        passwords, API keys and private host names before pasting.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: >-
+        A suspected cause, a workaround you found, or a related issue.
+    validations:
+      required: false
