@@ -5,6 +5,8 @@ from typing import Literal
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from energy_core.paths import default_env_file, resolve_database_url
+
 
 class AppEnvironment(StrEnum):
     DEVELOPMENT = "development"
@@ -19,7 +21,10 @@ class HeartbeatProviderKind(StrEnum):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Anchored at the project root rather than left relative, so every
+        # entry point reads the same file no matter which directory it was
+        # started from -- see `energy_core.paths` (GH-53).
+        env_file=default_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -28,6 +33,10 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="sqlite+aiosqlite:///./energy-dev.db",
         alias="DATABASE_URL",
+        # The default is as relative as the value `.env.example` documents,
+        # so it needs the same anchoring every other source of this field
+        # gets; pydantic skips validators on defaults unless asked (GH-53).
+        validate_default=True,
     )
     heartbeat_provider: HeartbeatProviderKind = Field(
         default=HeartbeatProviderKind.MOCK,
@@ -84,6 +93,14 @@ class Settings(BaseSettings):
     spa_smart_control_enabled: bool = Field(default=False, alias="SPA_SMART_CONTROL_ENABLED")
     spa_energy_collection_enabled: bool = Field(default=True, alias="SPA_ENERGY_COLLECTION_ENABLED")
     spa_cost_calculation_enabled: bool = Field(default=True, alias="SPA_COST_CALCULATION_ENABLED")
+
+    @field_validator("database_url")
+    @classmethod
+    def anchor_relative_sqlite_path(cls, value: str) -> str:
+        """Make `database_url` name the same physical file regardless of the
+        working directory it is read from. Absolute and non-sqlite URLs are
+        returned unchanged -- see `energy_core.paths.resolve_database_url`."""
+        return resolve_database_url(value)
 
     @field_validator("heartbeat_provider", mode="before")
     @classmethod
