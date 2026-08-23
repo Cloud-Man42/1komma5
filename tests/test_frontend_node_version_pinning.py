@@ -14,7 +14,8 @@ Pinning a single declared range and cross-checking every place that mentions
 a Node version against it is what keeps the next version-sensitive bug from
 repeating that path.
 
-This module holds three behavioral guards, one per acceptance criterion:
+This module originally held three behavioral guards, one per acceptance
+criterion:
 
 1. `test_frontend_package_json_declares_a_node_engines_range` and
    `test_frontend_engines_node_is_compatible_with_dependency` (AC1):
@@ -24,9 +25,14 @@ This module holds three behavioral guards, one per acceptance criterion:
 2. `test_nvmrc_declares_a_version_within_the_engines_node_span` (AC2): a
    `.nvmrc` must exist (at the repo root or under `frontend/`) and the
    version it names must fall inside `engines.node`'s span.
-3. `test_ci_frontend_job_node_version_is_within_engines_node_span` (AC3):
-   `.github/workflows/test.yml`'s `frontend` job's `actions/setup-node`
-   `node-version` must fall inside `engines.node`'s span.
+3. `test_ci_frontend_job_node_version_is_within_engines_node_span` (AC3)
+   checked that `.github/workflows/test.yml`'s `frontend` job's single
+   `actions/setup-node` `node-version` fell inside `engines.node`'s span.
+   **GH-17 removes this test** and replaces it with
+   `test_every_setup_node_step_in_the_workflow_requests_a_version_within_engines_node_span`
+   (AC5) -- see the "GH-17: generalizing the single-version CI check above
+   into a matrix-aware, whole-workflow check" section further down for why
+   AC3's original test could not simply be left in place alongside AC5's.
 
 None of these tests pin a specific version number. They pin *consistency*
 between the three declarations (and the dependencies' own requirements), so
@@ -412,7 +418,17 @@ def test_nvmrc_declares_a_version_within_the_engines_node_span() -> None:
         )
 
 
-# --- AC3: the CI frontend job's node-version is within the engines.node span
+# --- Step lookup: the frontend job's single actions/setup-node step --------
+#
+# `_frontend_setup_node_step` originally backed AC3's own real-world test
+# (`test_ci_frontend_job_node_version_is_within_engines_node_span`, removed
+# by GH-17 -- see the module docstring and the "GH-17: generalizing..."
+# section below). It is kept, unchanged, because it is still correct and
+# still needed: `test_frontend_job_setup_node_step_references_its_own_matrix_key`
+# (AC7) uses it to find the exact step whose `node-version` must reference
+# `strategy.matrix`, and `test_frontend_setup_node_step_finds_the_single_setup_node_step`
+# / `test_frontend_setup_node_step_raises_on_missing_or_ambiguous_step` below
+# remain its synthetic self-tests, carried forward per AC11.
 
 
 def _frontend_setup_node_step(workflow_data: dict) -> dict:
@@ -432,44 +448,6 @@ def _frontend_setup_node_step(workflow_data: dict) -> dict:
         f"{len(setup_node_steps)}"
     )
     return setup_node_steps[0]
-
-
-def test_ci_frontend_job_node_version_is_within_engines_node_span() -> None:
-    """Given `.github/workflows/test.yml`, when the `frontend` job's
-    `actions/setup-node` step's `node-version` is read, then it must fall
-    inside `frontend/package.json`'s declared `engines.node` span. Which
-    exact Node version(s) CI's matrix should run is GH-17's concern, not
-    this test's; this only checks that whatever version CI currently
-    requests is consistent with what the frontend itself declares it
-    needs."""
-    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
-    setup_node_step = _frontend_setup_node_step(workflow_data)
-    node_version = str(setup_node_step.get("with", {}).get("node-version", ""))
-    assert node_version, (
-        f"expected the 'frontend' job's 'actions/setup-node' step in {WORKFLOW_PATH} to "
-        "set 'with.node-version'; found none."
-    )
-
-    package_json = _read_frontend_package_json()
-    own_spec = package_json.get("engines", {}).get("node")
-    assert own_spec, (
-        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} has no 'engines.node', so CI's "
-        f"node-version ({node_version!r}) cannot be checked against it."
-    )
-
-    try:
-        own_intervals = parse_node_engines_range(own_spec)
-        node_version_interval = _parse_version_token(node_version)
-    except ValueError as exc:
-        pytest.fail(
-            f"could not parse engines.node={own_spec!r} or CI node-version={node_version!r}: {exc}"
-        )
-
-    assert _is_subset_of_union(node_version_interval, own_intervals), (
-        f"{WORKFLOW_PATH.relative_to(REPO_ROOT)}'s 'frontend' job requests Node "
-        f"{node_version!r}, which falls outside the engines.node span declared in "
-        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} ({own_spec!r})."
-    )
 
 
 # --- Synthetic validation of the parsing/interval helpers themselves -------
@@ -782,10 +760,16 @@ def test_synthetic_nvmrc_and_ci_pipeline_detects_both_within_and_outside_span(
     """Given a synthetic `engines.node` span, a synthetic `.nvmrc`, and a
     synthetic workflow document, when the same version-token parsing and
     subset-checking steps `test_nvmrc_declares_a_version_within_the_engines_node_span`
-    and `test_ci_frontend_job_node_version_is_within_engines_node_span`
-    perform are run against a version inside the span and one outside it,
-    then the in-span version must be reported compatible and the
-    out-of-span one must be reported incompatible."""
+    performs, paired with `_frontend_setup_node_step`'s step lookup (the same
+    lookup `test_frontend_job_setup_node_step_references_its_own_matrix_key`
+    (AC7) uses), are run against a version inside the span and one outside
+    it, then the in-span version must be reported compatible and the
+    out-of-span one must be reported incompatible. GH-17 removed the
+    real-world test that used to pair this same lookup with a subset check
+    directly (`test_ci_frontend_job_node_version_is_within_engines_node_span`,
+    AC3 -- see the module docstring); this synthetic case is kept because it
+    validates the helper combination itself, independent of which real test
+    currently exercises it."""
     own_intervals = parse_node_engines_range(">=20.0.0")
 
     nvmrc = tmp_path / ".nvmrc"
@@ -805,3 +789,575 @@ def test_synthetic_nvmrc_and_ci_pipeline_detects_both_within_and_outside_span(
     out_of_span_step = _frontend_setup_node_step(workflow_data)
     out_of_span_version = str(out_of_span_step["with"]["node-version"])
     assert not _is_subset_of_union(_parse_version_token(out_of_span_version), own_intervals)
+
+
+# =============================================================================
+# GH-17: generalizing the single-version CI check above into a matrix-aware,
+# whole-workflow check, and removing AC3's real-world test.
+#
+# GH-17 (issue #70's flakiness finding) splits the `frontend` job's single
+# hard-coded `node-version` into a two-leg `strategy.matrix`, and adds a
+# second job (`frontend-lint`) with its own `actions/setup-node` step.
+#
+# -- Removing AC3's real-world test, and why it could not just stay --
+#
+# `_frontend_setup_node_step`, AC1/AC2's tests, and `_frontend_setup_node_step`'s
+# own synthetic self-tests (`test_frontend_setup_node_step_finds_the_single_setup_node_step`,
+# `test_frontend_setup_node_step_raises_on_missing_or_ambiguous_step`) are
+# left completely unchanged below -- `_frontend_setup_node_step` still looks
+# up exactly the `frontend` job and still requires exactly one
+# `actions/setup-node` step there, which remains true after GH-17's fix (the
+# matrix parametrizes *runs* of that one YAML step, it does not add a second
+# step to the job's `steps:` list). AC11 protects exactly that helper and
+# that self-test family, and both are honored as-is.
+#
+# AC3's own *real-world* test, `test_ci_frontend_job_node_version_is_within_engines_node_span`,
+# is different: it fed `_frontend_setup_node_step`'s raw `with.node-version`
+# string straight into `_parse_version_token`, which understands numeric
+# version tokens only. Once GH-17's fix lands, that string becomes the
+# literal expression `${{ matrix.node }}` (or whatever key AC7 picks) --
+# not a version. Verified directly against this module's own functions
+# before deleting the test, by hand-injecting that exact future shape into a
+# deep copy of the real, parsed workflow document:
+#
+#     >>> _parse_version_token("${{ matrix.node }}")
+#     ValueError: '${{ matrix.node }}' is not a supported bare 'X', 'X.Y',
+#     or 'X.Y.Z' version token (no pre-release/build metadata, 'x'/'*'
+#     wildcards, or alias names like 'lts/*' are supported).
+#
+# `test_ci_frontend_job_node_version_is_within_engines_node_span` catches
+# `ValueError` and turns it into `pytest.fail`, so it would have become a
+# ninth red test after GH-17's fix -- one outside every acceptance
+# criterion's contract, that Gate 4 could only silence by editing a test
+# file, which is exactly what gate ordering exists to prevent. Deleting it
+# here, rather than leaving it to fail for an unowned reason later, is what
+# keeps the red set exactly the eight acceptance-criteria failures below.
+#
+# It is deleted, not merely edited to resolve the expression itself, because
+# `test_every_setup_node_step_in_the_workflow_requests_a_version_within_engines_node_span`
+# (AC5, below) already covers strictly more than it did: AC3's test read one
+# step in one job and parsed its `node-version` as a literal; AC5's test
+# reads every `actions/setup-node` step in the *whole* workflow (via
+# `_all_setup_node_steps`) and, for each one, resolves a `${{ matrix.<key>
+# }}` expression against that job's own `strategy.matrix` first (via
+# `_node_version_candidates`) before parsing and subset-checking every
+# concrete candidate version -- confirmed directly, against the same
+# hand-injected future workflow state used above, that
+# `_all_setup_node_steps` + `_node_version_candidates` resolve
+# `${{ matrix.node }}` to `["20.9.0", "26.4.0"]` and parse both without
+# error, where AC3's test raised. Every real (non-matrix) `node-version`
+# AC3's test could ever have read (e.g. `frontend-lint`'s own literal
+# `node-version`, once GH-17 adds that job) is still covered by AC5's test
+# too, since `_node_version_candidates` returns a literal `with.node-version`
+# unchanged when it is not a `${{ matrix.* }}` expression.
+#
+# Five new acceptance criteria, five new behavioral guards:
+#
+# 1. `test_every_setup_node_step_in_the_workflow_requests_a_version_within_engines_node_span`
+#    (AC5): supersedes and replaces AC3's single-job, single-step check
+#    (`test_ci_frontend_job_node_version_is_within_engines_node_span`,
+#    removed above) with a whole-workflow check. A step whose `node-version`
+#    is a `${{ matrix.<key> }}` expression is resolved against that job's
+#    own `strategy.matrix.<key>` list (see `_node_version_candidates`)
+#    rather than parsed as a literal token.
+# 2. `test_frontend_job_setup_node_step_references_its_own_matrix_key`
+#    (AC7): the `frontend` job's `strategy.matrix` must have exactly one key
+#    mapped to a list, and its `actions/setup-node` step's `node-version`
+#    must be the literal expression referencing that same key.
+# 3. `test_every_frontend_matrix_entry_is_within_the_engines_node_span`
+#    (AC8): every entry in that matrix list must itself fall inside
+#    `frontend/package.json`'s declared `engines.node` span.
+# 4. `test_frontend_matrix_entry_set_is_exactly_the_floor_and_the_nvmrc_entry`
+#    (AC9): the matrix's entry *set* must be exactly two versions -- the one
+#    whose parsed lower bound equals `engines.node`'s lowest lower bound
+#    across its whole `||`-union, and the one that covers `.nvmrc`'s
+#    declared version. Both are derived from the repository's own files at
+#    test time, never hard-coded, per AC9's own requirement.
+# 5. `test_frontend_job_strategy_has_fail_fast_disabled` (AC10):
+#    `strategy.fail-fast` must be the boolean `False`.
+# =============================================================================
+
+
+# --- Parsing: resolving a `${{ matrix.<key> }}` node-version expression ----
+
+_MATRIX_EXPR_RE = re.compile(r"^\$\{\{\s*matrix\.([A-Za-z0-9_-]+)\s*\}\}$")
+
+
+def _frontend_job_matrix(workflow_data: dict) -> dict:
+    """Return the `frontend` job's `strategy.matrix` dict from a parsed
+    workflow document (an empty dict if the job has no `strategy` or no
+    `matrix` key at all -- today's state, before GH-17's fix). Raises
+    `AssertionError` if the `frontend` job itself is missing."""
+    frontend_job = workflow_data.get("jobs", {}).get("frontend")
+    assert frontend_job is not None, "workflow has no 'frontend' job"
+    return frontend_job.get("strategy", {}).get("matrix", {})
+
+
+def _matrix_key_and_versions(matrix: dict) -> tuple[str, list[str]]:
+    """Return a `strategy.matrix` dict's single key and its list of values
+    (stringified). Raises `AssertionError` if the matrix has zero keys, more
+    than one key, or if the one key's value is not a non-empty list --
+    exactly the shape AC7 requires (one matrix dimension, driving one
+    `actions/setup-node` step's `node-version`)."""
+    assert len(matrix) == 1, (
+        f"expected exactly one strategy.matrix key, found {sorted(matrix)} (matrix={matrix!r})"
+    )
+    ((key, values),) = matrix.items()
+    assert isinstance(values, list) and values, (
+        f"expected strategy.matrix.{key} to be a non-empty list, got {values!r}"
+    )
+    return key, [str(value) for value in values]
+
+
+def _all_setup_node_steps(workflow_data: dict) -> list[tuple[str, dict, dict]]:
+    """Return every `actions/setup-node` step across every job in a parsed
+    workflow document, as `(job_name, job, step)` triples, in
+    dict-iteration (i.e. document) order.
+
+    Unlike `_frontend_setup_node_step`, this scans the *whole* workflow and
+    returns a list rather than asserting there is exactly one step overall
+    -- GH-17 legitimately adds a second job (`frontend-lint`) with its own
+    `actions/setup-node` step, so "exactly one across the whole workflow"
+    would no longer hold once that job exists, even though it still holds
+    for the `frontend` job alone. The `job` dict is returned alongside each
+    step so a caller can resolve a `${{ matrix.<key> }}` `node-version`
+    against that same job's own `strategy.matrix` (see
+    `_node_version_candidates`)."""
+    result: list[tuple[str, dict, dict]] = []
+    for job_name, job in workflow_data.get("jobs", {}).items():
+        for step in job.get("steps", []):
+            if str(step.get("uses", "")).startswith("actions/setup-node@"):
+                result.append((job_name, job, step))
+    return result
+
+
+def _node_version_candidates(job: dict, step: dict) -> list[str]:
+    """Return the concrete `node-version` value(s) `step`'s
+    `with.node-version` actually resolves to at workflow-run time: the
+    literal string itself, or -- if it is a `${{ matrix.<key> }}`
+    expression -- every entry in `job`'s `strategy.matrix.<key>` list.
+    Raises `AssertionError` if the expression references a matrix key the
+    job's `strategy.matrix` does not define, or whose value is not a list."""
+    raw = str(step.get("with", {}).get("node-version", ""))
+    matrix_match = _MATRIX_EXPR_RE.match(raw.strip())
+    if not matrix_match:
+        return [raw]
+
+    key = matrix_match.group(1)
+    matrix = job.get("strategy", {}).get("matrix", {})
+    assert key in matrix, (
+        f"step references '${{{{ matrix.{key} }}}}' but the job's strategy.matrix has no "
+        f"{key!r} key; matrix keys found: {sorted(matrix)}"
+    )
+    values = matrix[key]
+    assert isinstance(values, list), f"expected strategy.matrix.{key} to be a list, got {values!r}"
+    return [str(value) for value in values]
+
+
+def _lowest_lower_bound(intervals: list[Interval]) -> Version:
+    """Return the smallest lower bound among a list of half-open intervals
+    -- the version at which their union's coverage begins."""
+    return min(lo for lo, _hi in intervals)
+
+
+# --- Synthetic self-tests: _frontend_job_matrix -----------------------------
+
+
+def test_frontend_job_matrix_returns_the_matrix_dict_when_present() -> None:
+    """Given a synthetic workflow document whose `frontend` job declares a
+    `strategy.matrix`, when it is read, then the exact matrix dict must be
+    returned."""
+    workflow_data = {
+        "jobs": {"frontend": {"strategy": {"matrix": {"node_version": ["20.9.0", "26.4.0"]}}}}
+    }
+    assert _frontend_job_matrix(workflow_data) == {"node_version": ["20.9.0", "26.4.0"]}
+
+
+@pytest.mark.parametrize(
+    "workflow_data",
+    [
+        pytest.param({"jobs": {"frontend": {}}}, id="no_strategy_key"),
+        pytest.param({"jobs": {"frontend": {"strategy": {}}}}, id="no_matrix_key"),
+    ],
+)
+def test_frontend_job_matrix_returns_an_empty_dict_when_absent(workflow_data: dict) -> None:
+    """Given a synthetic workflow document whose `frontend` job has no
+    `strategy` at all, or a `strategy` with no `matrix` key, when it is
+    read, then an empty dict must be returned rather than raising -- this is
+    today's real, pre-GH-17 shape."""
+    assert _frontend_job_matrix(workflow_data) == {}
+
+
+def test_frontend_job_matrix_raises_when_the_frontend_job_is_missing() -> None:
+    """Given a synthetic workflow document with no `frontend` job, when its
+    matrix is requested, then an `AssertionError` must be raised."""
+    with pytest.raises(AssertionError):
+        _frontend_job_matrix({"jobs": {}})
+
+
+# --- Synthetic self-tests: _matrix_key_and_versions -------------------------
+
+
+def test_matrix_key_and_versions_returns_the_single_key_and_its_list() -> None:
+    """Given a synthetic matrix dict with exactly one key mapped to a
+    non-empty list, when it is read, then that key and a stringified copy
+    of its list must be returned."""
+    key, versions = _matrix_key_and_versions({"node_version": ["20.9.0", "26.4.0"]})
+    assert key == "node_version"
+    assert versions == ["20.9.0", "26.4.0"]
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        pytest.param({}, id="zero_keys"),
+        pytest.param({"a": ["1"], "b": ["2"]}, id="two_keys"),
+        pytest.param({"node_version": "20.9.0"}, id="value_is_not_a_list"),
+        pytest.param({"node_version": []}, id="value_is_an_empty_list"),
+    ],
+)
+def test_matrix_key_and_versions_raises_on_malformed_matrices(matrix: dict) -> None:
+    """Given a synthetic matrix dict with zero keys, two keys, a non-list
+    value, or an empty-list value, when it is read, then an
+    `AssertionError` must be raised rather than silently picking an
+    arbitrary key or accepting a shape AC7 does not allow."""
+    with pytest.raises(AssertionError):
+        _matrix_key_and_versions(matrix)
+
+
+# --- Synthetic self-tests: _all_setup_node_steps ----------------------------
+
+
+def test_all_setup_node_steps_finds_a_step_in_every_job_that_has_one() -> None:
+    """Given a synthetic workflow document with a `python` job (no
+    `actions/setup-node` step), a `frontend` job (one such step), and a
+    `frontend-lint` job (another such step), when every `actions/setup-node`
+    step in the workflow is collected, then exactly the two real ones must
+    be returned, each paired with its own job name and job dict."""
+    workflow_data = {
+        "jobs": {
+            "python": {"steps": [{"uses": "actions/checkout@v5"}]},
+            "frontend": {
+                "steps": [{"uses": "actions/setup-node@v5", "with": {"node-version": "22"}}]
+            },
+            "frontend-lint": {
+                "steps": [{"uses": "actions/setup-node@v5", "with": {"node-version": "26.4.0"}}]
+            },
+        }
+    }
+    found = _all_setup_node_steps(workflow_data)
+    assert [(job_name, step["with"]["node-version"]) for job_name, _job, step in found] == [
+        ("frontend", "22"),
+        ("frontend-lint", "26.4.0"),
+    ]
+
+
+def test_all_setup_node_steps_returns_an_empty_list_when_none_exist() -> None:
+    """Given a synthetic workflow document whose only job has no
+    `actions/setup-node` step, when every such step is collected, then an
+    empty list must be returned rather than raising."""
+    workflow_data = {"jobs": {"python": {"steps": [{"uses": "actions/checkout@v5"}]}}}
+    assert _all_setup_node_steps(workflow_data) == []
+
+
+# --- Synthetic self-tests: _node_version_candidates -------------------------
+
+
+def test_node_version_candidates_returns_the_literal_value_when_not_a_matrix_expression() -> None:
+    """Given a synthetic job/step pair whose `node-version` is a plain
+    literal (not a `${{ matrix.* }}` expression), when candidates are
+    resolved, then a single-element list holding that literal must be
+    returned."""
+    job = {"steps": [{"uses": "actions/setup-node@v5", "with": {"node-version": "22"}}]}
+    step = job["steps"][0]
+    assert _node_version_candidates(job, step) == ["22"]
+
+
+def test_node_version_candidates_resolves_a_matrix_expression_to_the_full_list() -> None:
+    """Given a synthetic job whose `node-version` is `${{ matrix.node_version
+    }}` and whose `strategy.matrix.node_version` is a two-entry list, when
+    candidates are resolved, then both matrix entries must be returned."""
+    job = {
+        "strategy": {"matrix": {"node_version": ["20.9.0", "26.4.0"]}},
+        "steps": [
+            {
+                "uses": "actions/setup-node@v5",
+                "with": {"node-version": "${{ matrix.node_version }}"},
+            }
+        ],
+    }
+    step = job["steps"][0]
+    assert _node_version_candidates(job, step) == ["20.9.0", "26.4.0"]
+
+
+def test_node_version_candidates_raises_when_the_referenced_matrix_key_is_missing() -> None:
+    """Given a synthetic job whose `node-version` references `${{
+    matrix.node_version }}` but whose `strategy.matrix` has no
+    `node_version` key at all, when candidates are resolved, then an
+    `AssertionError` must be raised rather than silently returning an empty
+    list or the raw expression string."""
+    job = {
+        "strategy": {"matrix": {"other_key": ["1"]}},
+        "steps": [
+            {
+                "uses": "actions/setup-node@v5",
+                "with": {"node-version": "${{ matrix.node_version }}"},
+            }
+        ],
+    }
+    step = job["steps"][0]
+    with pytest.raises(AssertionError):
+        _node_version_candidates(job, step)
+
+
+# --- Synthetic self-tests: _lowest_lower_bound ------------------------------
+
+
+def test_lowest_lower_bound_returns_the_smallest_lower_bound_across_a_gapped_union() -> None:
+    """Given the three half-open intervals a gapped, multi-alternative
+    `engines.node` union (`^18.18.0 || ^19.8.0 || >=20.0.0`) parses to, when
+    the lowest lower bound is computed, then it must be `18.18.0` -- the
+    first alternative's lower bound, even though it is not the first
+    interval encountered in parse order for every possible input."""
+    intervals = parse_node_engines_range("^18.18.0 || ^19.8.0 || >= 20.0.0")
+    assert _lowest_lower_bound(intervals) == (18, 18, 0)
+
+
+def test_lowest_lower_bound_is_order_independent() -> None:
+    """Given the same three intervals in a deliberately shuffled order, when
+    the lowest lower bound is computed, then the result must be unchanged --
+    proving this does not depend on the domain already being sorted."""
+    intervals = parse_node_engines_range(">= 20.0.0 || ^18.18.0 || ^19.8.0")
+    assert _lowest_lower_bound(intervals) == (18, 18, 0)
+
+
+# --- AC5: every setup-node step in the whole workflow is within span -------
+
+
+def test_every_setup_node_step_in_the_workflow_requests_a_version_within_engines_node_span() -> (
+    None
+):
+    """Given `.github/workflows/test.yml`, when every `actions/setup-node`
+    step across every job (not only `frontend`) is read -- resolving any
+    `${{ matrix.<key> }}` expression against that job's own
+    `strategy.matrix` first -- then every concrete Node version it can
+    resolve to must fall inside `frontend/package.json`'s declared
+    `engines.node` span. Supersedes and replaces AC3's now-removed
+    `test_ci_frontend_job_node_version_is_within_engines_node_span` (see the
+    module docstring's "GH-17: generalizing the single-version CI check
+    above ... and removing AC3's real-world test" section for exactly why
+    the old test could not be left in place once `node-version` becomes a
+    `${{ matrix.<key> }}` expression), since GH-17 also adds a second job
+    (`frontend-lint`) that needs Node -- issue #17, AC5.
+
+    Does not cover: which *specific* versions the `frontend` job's matrix
+    must contain (AC7-AC9's concern below), only that whichever versions
+    any job's `actions/setup-node` step can resolve to are individually
+    valid per `engines.node`."""
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    setup_node_steps = _all_setup_node_steps(workflow_data)
+    assert setup_node_steps, (
+        f"expected at least one 'actions/setup-node' step somewhere in "
+        f"{WORKFLOW_PATH.relative_to(REPO_ROOT)}; found none."
+    )
+
+    package_json = _read_frontend_package_json()
+    own_spec = package_json.get("engines", {}).get("node")
+    assert own_spec, (
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} has no 'engines.node', so no "
+        "setup-node step's node-version can be checked against it."
+    )
+    own_intervals = parse_node_engines_range(own_spec)
+
+    violations: list[str] = []
+    for job_name, job, step in setup_node_steps:
+        try:
+            candidates = _node_version_candidates(job, step)
+        except AssertionError as exc:
+            violations.append(f"job {job_name!r}: {exc}")
+            continue
+        for candidate in candidates:
+            if not candidate:
+                violations.append(f"job {job_name!r}: step sets no 'with.node-version'")
+                continue
+            try:
+                interval = _parse_version_token(candidate)
+            except ValueError as exc:
+                violations.append(f"job {job_name!r}: unparsable node-version {candidate!r}: {exc}")
+                continue
+            if not _is_subset_of_union(interval, own_intervals):
+                violations.append(
+                    f"job {job_name!r}: node-version {candidate!r} falls outside "
+                    f"engines.node span {own_spec!r}"
+                )
+
+    assert not violations, (
+        f"{WORKFLOW_PATH.relative_to(REPO_ROOT)} has 'actions/setup-node' step(s) requesting "
+        f"Node version(s) outside the engines.node span declared in "
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} ({own_spec!r}):\n" + "\n".join(violations)
+    )
+
+
+# --- AC7: the frontend job's setup-node step references its own matrix key -
+
+
+def test_frontend_job_setup_node_step_references_its_own_matrix_key() -> None:
+    """Given `.github/workflows/test.yml`, when the `frontend` job's
+    `strategy.matrix` is read, then it must have exactly one key mapped to a
+    non-empty list, and the job's `actions/setup-node` step's
+    `with.node-version` must be exactly the expression `${{ matrix.<key> }}`
+    referencing that same key -- issue #17, AC7."""
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    matrix = _frontend_job_matrix(workflow_data)
+    key, _versions = _matrix_key_and_versions(matrix)
+
+    setup_node_step = _frontend_setup_node_step(workflow_data)
+    node_version = str(setup_node_step.get("with", {}).get("node-version", "")).strip()
+    expected = f"${{{{ matrix.{key} }}}}"
+
+    assert node_version == expected, (
+        f"expected the 'frontend' job's 'actions/setup-node' step to set "
+        f"with.node-version to {expected!r} (referencing strategy.matrix.{key}), found "
+        f"{node_version!r}."
+    )
+
+
+# --- AC8: every frontend matrix entry is within the engines.node span ------
+
+
+def test_every_frontend_matrix_entry_is_within_the_engines_node_span() -> None:
+    """Given `.github/workflows/test.yml`'s `frontend` job's
+    `strategy.matrix` entries, when each is parsed as a bare version token,
+    then it must fall entirely within `frontend/package.json`'s declared
+    `engines.node` span -- issue #17, AC8.
+
+    This is the trap the task's own briefing calls out by name: a floor leg
+    spelled `"20"` parses to the interval `[20.0.0, 21.0.0)`, which is *not*
+    a subset of `^20.9.0 || >=21.1.0` (it dips below `20.9.0`), so this test
+    fails loudly if the floor leg is under-specified to a bare major
+    instead of the full `20.9.0`."""
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    matrix = _frontend_job_matrix(workflow_data)
+    _key, versions = _matrix_key_and_versions(matrix)
+
+    package_json = _read_frontend_package_json()
+    own_spec = package_json.get("engines", {}).get("node")
+    assert own_spec, (
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} has no 'engines.node', so matrix "
+        "entries cannot be checked against it."
+    )
+    own_intervals = parse_node_engines_range(own_spec)
+
+    violations = []
+    for version in versions:
+        try:
+            interval = _parse_version_token(version)
+        except ValueError as exc:
+            violations.append(f"{version!r}: {exc}")
+            continue
+        if not _is_subset_of_union(interval, own_intervals):
+            violations.append(f"{version!r} falls outside engines.node span {own_spec!r}")
+
+    assert not violations, (
+        f"expected every entry of {WORKFLOW_PATH.relative_to(REPO_ROOT)}'s 'frontend' job "
+        f"strategy.matrix to fall inside engines.node={own_spec!r}; violations:\n"
+        + "\n".join(violations)
+    )
+
+
+# --- AC9: the matrix entry set is exactly the floor leg and the nvmrc leg --
+
+
+def test_frontend_matrix_entry_set_is_exactly_the_floor_and_the_nvmrc_entry() -> None:
+    """Given `.github/workflows/test.yml`'s `frontend` job's
+    `strategy.matrix` entries, `frontend/package.json`'s declared
+    `engines.node` span, and the repository's own `.nvmrc`, when the matrix
+    entry set is compared against (a) the entry whose parsed lower bound
+    equals `engines.node`'s lowest lower bound across its whole `||`-union,
+    and (b) the entry that covers `.nvmrc`'s declared version, then the
+    matrix entry set must be exactly those two -- no extra legs, no
+    substitutes -- so CI exercises the oldest Node version this frontend
+    still claims to support alongside the exact version every contributor's
+    `nvm use`/CI's own `.nvmrc`-driven tooling resolves to -- issue #17,
+    AC9.
+
+    Neither expected version is hard-coded in this test: both are derived
+    at test time from `frontend/package.json`'s `engines.node` and the
+    repository's own `.nvmrc` file, per AC9's own requirement. This test
+    does not need editing if either source changes -- only if the
+    *relationship* the matrix is supposed to have with them breaks."""
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    matrix = _frontend_job_matrix(workflow_data)
+    _key, versions = _matrix_key_and_versions(matrix)
+
+    package_json = _read_frontend_package_json()
+    own_spec = package_json.get("engines", {}).get("node")
+    assert own_spec, (
+        f"{FRONTEND_PACKAGE_JSON.relative_to(REPO_ROOT)} has no 'engines.node'; cannot derive "
+        "the expected floor version."
+    )
+    own_intervals = parse_node_engines_range(own_spec)
+    floor = _lowest_lower_bound(own_intervals)
+
+    nvmrc_candidates = [path for path in NVMRC_CANDIDATES if path.is_file()]
+    assert nvmrc_candidates, (
+        "expected a '.nvmrc' at one of "
+        f"{[str(p.relative_to(REPO_ROOT)) for p in NVMRC_CANDIDATES]}; found none."
+    )
+    nvmrc_token = _first_nvmrc_version_token(nvmrc_candidates[0])
+    nvmrc_interval = _parse_version_token(nvmrc_token)
+
+    parsed_by_version: dict[str, Interval] = {}
+    for version in versions:
+        try:
+            parsed_by_version[version] = _parse_version_token(version)
+        except ValueError as exc:
+            pytest.fail(f"matrix entry {version!r} could not be parsed as a version token: {exc}")
+
+    floor_entries = {v for v, interval in parsed_by_version.items() if interval[0] == floor}
+    nvmrc_entries = {
+        v
+        for v, interval in parsed_by_version.items()
+        if _is_subset_of_union(nvmrc_interval, [interval])
+    }
+
+    assert floor_entries, (
+        f"expected one matrix entry whose parsed lower bound equals engines.node's lowest "
+        f"lower bound {floor!r} (derived from engines.node={own_spec!r}); matrix entries: "
+        f"{sorted(versions)}"
+    )
+    assert nvmrc_entries, (
+        f"expected one matrix entry that covers .nvmrc's declared version {nvmrc_token!r}; "
+        f"matrix entries: {sorted(versions)}"
+    )
+
+    expected_entries = floor_entries | nvmrc_entries
+    assert set(versions) == expected_entries, (
+        f"expected {WORKFLOW_PATH.relative_to(REPO_ROOT)}'s 'frontend' job strategy.matrix "
+        f"entries to be exactly {sorted(expected_entries)} (the floor leg matching "
+        f"engines.node's lowest lower bound {floor!r} and the leg covering .nvmrc's "
+        f"{nvmrc_token!r}), found {sorted(versions)}."
+    )
+
+
+# --- AC10: strategy.fail-fast is disabled -----------------------------------
+
+
+def test_frontend_job_strategy_has_fail_fast_disabled() -> None:
+    """Given `.github/workflows/test.yml`, when the `frontend` job's
+    `strategy.fail-fast` is read, then it must be the boolean `False` -- so
+    one matrix leg's flaky Vitest failure (issue #70) cannot cancel the
+    other leg's run before it has a chance to report -- issue #17, AC10."""
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    frontend_job = workflow_data.get("jobs", {}).get("frontend")
+    assert frontend_job is not None, (
+        f"expected a 'frontend' job in {WORKFLOW_PATH.relative_to(REPO_ROOT)}"
+    )
+    strategy = frontend_job.get("strategy", {})
+    assert "fail-fast" in strategy, (
+        f"expected the 'frontend' job's strategy to set 'fail-fast'; found strategy={strategy!r}"
+    )
+    assert strategy["fail-fast"] is False, (
+        "expected the 'frontend' job's strategy.fail-fast to be the boolean False, found "
+        f"{strategy['fail-fast']!r}"
+    )

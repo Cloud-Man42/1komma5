@@ -1,5 +1,6 @@
 """Contract and integration tests for the Python side of the repository's
-install flow (GH-13).
+install flow (GH-13), plus GH-17's `--locked` hardening of the same CI
+install step.
 
 ``uv sync`` run at the workspace root only installs the root project
 (``energy-monorepo``, whose ``[project] dependencies`` list is empty) plus
@@ -28,6 +29,30 @@ importable. That test is intentionally decoupled from the literal string
 ``--all-packages`` -- it reads the real recipe out of the Makefile and runs
 it, so it fails while the recipe omits the flag and passes once the recipe
 includes it, without needing to be edited when the fix lands.
+
+-- GH-17: reading the ``python`` job's install step with PyYAML instead of a
+job-order-dependent regex --
+
+``test_ci_workflow_installs_python_dependencies_with_all_packages`` used to
+isolate the ``python:`` job's block with the regex
+``r"\\n  python:\\n(.*?)\\n  frontend:\\n"``, which only worked because the
+``frontend:`` job happened to immediately follow the ``python:`` job in the
+file. GH-17 adds a third job (``frontend-lint``) to this same workflow, and
+nothing about the ``python``/``frontend`` install-flag contract this test
+guards depends on where a *third*, unrelated job sits in the file -- a job
+inserted between ``python:`` and ``frontend:`` would have broken that regex
+for a reason having nothing to do with what this test actually checks
+(whether the ``python`` job's own install step passes ``--all-packages``).
+``_ci_python_install_step`` below replaces the regex with a real YAML parse
+(``pyyaml`` is already a locked, ``uv sync --all-packages``-installed
+dependency here, and ``tests/test_frontend_node_version_pinning.py``
+documents the same "parse the workflow for real instead of a hand-rolled
+regex" rationale for GH-32's sake), and finds the ``python`` job's
+``Install Python dependencies`` step by its ``jobs.python`` key and step
+``name`` -- both independent of job or step ordering elsewhere in the file.
+This also lets GH-17's own new ``--locked`` check
+(``test_ci_workflow_installs_python_dependencies_with_locked_flag``) share
+the exact same step-lookup logic instead of duplicating it.
 """
 
 from __future__ import annotations
@@ -42,6 +67,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
@@ -49,6 +75,7 @@ README_PATH = REPO_ROOT / "README.md"
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "test.yml"
 
 ALL_PACKAGES_FLAG = "--all-packages"
+LOCKED_FLAG = "--locked"
 
 # One entry per `[tool.uv.workspace] members` package in the root
 # pyproject.toml, paired with a side-effect-free import expression that can
@@ -134,33 +161,62 @@ def test_readme_direct_uv_sync_command_uses_all_packages() -> None:
         )
 
 
+def _ci_python_install_step() -> dict:
+    """Read `.github/workflows/test.yml` with PyYAML and return the
+    `python` job's `Install Python dependencies` step as a dict.
+
+    Looks the job up by its `jobs.python` key and the step up by its `name`,
+    so this is correct regardless of how many other jobs exist in the
+    workflow or where they sit relative to `python:` -- see this module's
+    docstring ("GH-17: reading the `python` job's install step with PyYAML
+    instead of a job-order-dependent regex") for why that independence
+    matters here specifically.
+    """
+    workflow_data = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    python_job = workflow_data.get("jobs", {}).get("python")
+    assert python_job is not None, f"Expected a 'python' job in {WORKFLOW_PATH}."
+
+    steps = python_job.get("steps", [])
+    matching_steps = [step for step in steps if step.get("name") == "Install Python dependencies"]
+    assert len(matching_steps) == 1, (
+        "Expected exactly one 'Install Python dependencies' step in the 'python' job of "
+        f"{WORKFLOW_PATH}; found {len(matching_steps)}."
+    )
+    return matching_steps[0]
+
+
 def test_ci_workflow_installs_python_dependencies_with_all_packages() -> None:
     """Given .github/workflows/test.yml, when the `python` job's
     "Install Python dependencies" step is read, then its `run` command must
     include `--all-packages`, so CI actually installs the workspace members
     before running pytest instead of only the root project and dev group."""
-    content = WORKFLOW_PATH.read_text(encoding="utf-8")
-
-    # Isolate the `python:` job's block from the rest of the workflow (up to
-    # the next top-level job, `frontend:`) so this only inspects the Python
-    # job's own install step, not any unrelated `uv sync` elsewhere.
-    job_match = re.search(r"\n  python:\n(.*?)\n  frontend:\n", content, re.DOTALL)
-    assert job_match, f"Expected a 'python:' job followed by a 'frontend:' job in {WORKFLOW_PATH}."
-    python_job_block = job_match.group(1)
-
-    step_match = re.search(
-        r"name:\s*Install Python dependencies\s*\n\s*run:\s*(.+)", python_job_block
-    )
-    assert step_match, (
-        "Expected the 'python' job to contain an 'Install Python dependencies' step "
-        f"with a 'run:' command in {WORKFLOW_PATH}."
-    )
-    run_command = step_match.group(1).strip()
+    run_command = str(_ci_python_install_step().get("run", "")).strip()
 
     assert ALL_PACKAGES_FLAG in shlex.split(run_command), (
         f".github/workflows/test.yml's 'Install Python dependencies' step runs "
         f"{run_command!r}; expected it to include {ALL_PACKAGES_FLAG!r} so CI installs "
         "the workspace members before running pytest."
+    )
+
+
+def test_ci_workflow_installs_python_dependencies_with_locked_flag() -> None:
+    """Given .github/workflows/test.yml, when the `python` job's "Install
+    Python dependencies" step is read, then its `run` command must include
+    `--locked`, so CI fails fast the moment `uv.lock` and `pyproject.toml`
+    drift apart, instead of `uv sync` silently re-resolving and rewriting
+    the lock file mid-CI-run and masking the drift (GH-17, AC1).
+
+    Does not cover: whether the command still carries `--all-packages`
+    (`test_ci_workflow_installs_python_dependencies_with_all_packages`'s own
+    concern), nor whether `uv.lock` is itself currently in sync with
+    `pyproject.toml` (a property of the lock file's content, not of the CI
+    command that consumes it)."""
+    run_command = str(_ci_python_install_step().get("run", "")).strip()
+
+    assert LOCKED_FLAG in shlex.split(run_command), (
+        f".github/workflows/test.yml's 'Install Python dependencies' step runs "
+        f"{run_command!r}; expected it to include {LOCKED_FLAG!r} so CI fails fast on an "
+        "out-of-sync uv.lock instead of silently re-resolving it."
     )
 
 

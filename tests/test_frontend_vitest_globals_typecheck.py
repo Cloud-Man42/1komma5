@@ -101,6 +101,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from _tsc_diagnostics import tsc_diagnostics
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = REPO_ROOT / "frontend"
@@ -138,17 +139,6 @@ VITEST_INJECTED_GLOBAL_NAMES = frozenset(
 # in its message is one of `VITEST_INJECTED_GLOBAL_NAMES` -- never by code
 # alone.
 _TS_UNKNOWN_NAME_CODES = frozenset({"TS2304", "TS2582"})
-
-# Matches one `tsc --pretty false` diagnostic header line, e.g.:
-#   src/lib/brand.test.ts(3,1): error TS2582: Cannot find name 'describe'.
-# `tsc` may follow this with further, differently-indented continuation
-# lines for multi-part messages (observed at authoring time for TS2345);
-# those simply do not match this line-anchored pattern and are skipped,
-# which is fine here since every TS2304/TS2582 message this test cares
-# about is a single line.
-_TSC_DIAGNOSTIC_RE = re.compile(
-    r"^(?P<path>[^():]+)\((?P<line>\d+),(?P<column>\d+)\): error (?P<code>TS\d+): (?P<message>.*)$"
-)
 
 # TypeScript quotes the offending identifier in single quotes for both
 # TS2304 ("Cannot find name 'X'.") and TS2582 ("Cannot find name 'X'. Do
@@ -223,18 +213,6 @@ def test_tsconfig_types_and_vitest_config_globals_are_consistent() -> None:
     )
 
 
-def _tsc_diagnostics(output: str) -> list[dict[str, str]]:
-    """Return every `tsc --pretty false` diagnostic header line in `output`
-    that matches `_TSC_DIAGNOSTIC_RE`, each as a `{path, line, column,
-    code, message}` dict."""
-    diagnostics = []
-    for line in output.splitlines():
-        match = _TSC_DIAGNOSTIC_RE.match(line)
-        if match:
-            diagnostics.append(match.groupdict())
-    return diagnostics
-
-
 def _is_missing_vitest_global_diagnostic(diagnostic: dict[str, str]) -> bool:
     """A diagnostic is "the class issue #21 is about" only if it is
     TS2304/TS2582 *and* the quoted name in its message is one of Vitest's
@@ -292,7 +270,7 @@ def test_tsc_reports_no_vitest_global_name_errors(tmp_path: Path) -> None:
         check=False,
     )
 
-    diagnostics = _tsc_diagnostics(completed.stdout)
+    diagnostics = tsc_diagnostics(completed.stdout)
     if completed.returncode != 0:
         # `tsc` reported *something*; make sure this test's regex actually
         # parsed it, rather than passing vacuously because the output
@@ -301,7 +279,8 @@ def test_tsc_reports_no_vitest_global_name_errors(tmp_path: Path) -> None:
         assert diagnostics, (
             f"tsc exited non-zero ({completed.returncode}) but this test's regex found no "
             "parseable diagnostic lines in stdout; either tsc's output format changed and "
-            f"`_TSC_DIAGNOSTIC_RE` needs updating, or output landed on stderr instead. "
+            f"`tests/_tsc_diagnostics.py`'s `TSC_DIAGNOSTIC_RE` needs updating, or output "
+            "landed on stderr instead. "
             f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
         )
 
