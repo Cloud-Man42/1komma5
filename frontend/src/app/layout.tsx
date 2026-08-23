@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import Script from "next/script";
 import { EnergySceneConfigProvider } from "@/components/EnergySceneConfigProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -38,9 +39,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="brand-full">{APP_NAME}</span>
               </h1>
               <nav className="header-nav">
-                <a href="/">Dashboard</a>
-                <a href="/config">Konfiguration</a>
-                <a href="/calibrate">Kalibrera</a>
+                <Link href="/">Dashboard</Link>
+                <Link href="/config">Konfiguration</Link>
+                <Link href="/calibrate">Kalibrera</Link>
                 <ThemeToggle />
               </nav>
             </div>

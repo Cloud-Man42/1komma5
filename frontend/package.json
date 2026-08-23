@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^20.9.0 || >=21.1.0"
   },
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,7 @@
     "generate-scene": "node scripts/generate-energy-scene.mjs",
     "extract-paths": "node scripts/extract-conduit-paths.mjs",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -24,6 +24,7 @@
     "recharts": "^2.15.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.6.1",
@@ -31,6 +32,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^2.1.8",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.23",
     "jsdom": "^25.0.1",
     "pngjs": "^7.0.0",
     "typescript": "^5.7.2",

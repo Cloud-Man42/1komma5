@@ -41,14 +41,16 @@ not two.
   `requires-python = ">=3.12"`.
 - **[uv](https://docs.astral.sh/uv/)** — the workspace is a uv workspace with a
   single `uv.lock` at the repository root.
-- **Node.js 20 or newer** — `frontend/package.json` declares
-  `engines.node = ">=20.0.0"`. No `.npmrc` sets `engine-strict`, so npm
-  warns with `EBADENGINE` on an older runtime rather than refusing to
+- **Node.js 20.9 or newer** — `frontend/package.json` declares
+  `engines.node = "^20.9.0 || >=21.1.0"`. The two gaps that range leaves
+  (20.0–20.8 and 21.0) are not arbitrary: they are exactly the versions
+  `eslint`'s own `engines.node` (`^18.18.0 || ^20.9.0 || >=21.1.0`)
+  excludes. No `.npmrc` sets `engine-strict`, so npm
+  warns with `EBADENGINE` on an unsupported runtime rather than refusing to
   install — treat that warning as an error.
   `.nvmrc` at the repository root pins **26.4.0**, the version development
   happens on; `nvm use` from anywhere in the tree picks it up, because nvm walks
-  upward looking for the file. CI runs Node 20, the floor of the supported
-  range, so both ends of the range get exercised.
+  upward looking for the file. CI runs Node 22.
 - **make** (optional — every target is a one-line shell command you can run by
   hand; see below).
 
