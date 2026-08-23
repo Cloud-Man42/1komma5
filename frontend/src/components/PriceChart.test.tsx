@@ -1,6 +1,28 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PriceChart } from "./PriceChart";
+import {
+  ALL_IN_SERIES_COLOR,
+  PRICE_TIER_COLORS,
+  PriceChart,
+  SPOT_SERIES_COLOR,
+  TOOLTIP_BACKGROUND,
+  priceColor,
+} from "./PriceChart";
+
+function relativeLuminance(hex: string) {
+  const channels = [1, 3, 5].map((offset) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+function contrastRatio(foreground: string, background: string) {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  const [lighter, darker] = a > b ? [a, b] : [b, a];
+  return (lighter + 0.05) / (darker + 0.05);
+}
 
 describe("PriceChart", () => {
   beforeEach(() => {
@@ -77,5 +99,26 @@ describe("PriceChart", () => {
     );
 
     expect(screen.getByText("Inga elpriser tillgängliga från Heartbeat.")).toBeTruthy();
+  });
+
+  it("uses an All-in series colour that is readable on the tooltip background", () => {
+    expect(ALL_IN_SERIES_COLOR.toLowerCase()).not.toBe("#000000");
+    expect(contrastRatio(ALL_IN_SERIES_COLOR, TOOLTIP_BACKGROUND)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps the Spot series readable on the tooltip background", () => {
+    expect(contrastRatio(SPOT_SERIES_COLOR, TOOLTIP_BACKGROUND)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it("keeps every price tier colour readable on the dark chart surface", () => {
+    for (const color of Object.values(PRICE_TIER_COLORS)) {
+      expect(contrastRatio(color, TOOLTIP_BACKGROUND)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("maps price levels to cheap, normal and expensive tiers", () => {
+    expect(priceColor(50, 100)).toBe(PRICE_TIER_COLORS.cheap);
+    expect(priceColor(100, 100)).toBe(PRICE_TIER_COLORS.normal);
+    expect(priceColor(200, 100)).toBe(PRICE_TIER_COLORS.expensive);
   });
 });

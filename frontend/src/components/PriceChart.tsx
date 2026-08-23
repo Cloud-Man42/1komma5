@@ -46,10 +46,20 @@ function formatPrice(valuePerKwh: number) {
   return formatOrePerKwh(valuePerKwh);
 }
 
-function priceColor(value: number, average: number) {
-  if (value >= average * 1.15) return "#ef4444";
-  if (value <= average * 0.85) return "#22c55e";
-  return "#38bdf8";
+export const TOOLTIP_BACKGROUND = "#1e293b";
+export const PRICE_TIER_COLORS = {
+  expensive: "#f87171",
+  cheap: "#4ade80",
+  normal: "#38bdf8",
+} as const;
+/** Series colour for the All-in bars; also drives the tooltip label colour. */
+export const ALL_IN_SERIES_COLOR = PRICE_TIER_COLORS.normal;
+export const SPOT_SERIES_COLOR = "#fde68a";
+
+export function priceColor(value: number, average: number) {
+  if (value >= average * 1.15) return PRICE_TIER_COLORS.expensive;
+  if (value <= average * 0.85) return PRICE_TIER_COLORS.cheap;
+  return PRICE_TIER_COLORS.normal;
 }
 
 export function PriceChart({ prices }: PriceChartProps) {
@@ -160,7 +170,7 @@ export function PriceChart({ prices }: PriceChartProps) {
                 }}
               />
               <Tooltip
-                contentStyle={{ background: "#1e293b", border: "1px solid #334155" }}
+                contentStyle={{ background: TOOLTIP_BACKGROUND, border: "1px solid #334155" }}
                 labelStyle={labelStyle}
                 formatter={(value: number, name: string) => [
                   `${value.toFixed(1)} öre/kWh`,
@@ -178,7 +188,7 @@ export function PriceChart({ prices }: PriceChartProps) {
                   position: "insideTopRight",
                 }}
               />
-              <Bar dataKey="allIn" name="allIn" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="allIn" name="allIn" fill={ALL_IN_SERIES_COLOR} radius={[4, 4, 0, 0]}>
                 {chart.data.map((point) => (
                   <Cell
                     key={point.timestamp}
@@ -191,7 +201,7 @@ export function PriceChart({ prices }: PriceChartProps) {
                 type="monotone"
                 dataKey="spot"
                 name="spot"
-                stroke="#fde68a"
+                stroke={SPOT_SERIES_COLOR}
                 dot={false}
                 strokeWidth={2}
               />
