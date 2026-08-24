@@ -87,32 +87,6 @@ function isPriceOnlyMode(mode: string | null | undefined): boolean {
   return mode === "PRICE_CHARGE";
 }
 
-function HeartbeatSyncStatus({ charger }: { charger: EvCharger }) {
-  if (!charger.heartbeat_sync_enabled) {
-    return null;
-  }
-
-  const pushed = charger.heartbeat_last_pushed_at
-    ? new Date(charger.heartbeat_last_pushed_at).toLocaleString("sv-SE")
-    : null;
-  const pulled = charger.heartbeat_last_pulled_at
-    ? new Date(charger.heartbeat_last_pulled_at).toLocaleString("sv-SE")
-    : null;
-
-  return (
-    <div className="charger-sync-status">
-      <p className="muted">
-        Heartbeat-synk aktiv
-        {pushed ? <> · Senast skickat {pushed}</> : null}
-        {pulled ? <> · Senast hämtat {pulled}</> : null}
-      </p>
-      {charger.heartbeat_sync_error ? (
-        <p className="form-error">Synkfel: {charger.heartbeat_sync_error}</p>
-      ) : null}
-    </div>
-  );
-}
-
 function ChargerControlForm({
   charger,
   onSubmit,
@@ -838,8 +812,6 @@ export function EvChargerPanel({ siteSlug }: { siteSlug: string }) {
             </div>
             <ChargeAmpsHaloVisual charger={charger} />
           </div>
-
-          <HeartbeatSyncStatus charger={charger} />
 
           {charger.power_w != null && (
 

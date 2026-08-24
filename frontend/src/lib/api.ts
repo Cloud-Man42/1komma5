@@ -188,11 +188,6 @@ export interface EvCharger {
   connection_status?: string;
   last_connection_at?: string | null;
   last_connection_test_at?: string | null;
-  heartbeat_sync_enabled?: boolean;
-  heartbeat_last_pushed_at?: string | null;
-  heartbeat_last_pulled_at?: string | null;
-  heartbeat_remote_updated_at?: string | null;
-  heartbeat_sync_error?: string | null;
 }
 
 export interface ChargerManufacturer {
@@ -599,7 +594,6 @@ export interface HeartbeatConfig {
   notes: string[];
   sites: SiteHeartbeatMapping[];
   updated_at: string | null;
-  heartbeat_write_enabled: boolean;
 }
 
 export interface HeartbeatConfigUpdate {
@@ -614,7 +608,6 @@ export interface HeartbeatConfigUpdate {
   password?: string;
   api_token?: string;
   sites: { slug: string; external_system_id: string | null }[];
-  heartbeat_write_enabled?: boolean;
 }
 
 export interface ChargeAmpsConfig {

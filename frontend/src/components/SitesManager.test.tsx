@@ -123,12 +123,4 @@ describe("SitesManager", () => {
     render(<SitesManager />);
     expect(await screen.findByText("Network error")).toBeTruthy();
   });
-
-  it("renders charger sync toggle when heartbeat ev id is set", async () => {
-    mockFetchEvChargers.mockResolvedValue([
-      makeEvCharger({ heartbeat_ev_id: "ev-123", heartbeat_sync_enabled: false }),
-    ]);
-    render(<SitesManager />);
-    expect(await screen.findByText(/Heartbeat-synk \(EV-profil\)/i)).toBeTruthy();
-  });
 });

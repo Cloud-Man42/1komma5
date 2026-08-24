@@ -7,10 +7,8 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.db.ev_charger_repo import EvChargerRepository
-from energy_core.db.models import SiteModel, VehicleCapabilityModel, VehicleModel, VehicleProviderConnectionModel
+from energy_core.db.models import VehicleCapabilityModel, VehicleModel, VehicleProviderConnectionModel
 from energy_core.db.vehicle_repo import VehicleProviderRepository
-from energy_core.heartbeat.ev_sync import HeartbeatEvSyncService
 from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import VehicleCommandResult
 from energy_core.vehicles.commands.errors import (
@@ -48,11 +46,8 @@ class VehicleCommandService:
             features=features,
         )
         status = await self._send_mercedes_command(site_id, payload, request_id=request_id)
-        success = _is_successful_status(status.state)
-        if success:
-            await self._push_heartbeat_target_soc(site_id, vehicle, target_soc_percent)
         return VehicleCommandResult(
-            success=success,
+            success=_is_successful_status(status.state),
             message=f"Target SoC command {status.state}: {describe_client_message(payload)}",
             vehicle_id=str(vehicle.id),
             command="set_target_soc",
@@ -87,34 +82,6 @@ class VehicleCommandService:
             vehicle_id=str(vehicle.id),
             command="stop_charging",
         )
-
-    async def _push_heartbeat_target_soc(
-        self,
-        site_id: int,
-        vehicle: VehicleModel,
-        target_soc_percent: int,
-    ) -> None:
-        if not vehicle.charger_id:
-            return
-        charger_repo = EvChargerRepository(self._session)
-        charger = await charger_repo.get_by_id(vehicle.charger_id)
-        if charger is None or not charger.heartbeat_sync_enabled:
-            return
-        site = await self._session.get(SiteModel, site_id)
-        if site is None:
-            return
-        try:
-            await HeartbeatEvSyncService(self._session).push_charger(
-                charger,
-                site,
-                target_soc_pct=float(target_soc_percent),
-            )
-        except Exception:
-            logger.exception(
-                "Heartbeat target SoC push failed vehicle_id=%s charger_id=%s",
-                vehicle.id,
-                vehicle.charger_id,
-            )
 
     async def _ensure_commands_enabled(self, site_id: int) -> None:
         row = await self._provider_repo.get_for_site(site_id)

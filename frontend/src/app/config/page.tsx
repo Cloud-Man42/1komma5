@@ -34,7 +34,6 @@ type FormState = {
   username: string;
   password: string;
   api_token: string;
-  heartbeat_write_enabled: boolean;
 };
 
 function configToForm(config: HeartbeatConfig): FormState {
@@ -49,7 +48,6 @@ function configToForm(config: HeartbeatConfig): FormState {
     username: config.username,
     password: "",
     api_token: "",
-    heartbeat_write_enabled: config.heartbeat_write_enabled ?? false,
   };
 }
 
@@ -110,7 +108,6 @@ export default function ConfigPage() {
       dashboard_refresh_seconds: form.dashboard_refresh_seconds,
       username: form.username.trim(),
       sites: [],
-      heartbeat_write_enabled: form.heartbeat_write_enabled,
     };
 
     if (form.password.trim()) payload.password = form.password;
@@ -292,24 +289,6 @@ export default function ConfigPage() {
               />
             </label>
           </div>
-        </div>
-
-        <div className="card config-card">
-          <h3 className="config-section-title">Heartbeat EV-synk</h3>
-          <p className="muted config-env-intro">
-            Skriver laddinställningar (läge, mål-SoC, avfärd) till Heartbeat EV-profilen och hämtar
-            ändringar från 1Komma5-appen. Kräver att global skrivning är aktiverad och att varje
-            laddbox har Heartbeat EV-ID samt synk aktiverad under anläggningen. Paus (PAUSED) är
-            endast lokalt i EMIC.
-          </p>
-          <label className="form-field form-field-checkbox">
-            <input
-              type="checkbox"
-              checked={form.heartbeat_write_enabled}
-              onChange={(e) => updateField("heartbeat_write_enabled", e.target.checked)}
-            />
-            <span>Synka laddinställningar till Heartbeat</span>
-          </label>
         </div>
 
         {chargeAmps && (

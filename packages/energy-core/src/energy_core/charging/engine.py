@@ -34,7 +34,6 @@ from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
 from energy_core.energy.state import EnergyState
-from energy_core.heartbeat.ev_sync import HeartbeatEvSyncService
 from energy_core.heartbeat_client_factory import create_heartbeat_client
 from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
 
@@ -115,11 +114,6 @@ class SmartChargingEngine:
             charger.last_bridge_run_at = now
             return
 
-        sync_service = HeartbeatEvSyncService(session)
-        sync_result = await sync_service.sync_charger(charger, site, client=client)
-        pushed_this_cycle = sync_result.pushed
-        settings_before = (charger.charging_mode, charger.target_soc_pct, charger.departure_time)
-
         provider = HeartbeatEnergyProvider(
             client,
             system_id=site.external_system_id,
@@ -136,26 +130,6 @@ class SmartChargingEngine:
             now=now,
         )
         energy, config = apply_vehicle_charging_context(charger, energy, config, vehicle_context)
-        if (
-            not pushed_this_cycle
-            and charger.heartbeat_sync_enabled
-            and vehicle_context
-            and vehicle_context.active
-        ):
-            vehicle_target = vehicle_context.requirement.target_soc_percent
-            settings_after = (charger.charging_mode, charger.target_soc_pct, charger.departure_time)
-            settings_changed = settings_before != settings_after
-            vehicle_target_changed = (
-                vehicle_target is not None and vehicle_target != settings_before[1]
-            )
-            if settings_changed or vehicle_target_changed:
-                push_result = await sync_service.push_charger(
-                    charger,
-                    site,
-                    client=client,
-                    target_soc_pct=float(vehicle_target) if vehicle_target is not None else None,
-                )
-                pushed_this_cycle = push_result.pushed
         energy = _mark_stale(energy, charger.stale_timeout_seconds)
 
         adapter = LegacyControlBridge(ChargerAdapterFactory.from_charger_model(charger))

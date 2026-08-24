@@ -53,7 +53,6 @@ def _to_response(repo_record, sites, info) -> HeartbeatConfigResponse:
             for site in sites
         ],
         updated_at=repo_record.updated_at,
-        heartbeat_write_enabled=repo_record.heartbeat_write_enabled,
     )
 
 
@@ -136,7 +135,6 @@ async def update_heartbeat_config(
         username=payload.username,
         password=password,
         api_token=api_token,
-        heartbeat_write_enabled=payload.heartbeat_write_enabled,
     )
 
     for site_update in payload.sites:

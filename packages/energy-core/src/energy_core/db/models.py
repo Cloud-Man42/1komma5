@@ -114,11 +114,6 @@ class EvChargerModel(Base):
     virtual_evse_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     semp_device_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     semp_endpoint_registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    heartbeat_sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    heartbeat_last_pushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    heartbeat_last_pulled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    heartbeat_remote_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    heartbeat_sync_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     site: Mapped[SiteModel] = relationship(back_populates="ev_chargers")
     bridge_cycles: Mapped[list["EvBridgeCycleModel"]] = relationship(
@@ -487,7 +482,6 @@ class HeartbeatSettingsModel(Base):
     username: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     password: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     api_token: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    heartbeat_write_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -172,34 +172,6 @@ class HeartbeatClient:
                 return ev
         return None
 
-    async def patch_ev(self, system_id: str, ev_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        data = await self._request(
-            "PATCH",
-            f"/v1/systems/{system_id}/devices/evs/{ev_id}",
-            json=payload,
-        )
-        return data if isinstance(data, dict) else {}
-
-    async def update_ev_charge_settings(
-        self,
-        system_id: str,
-        ev_id: str,
-        *,
-        charging_mode: str | None = None,
-        target_soc_pct: float | None = None,
-        departure_time: str | None = None,
-    ) -> dict[str, Any]:
-        from energy_core.heartbeat.ev_control import build_charge_settings_patch
-
-        payload = build_charge_settings_patch(
-            charging_mode=charging_mode,
-            target_soc_pct=target_soc_pct,
-            departure_time=departure_time,
-        )
-        if not payload:
-            return {}
-        return await self.patch_ev(system_id, ev_id, payload)
-
 
 def build_heartbeat_client(
     *,

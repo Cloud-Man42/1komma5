@@ -148,11 +148,6 @@ class EvChargerResponse(BaseModel):
     connection_status: str = "NOT_CONFIGURED"
     last_connection_at: datetime | None = None
     last_connection_test_at: datetime | None = None
-    heartbeat_sync_enabled: bool = False
-    heartbeat_last_pushed_at: datetime | None = None
-    heartbeat_last_pulled_at: datetime | None = None
-    heartbeat_remote_updated_at: datetime | None = None
-    heartbeat_sync_error: str | None = None
 
 
 class EvChargerCreateRequest(BaseModel):
@@ -249,7 +244,6 @@ class EvChargerUpdateRequest(BaseModel):
     integration_method: str | None = None
     external_charger_id: str | None = None
     connection_settings: dict[str, object] | None = None
-    heartbeat_sync_enabled: bool | None = None
 
 
 class EvChargerConnectionTestRequest(BaseModel):
@@ -588,7 +582,6 @@ class HeartbeatConfigResponse(BaseModel):
     implementation_status: str
     notes: list[str] = Field(default_factory=list)
     sites: list[SiteHeartbeatMappingResponse] = Field(default_factory=list)
-    heartbeat_write_enabled: bool = False
     updated_at: datetime | None = None
 
 
@@ -608,7 +601,6 @@ class HeartbeatConfigUpdateRequest(BaseModel):
     username: str = ""
     password: str | None = None
     api_token: str | None = None
-    heartbeat_write_enabled: bool | None = None
     sites: list[SiteHeartbeatMappingUpdate] = Field(default_factory=list)
 
     @field_validator("connection_type", mode="before")

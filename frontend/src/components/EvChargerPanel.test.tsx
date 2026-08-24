@@ -166,18 +166,4 @@ describe("EvChargerPanel", () => {
     });
     expect(screen.queryByText(/Solprognos \(Smart laddning\)/i)).toBeNull();
   });
-
-  it("shows heartbeat sync status when enabled", async () => {
-    mockFetchEvChargers.mockResolvedValue([
-      makeEvCharger({
-        bridge_enabled: true,
-        heartbeat_sync_enabled: true,
-        heartbeat_last_pushed_at: "2026-08-18T10:00:00Z",
-        heartbeat_sync_error: "timeout",
-      }),
-    ]);
-    render(<EvChargerPanel siteSlug="akarp" />);
-    expect(await screen.findByText(/Heartbeat-synk aktiv/i)).toBeTruthy();
-    expect(screen.getByText(/Synkfel: timeout/i)).toBeTruthy();
-  });
 });

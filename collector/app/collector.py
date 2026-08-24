@@ -10,9 +10,7 @@ from datetime import UTC, datetime, timedelta
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
 from energy_core.config import get_settings
-from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
-from energy_core.heartbeat.ev_sync import HeartbeatEvSyncService
 from energy_core.db.repositories import (
     EnergyReadingRepository,
     MarketPriceRepository,
@@ -85,7 +83,6 @@ class Collector:
             await self._run_vehicle_charge_sessions(session, site_repo)
             await self._run_energy_balance(session, site_repo)
             await self._run_solar_forecast(session, site_repo)
-            await self._run_heartbeat_ev_sync_fallback(session)
             await session.commit()
 
         bridge_count = 0
@@ -209,27 +206,6 @@ class Collector:
         count = await self._solar_forecast.run_due_sites(session, sites)
         if count:
             logger.debug("Solar forecast refreshed for %d sites", count)
-
-    async def _run_heartbeat_ev_sync_fallback(self, session) -> None:
-        hb_repo = HeartbeatSettingsRepository(session)
-        if not await hb_repo.is_write_enabled():
-            return
-        charger_repo = EvChargerRepository(session)
-        sync_service = HeartbeatEvSyncService(session)
-        now = datetime.now(UTC)
-        synced = 0
-        for charger, site in await charger_repo.list_heartbeat_sync_enabled_with_sites():
-            if charger.last_bridge_run_at is not None:
-                elapsed = (now - charger.last_bridge_run_at).total_seconds()
-                if elapsed < 60:
-                    continue
-            try:
-                await sync_service.sync_charger(charger, site)
-                synced += 1
-            except Exception:
-                logger.exception("Heartbeat EV sync fallback failed charger_id=%s", charger.id)
-        if synced:
-            logger.debug("Heartbeat EV sync fallback processed %d chargers", synced)
 
     async def run(self) -> None:
         logging.basicConfig(level=self._settings.log_level)

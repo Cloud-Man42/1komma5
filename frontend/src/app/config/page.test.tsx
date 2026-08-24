@@ -43,7 +43,6 @@ const heartbeatConfig = {
   notes: [] as string[],
   sites: [] as { slug: string; external_system_id: string | null }[],
   updated_at: null,
-  heartbeat_write_enabled: false,
 };
 
 describe("ConfigPage", () => {
@@ -80,19 +79,5 @@ describe("ConfigPage", () => {
     await screen.findByTestId("sites-manager");
     await user.click(screen.getByRole("button", { name: /Spara konfiguration/i }));
     await waitFor(() => expect(mockSaveHeartbeat).toHaveBeenCalled());
-  });
-
-  it("shows heartbeat write toggle and sends flag on save", async () => {
-    const user = userEvent.setup();
-    const ConfigPage = (await import("@/app/config/page")).default;
-    render(<ConfigPage />);
-    await screen.findByText(/Synka laddinställningar till Heartbeat/i);
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: /Spara konfiguration/i }));
-    await waitFor(() =>
-      expect(mockSaveHeartbeat).toHaveBeenCalledWith(
-        expect.objectContaining({ heartbeat_write_enabled: true }),
-      ),
-    );
   });
 });

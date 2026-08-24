@@ -81,11 +81,6 @@ class EvChargerRecord:
     connection_status: str = "NOT_CONFIGURED"
     last_connection_at: datetime | None = None
     last_connection_test_at: datetime | None = None
-    heartbeat_sync_enabled: bool = False
-    heartbeat_last_pushed_at: datetime | None = None
-    heartbeat_last_pulled_at: datetime | None = None
-    heartbeat_remote_updated_at: datetime | None = None
-    heartbeat_sync_error: str | None = None
 
 
 class EvChargerRepository:
@@ -274,12 +269,6 @@ class EvChargerRepository:
         connection_status: str | None = None,
         last_connection_at: datetime | None = None,
         last_connection_test_at: datetime | None = None,
-        heartbeat_sync_enabled: bool | None = None,
-        heartbeat_last_pushed_at: datetime | None = None,
-        heartbeat_last_pulled_at: datetime | None = None,
-        heartbeat_remote_updated_at: datetime | None = None,
-        heartbeat_sync_error: str | None = None,
-        clear_heartbeat_sync_error: bool = False,
     ) -> EvChargerModel:
         if name is not None:
             charger.name = name.strip()
@@ -416,18 +405,6 @@ class EvChargerRepository:
             charger.last_connection_at = last_connection_at
         if last_connection_test_at is not None:
             charger.last_connection_test_at = last_connection_test_at
-        if heartbeat_sync_enabled is not None:
-            charger.heartbeat_sync_enabled = heartbeat_sync_enabled
-        if heartbeat_last_pushed_at is not None:
-            charger.heartbeat_last_pushed_at = heartbeat_last_pushed_at
-        if heartbeat_last_pulled_at is not None:
-            charger.heartbeat_last_pulled_at = heartbeat_last_pulled_at
-        if heartbeat_remote_updated_at is not None:
-            charger.heartbeat_remote_updated_at = heartbeat_remote_updated_at
-        if heartbeat_sync_error is not None:
-            charger.heartbeat_sync_error = heartbeat_sync_error[:512]
-        elif clear_heartbeat_sync_error:
-            charger.heartbeat_sync_error = None
         await self._session.flush()
         return charger
 
@@ -436,18 +413,6 @@ class EvChargerRepository:
             select(EvChargerModel, SiteModel)
             .join(SiteModel, EvChargerModel.site_id == SiteModel.id)
             .where(EvChargerModel.bridge_enabled.is_(True))
-            .order_by(SiteModel.slug, EvChargerModel.name)
-        )
-        return list(result.all())
-
-    async def list_heartbeat_sync_enabled_with_sites(self) -> list[tuple[EvChargerModel, SiteModel]]:
-        result = await self._session.execute(
-            select(EvChargerModel, SiteModel)
-            .join(SiteModel, EvChargerModel.site_id == SiteModel.id)
-            .where(
-                EvChargerModel.heartbeat_sync_enabled.is_(True),
-                EvChargerModel.heartbeat_ev_id.is_not(None),
-            )
             .order_by(SiteModel.slug, EvChargerModel.name)
         )
         return list(result.all())
@@ -525,11 +490,6 @@ class EvChargerRepository:
             connection_status=charger.connection_status,
             last_connection_at=charger.last_connection_at,
             last_connection_test_at=charger.last_connection_test_at,
-            heartbeat_sync_enabled=charger.heartbeat_sync_enabled,
-            heartbeat_last_pushed_at=charger.heartbeat_last_pushed_at,
-            heartbeat_last_pulled_at=charger.heartbeat_last_pulled_at,
-            heartbeat_remote_updated_at=charger.heartbeat_remote_updated_at,
-            heartbeat_sync_error=charger.heartbeat_sync_error,
         )
 
     async def get_site_by_slug(self, slug: str) -> SiteModel | None:
