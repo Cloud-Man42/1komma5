@@ -198,7 +198,12 @@ class EvChargingOptimizer:
         deadline = config.deadline_at or _deadline_from_departure(
             now, config.departure_time or state.departure_time, config.timezone
         )
-        urgency = charging_urgency(now, deadline=deadline, config=config)
+        urgency = combined_charging_urgency(
+            now,
+            deadline=deadline,
+            config=config,
+            required_energy_kwh=state.vehicle_required_energy_kwh,
+        )
 
         if deadline is not None and deadline <= now:
             return OptimizerTarget(_max_current(config), "deadline_overdue")
@@ -297,6 +302,51 @@ def charging_urgency(
     if hours_left >= relaxed_hours:
         return 0.0
     return (relaxed_hours - hours_left) / (relaxed_hours - urgent_hours)
+
+
+def energy_charging_urgency(
+    *,
+    required_energy_kwh: float,
+    hours_left: float,
+    charge_power_kw: float,
+) -> float:
+    """Rise toward 1 when remaining energy need is tight for the time left."""
+    if required_energy_kwh <= 0.05:
+        return 0.0
+    if hours_left <= 0:
+        return 1.0
+    if charge_power_kw <= 0:
+        return 0.5
+    hours_needed = required_energy_kwh / charge_power_kw * 1.1
+    if hours_needed >= hours_left:
+        return 1.0
+    relaxed_hours = max(hours_left * 0.5, 0.5)
+    if hours_needed <= relaxed_hours:
+        return 0.0
+    return (hours_needed - relaxed_hours) / max(hours_left - relaxed_hours, 0.01)
+
+
+def combined_charging_urgency(
+    now: datetime,
+    *,
+    deadline: datetime | None,
+    config: ChargingConfig,
+    required_energy_kwh: float | None = None,
+) -> float:
+    time_urgency = charging_urgency(now, deadline=deadline, config=config)
+    if deadline is None or required_energy_kwh is None or required_energy_kwh <= 0:
+        return time_urgency
+    hours_left = max(0.0, (deadline - now).total_seconds() / 3600.0)
+    energy_urgency = energy_charging_urgency(
+        required_energy_kwh=required_energy_kwh,
+        hours_left=hours_left,
+        charge_power_kw=_estimate_charge_power_kw(config),
+    )
+    return max(time_urgency, energy_urgency)
+
+
+def _estimate_charge_power_kw(config: ChargingConfig) -> float:
+    return _power_for_current(config.max_current_a, config) / 1000.0
 
 
 def _should_wait_for_solar_forecast(

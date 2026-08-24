@@ -22,3 +22,4 @@ Thumbs.db
 *.tsbuildinfo
 cookies.txt
 scripts/deploy.local.ps1
+emic-secret.key

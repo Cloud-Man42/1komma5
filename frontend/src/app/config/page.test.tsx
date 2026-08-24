@@ -5,7 +5,6 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 const mockFetchHeartbeat = vi.fn();
 const mockFetchChargeAmps = vi.fn();
 const mockFetchReadiness = vi.fn();
-const mockFetchSites = vi.fn();
 const mockSaveHeartbeat = vi.fn();
 
 vi.mock("next/link", () => ({
@@ -18,15 +17,10 @@ vi.mock("@/components/SitesManager", () => ({
   SitesManager: () => <div data-testid="sites-manager">SitesManager</div>,
 }));
 
-vi.mock("@/components/SpaAdminPanel", () => ({
-  SpaAdminPanel: () => null,
-}));
-
 vi.mock("@/lib/api", () => ({
   fetchHeartbeatConfig: (...args: unknown[]) => mockFetchHeartbeat(...args),
   fetchChargeAmpsConfig: (...args: unknown[]) => mockFetchChargeAmps(...args),
   fetchChargingReadiness: (...args: unknown[]) => mockFetchReadiness(...args),
-  fetchSites: (...args: unknown[]) => mockFetchSites(...args),
   saveHeartbeatConfig: (...args: unknown[]) => mockSaveHeartbeat(...args),
 }));
 
@@ -49,6 +43,7 @@ const heartbeatConfig = {
   notes: [] as string[],
   sites: [] as { slug: string; external_system_id: string | null }[],
   updated_at: null,
+  heartbeat_write_enabled: false,
 };
 
 describe("ConfigPage", () => {
@@ -68,7 +63,6 @@ describe("ConfigPage", () => {
       issues: [],
       notes: [],
     });
-    mockFetchSites.mockResolvedValue([]);
     mockSaveHeartbeat.mockResolvedValue({ ...heartbeatConfig });
   });
 
@@ -86,5 +80,19 @@ describe("ConfigPage", () => {
     await screen.findByTestId("sites-manager");
     await user.click(screen.getByRole("button", { name: /Spara konfiguration/i }));
     await waitFor(() => expect(mockSaveHeartbeat).toHaveBeenCalled());
+  });
+
+  it("shows heartbeat write toggle and sends flag on save", async () => {
+    const user = userEvent.setup();
+    const ConfigPage = (await import("@/app/config/page")).default;
+    render(<ConfigPage />);
+    await screen.findByText(/Synka laddinställningar till Heartbeat/i);
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: /Spara konfiguration/i }));
+    await waitFor(() =>
+      expect(mockSaveHeartbeat).toHaveBeenCalledWith(
+        expect.objectContaining({ heartbeat_write_enabled: true }),
+      ),
+    );
   });
 });

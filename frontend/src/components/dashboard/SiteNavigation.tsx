@@ -54,9 +54,11 @@ export function SiteSwitcher({ currentSlug }: { currentSlug: string }) {
 export function SiteTabs({
   slug,
   spaEnabled,
+  vehicleEnabled,
 }: {
   slug: string;
   spaEnabled?: boolean;
+  vehicleEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const base = `/sites/${slug}`;
@@ -70,6 +72,9 @@ export function SiteTabs({
   ];
   if (spaEnabled) {
     tabs.push({ href: `${base}/spa`, label: "Spa" });
+  }
+  if (vehicleEnabled) {
+    tabs.push({ href: `${base}/vehicle`, label: "Fordon" });
   }
 
   return (

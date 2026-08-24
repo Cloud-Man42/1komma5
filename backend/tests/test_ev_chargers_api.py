@@ -446,3 +446,33 @@ async def test_virtual_evse_enable_and_semp_discovery(client):
     assert f"emic-evse-{charger_id}" in devices.json()["devices"]
 
     await ac.delete(f"/api/sites/akarp/ev-chargers/{charger_id}")
+
+
+@pytest.mark.asyncio
+async def test_ev_charger_heartbeat_sync_fields(client, monkeypatch):
+    ac, _, _ = client
+    push_mock = AsyncMock(return_value=SimpleNamespace(pushed=True))
+    monkeypatch.setattr(
+        "app.api.ev_chargers.HeartbeatEvSyncService.push_charger",
+        push_mock,
+    )
+    charger = await create_charger(ac, "akarp", name="Sync Halo")
+    charger_id = charger["id"]
+    assert charger["heartbeat_sync_enabled"] is False
+
+    with_id = await ac.put(
+        f"/api/sites/akarp/ev-chargers/{charger_id}",
+        json={"heartbeat_ev_id": "ev-123"},
+    )
+    assert with_id.status_code == 200
+
+    enable = await ac.put(
+        f"/api/sites/akarp/ev-chargers/{charger_id}",
+        json={"heartbeat_sync_enabled": True},
+    )
+    assert enable.status_code == 200
+    body = enable.json()
+    assert body["heartbeat_sync_enabled"] is True
+    push_mock.assert_awaited()
+
+    await ac.delete(f"/api/sites/akarp/ev-chargers/{charger_id}")

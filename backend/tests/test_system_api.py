@@ -10,7 +10,32 @@ async def test_heartbeat_config_defaults(client):
     assert data["connection_type"] == "mock"
     assert data["contacting_component"] == "collector"
     assert data["dashboard_refresh_seconds"] == 30
+    assert data["heartbeat_write_enabled"] is False
     assert len(data["sites"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_update_heartbeat_write_enabled(client):
+    ac, _, _ = client
+    res = await ac.put(
+        "/api/system/heartbeat-config",
+        json={
+            "connection_type": "mock",
+            "host": "",
+            "port": 443,
+            "use_tls": True,
+            "api_path": "/api",
+            "poll_interval_seconds": 60,
+            "username": "",
+            "heartbeat_write_enabled": True,
+            "sites": [],
+        },
+    )
+    assert res.status_code == 200
+    assert res.json()["heartbeat_write_enabled"] is True
+
+    get_res = await ac.get("/api/system/heartbeat-config")
+    assert get_res.json()["heartbeat_write_enabled"] is True
 
 
 @pytest.mark.asyncio

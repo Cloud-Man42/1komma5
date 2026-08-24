@@ -1,7 +1,8 @@
 """Tests for SmartChargingEngine."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,6 +23,24 @@ def _charger(**overrides) -> EvChargerModel:
         bridge_enabled=True,
         chargeamp_charger_id="halo-1",
         charging_mode="SMART_CHARGE",
+        max_current_a=16.0,
+        min_current_a=6.0,
+        phases=3,
+        nominal_voltage_v=230.0,
+        solar_start_delay_seconds=30,
+        solar_stop_delay_seconds=60,
+        start_delay_seconds=120,
+        stop_delay_seconds=300,
+        minimum_run_time_seconds=300,
+        minimum_off_time_seconds=300,
+        temporary_grid_import_seconds=600,
+        minimum_current_change_interval_seconds=30,
+        stale_timeout_seconds=120,
+        update_interval_seconds=30,
+        solar_start_threshold_w=1500.0,
+        solar_stop_threshold_w=800.0,
+        grid_deadband_w=300.0,
+        max_automatic_starts_per_hour=4,
     )
     for key, value in overrides.items():
         setattr(charger, key, value)
@@ -73,3 +92,42 @@ async def test_run_cycle_skips_without_heartbeat_client():
         processed = await engine.run_cycle(session)
     assert processed == 0
     session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_charger_cycle_calls_heartbeat_sync():
+    engine = SmartChargingEngine()
+    session = AsyncMock()
+    client = AsyncMock()
+    charger = _charger(
+        heartbeat_sync_enabled=True,
+        heartbeat_ev_id="ev-1",
+        external_charger_id="halo-1",
+    )
+    site = SimpleNamespace(
+        id=1,
+        slug="akarp",
+        external_system_id="sys-1",
+        timezone="Europe/Stockholm",
+        main_fuse_a=25,
+        safety_margin_a=2,
+    )
+
+    sync_mock = AsyncMock(return_value=SimpleNamespace(pushed=False, pulled=True))
+    provider_instance = AsyncMock()
+    provider_instance.get_energy_state = AsyncMock(side_effect=RuntimeError("stop-after-sync"))
+    with (
+        patch("energy_core.charging.engine.HeartbeatEvSyncService") as sync_cls,
+        patch("energy_core.charging.engine.HeartbeatEnergyProvider", return_value=provider_instance),
+    ):
+        sync_cls.return_value.sync_charger = sync_mock
+        with pytest.raises(RuntimeError, match="stop-after-sync"):
+            await engine._run_charger_cycle(
+                session,
+                client,
+                charger,
+                site,
+                now=datetime(2026, 8, 18, 12, 0, tzinfo=UTC),
+            )
+
+    sync_mock.assert_awaited_once_with(charger, site, client=client)

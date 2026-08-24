@@ -107,6 +107,7 @@ export interface SiteDashboard {
   optimization: DashboardOptimizationSection | null;
   alerts: DashboardAlert[];
   spa_integration_enabled: boolean;
+  vehicle_integration_enabled: boolean;
 }
 
 export interface SiteEnergyConfig {
@@ -187,6 +188,11 @@ export interface EvCharger {
   connection_status?: string;
   last_connection_at?: string | null;
   last_connection_test_at?: string | null;
+  heartbeat_sync_enabled?: boolean;
+  heartbeat_last_pushed_at?: string | null;
+  heartbeat_last_pulled_at?: string | null;
+  heartbeat_remote_updated_at?: string | null;
+  heartbeat_sync_error?: string | null;
 }
 
 export interface ChargerManufacturer {
@@ -362,6 +368,13 @@ export interface EnergyReasoning {
   energy_flow_line: string | null;
   energy_balance_status: string | null;
   reasoning_steps: string[];
+  vehicle_linked: boolean;
+  vehicle_display_name: string | null;
+  vehicle_soc_pct: number | null;
+  vehicle_target_soc_pct: number | null;
+  vehicle_required_energy_kwh: number | null;
+  vehicle_departure_time: string | null;
+  vehicle_energy_quality: string | null;
 }
 
 export interface EvSolarChargingPlan {
@@ -586,6 +599,7 @@ export interface HeartbeatConfig {
   notes: string[];
   sites: SiteHeartbeatMapping[];
   updated_at: string | null;
+  heartbeat_write_enabled: boolean;
 }
 
 export interface HeartbeatConfigUpdate {
@@ -600,6 +614,7 @@ export interface HeartbeatConfigUpdate {
   password?: string;
   api_token?: string;
   sites: { slug: string; external_system_id: string | null }[];
+  heartbeat_write_enabled?: boolean;
 }
 
 export interface ChargeAmpsConfig {
@@ -1476,6 +1491,234 @@ export async function testSpaConnection(slug: string): Promise<SpaConnectionTest
 export async function fetchSpaReadiness(): Promise<{ enabled: boolean; configured_sites: number; online_sites: number; error_sites: number }> {
   const res = await fetch(`${getApiBaseUrl()}/api/system/integrations/spa-readiness`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export interface VehicleCapabilities {
+  can_read_soc: boolean | null;
+  can_read_range: boolean | null;
+  can_read_charging_state: boolean | null;
+  can_read_charging_power: boolean | null;
+  can_read_target_soc: boolean | null;
+  can_read_departure_time: boolean | null;
+  can_set_target_soc: boolean | null;
+  can_start_charging: boolean | null;
+  can_stop_charging: boolean | null;
+}
+
+export interface VehicleHaloCorrelation {
+  charger_id: number | null;
+  confidence: number;
+  status: string;
+  plugged_agreement: boolean | null;
+  charging_agreement: boolean | null;
+  power_delta_kw: number | null;
+  vehicle_power_kw: number | null;
+  halo_power_kw: number | null;
+  notes: string;
+  updated_at: string | null;
+}
+
+export interface VehicleListItem {
+  id: number;
+  site_id: number;
+  provider: string;
+  display_name: string;
+  manufacturer: string;
+  model: string;
+  masked_vin: string | null;
+  enabled: boolean;
+  connection_state: string;
+  data_quality: string;
+  freshness_label: string;
+  state_of_charge_percent: number | null;
+  target_soc_percent: number | null;
+  electric_range_km: number | null;
+  is_plugged_in: boolean | null;
+  is_charging: boolean | null;
+  charging_power_kw: number | null;
+  last_vehicle_update: string | null;
+  capabilities: VehicleCapabilities;
+  halo_correlation: VehicleHaloCorrelation | null;
+}
+
+export interface VehicleListResponse {
+  site_slug: string;
+  vehicles: VehicleListItem[];
+}
+
+export interface VehicleIntegrationStatus {
+  site_slug: string;
+  provider: string;
+  enabled: boolean;
+  region: string;
+  username: string;
+  password_configured: boolean;
+  connection_state: string;
+  commands_enabled: boolean;
+  token_expires_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+  backoff_until: string | null;
+  blocked_since: string | null;
+  reconnect_count: number;
+  http_429_count: number;
+  decode_failure_count: number;
+  health: string;
+}
+
+export interface VehicleIntegrationConfig {
+  site_slug: string;
+  provider: string;
+  enabled: boolean;
+  region: string;
+  username: string;
+  password_configured: boolean;
+  commands_enabled: boolean;
+}
+
+export interface VehicleIntegrationLoginResult {
+  success: boolean;
+  message: string;
+}
+
+export interface VehicleEnergySources {
+  solar_direct_kwh: number;
+  solar_battery_kwh: number;
+  grid_battery_kwh: number;
+  grid_direct_kwh: number;
+}
+
+export interface VehicleChargeSession {
+  id: number;
+  vehicle_id: number;
+  charger_id: number;
+  connected_at: string;
+  disconnected_at: string | null;
+  charging_started_at: string | null;
+  charging_stopped_at: string | null;
+  start_soc: number | null;
+  end_soc: number | null;
+  target_soc: number | null;
+  status: string;
+  halo_energy_kwh: number | null;
+  estimated_battery_energy_delta_kwh: number | null;
+  energy_sources: VehicleEnergySources;
+  actual_cost_sek: number | null;
+  reference_cost_sek: number | null;
+  savings_sek: number | null;
+  renewable_share_pct: number | null;
+  grid_share_pct: number | null;
+  identification_confidence: number | null;
+  energy_quality: string | null;
+  cost_quality: string | null;
+  attribution_quality: string | null;
+}
+
+export interface VehicleChargeSessionListResponse {
+  site_slug: string;
+  vehicle_id: number;
+  sessions: VehicleChargeSession[];
+}
+
+export async function fetchVehicles(slug: string): Promise<VehicleListResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchVehicleIntegrationStatus(slug: string): Promise<VehicleIntegrationStatus> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchVehicleIntegrationConfig(slug: string): Promise<VehicleIntegrationConfig> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function updateVehicleIntegrationConfig(
+  slug: string,
+  payload: Record<string, unknown>,
+): Promise<VehicleIntegrationConfig> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function loginVehicleIntegration(slug: string): Promise<VehicleIntegrationLoginResult> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/login`, { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchVehicleChargeSessions(
+  slug: string,
+  vehicleId: number,
+): Promise<VehicleChargeSessionListResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchCurrentVehicleChargeSession(
+  slug: string,
+  vehicleId: number,
+): Promise<VehicleChargeSession> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/current`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export interface VehicleCommandResult {
+  success: boolean;
+  message: string;
+  vehicle_id: number;
+  command: string;
+}
+
+export async function sendVehicleSetTargetSoc(
+  slug: string,
+  vehicleId: number,
+  targetSocPercent: number,
+): Promise<VehicleCommandResult> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/set-target-soc`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_soc_percent: targetSocPercent }),
+    },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function startVehicleCharging(slug: string, vehicleId: number): Promise<VehicleCommandResult> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/start-charging`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function stopVehicleCharging(slug: string, vehicleId: number): Promise<VehicleCommandResult> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/stop-charging`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 

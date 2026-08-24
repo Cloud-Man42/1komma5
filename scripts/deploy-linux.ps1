@@ -38,6 +38,7 @@ $tarArgs = @(
     "--exclude=.env",
     "-C", $repoRoot,
     "backend", "collector", "frontend", "packages", "docker", "scripts", "alembic", "alembic.ini",
+    "scripts/verify_mercedes_eqe_commands.py",
     "docker-compose.yml", "Caddyfile", "pyproject.toml", "uv.lock", ".env.production.example"
 )
 

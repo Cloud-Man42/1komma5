@@ -80,7 +80,9 @@ describe("EvChargerPanel", () => {
   it("shows solar charging plan section for bridge-enabled charger", async () => {
     mockFetchEvChargers.mockResolvedValue([makeEvCharger({ bridge_enabled: true })]);
     render(<EvChargerPanel siteSlug="akarp" />);
-    expect(await screen.findByText(/Solprognos \(Smart laddning\)/i)).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText(/Solprognos \(Smart laddning\)/i)).toBeTruthy();
+    });
     await waitFor(() => {
       expect(mockFetchEvSolarChargingPlan).toHaveBeenCalled();
     });
@@ -163,5 +165,19 @@ describe("EvChargerPanel", () => {
       expect(mockFetchEvSolarChargingPlan).toHaveBeenCalled();
     });
     expect(screen.queryByText(/Solprognos \(Smart laddning\)/i)).toBeNull();
+  });
+
+  it("shows heartbeat sync status when enabled", async () => {
+    mockFetchEvChargers.mockResolvedValue([
+      makeEvCharger({
+        bridge_enabled: true,
+        heartbeat_sync_enabled: true,
+        heartbeat_last_pushed_at: "2026-08-18T10:00:00Z",
+        heartbeat_sync_error: "timeout",
+      }),
+    ]);
+    render(<EvChargerPanel siteSlug="akarp" />);
+    expect(await screen.findByText(/Heartbeat-synk aktiv/i)).toBeTruthy();
+    expect(screen.getByText(/Synkfel: timeout/i)).toBeTruthy();
   });
 });

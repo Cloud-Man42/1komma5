@@ -54,6 +54,13 @@ class EnergyReasoningSnapshot:
     energy_flow_line: str | None
     energy_balance_status: str | None
     reasoning_steps: tuple[str, ...]
+    vehicle_linked: bool = False
+    vehicle_display_name: str | None = None
+    vehicle_soc_pct: float | None = None
+    vehicle_target_soc_pct: float | None = None
+    vehicle_required_energy_kwh: float | None = None
+    vehicle_departure_time: str | None = None
+    vehicle_energy_quality: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,6 +96,13 @@ class EnergyReasoningSnapshot:
             "energy_flow_line": self.energy_flow_line,
             "energy_balance_status": self.energy_balance_status,
             "reasoning_steps": list(self.reasoning_steps),
+            "vehicle_linked": self.vehicle_linked,
+            "vehicle_display_name": self.vehicle_display_name,
+            "vehicle_soc_pct": self.vehicle_soc_pct,
+            "vehicle_target_soc_pct": self.vehicle_target_soc_pct,
+            "vehicle_required_energy_kwh": self.vehicle_required_energy_kwh,
+            "vehicle_departure_time": self.vehicle_departure_time,
+            "vehicle_energy_quality": self.vehicle_energy_quality,
         }
 
 
@@ -101,6 +115,7 @@ def build_energy_reasoning(
     energy_flow_line: str | None = None,
     energy_balance_status: str | None = None,
     active_optimizations: tuple[str, ...] = (),
+    vehicle_context=None,
     now: datetime | None = None,
 ) -> EnergyReasoningSnapshot:
     now = now or datetime.now(UTC)
@@ -109,7 +124,11 @@ def build_energy_reasoning(
     charging_active = bool(charger.bridge_enabled) and not respects_manual_pause(
         mode, override_active=is_override
     )
-    departure_time = charger.departure_time or (energy.departure_time if energy else None)
+    departure_time = (
+        (energy.departure_time if energy and energy.vehicle_linked else None)
+        or charger.departure_time
+        or (energy.departure_time if energy else None)
+    )
     timezone = site.timezone or "Europe/Stockholm"
     expensive_threshold = 0.35
     charge_hours = 4.0
@@ -158,7 +177,29 @@ def build_energy_reasoning(
         display_status_sv=display,
         override_active=is_override,
         show_price_rules=show_price_rules,
+        vehicle_context=vehicle_context,
     )
+
+    vehicle_soc = None
+    vehicle_target = None
+    vehicle_required = None
+    vehicle_departure = None
+    vehicle_quality = None
+    vehicle_linked = bool(energy and energy.vehicle_linked)
+    vehicle_name = energy.vehicle_display_name if energy else None
+    if energy and energy.vehicle_linked:
+        vehicle_soc = energy.ev_soc * 100.0 if energy.ev_soc is not None else None
+        vehicle_target = energy.target_soc * 100.0 if energy.target_soc is not None else None
+        vehicle_required = energy.vehicle_required_energy_kwh
+        vehicle_departure = energy.departure_time
+        vehicle_quality = energy.vehicle_energy_quality
+    elif vehicle_context is not None:
+        vehicle_name = vehicle_context.display_name
+        vehicle_soc = vehicle_context.requirement.current_soc_percent
+        vehicle_target = vehicle_context.requirement.target_soc_percent
+        vehicle_required = vehicle_context.requirement.required_energy_kwh
+        vehicle_departure = vehicle_context.departure_time
+        vehicle_quality = vehicle_context.requirement.quality
 
     return EnergyReasoningSnapshot(
         bridge_enabled=bool(charger.bridge_enabled),
@@ -193,6 +234,13 @@ def build_energy_reasoning(
         energy_flow_line=energy_flow_line,
         energy_balance_status=energy_balance_status,
         reasoning_steps=steps,
+        vehicle_linked=vehicle_linked,
+        vehicle_display_name=vehicle_name,
+        vehicle_soc_pct=vehicle_soc,
+        vehicle_target_soc_pct=vehicle_target,
+        vehicle_required_energy_kwh=vehicle_required,
+        vehicle_departure_time=vehicle_departure,
+        vehicle_energy_quality=vehicle_quality,
     )
 
 
@@ -226,6 +274,7 @@ def _build_steps(
     display_status_sv: str | None,
     override_active: bool = False,
     show_price_rules: bool = True,
+    vehicle_context=None,
 ) -> tuple[str, ...]:
     steps: list[str] = []
 
@@ -259,6 +308,25 @@ def _build_steps(
             steps.append("Heartbeat AI rekommenderar laddning från nätet just nu.")
         if energy.ev_target_power_w is not None:
             steps.append(f"Heartbeat EV-mål: {energy.ev_target_power_w / 1000:.1f} kW.")
+
+    if energy is not None and energy.vehicle_linked:
+        soc = f"{energy.ev_soc * 100:.0f} %" if energy.ev_soc is not None else "—"
+        target = f"{energy.target_soc * 100:.0f} %" if energy.target_soc is not None else "—"
+        need = (
+            f"{energy.vehicle_required_energy_kwh:.1f} kWh"
+            if energy.vehicle_required_energy_kwh is not None
+            else "—"
+        )
+        quality = energy.vehicle_energy_quality or "UNKNOWN"
+        label = energy.vehicle_display_name or "Fordon"
+        steps.append(
+            f"Fordonsdata ({label}): SoC {soc}, mål {target}, behov {need} ({quality.lower()})."
+        )
+        if energy.departure_time:
+            steps.append(f"Mercedes avresa: {energy.departure_time}.")
+    elif vehicle_context is not None and not vehicle_context.active:
+        reason = "inaktuell data" if vehicle_context.stale else "låg Halo-korrelation"
+        steps.append(f"Fordonsdata används inte i SmartLaddning ({reason}).")
 
     tier_label = {"green": "grönt (billigt)", "red": "rött (dyrt)", "normal": "normalt"}.get(
         price_tier, "okänt"
@@ -363,11 +431,15 @@ async def load_energy_reasoning_for_charger(
     from energy_core.db.energy_balance_repo import EnergyBalanceRepository
     from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
     from energy_core.heartbeat_client_factory import create_heartbeat_client
+    from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
+    from energy_core.charging.solar_plan import charging_config_from_models
 
     logger = logging.getLogger(__name__)
     now = now or datetime.now(UTC)
     energy = None
     active_optimizations: tuple[str, ...] = ()
+    vehicle_context = None
+    config = charging_config_from_models(charger, site)
 
     client = await create_heartbeat_client(session)
     if client is not None and site.external_system_id:
@@ -389,6 +461,16 @@ async def load_energy_reasoning_for_charger(
         except Exception:
             logger.debug("energy reasoning heartbeat fetch failed site=%s", site.slug, exc_info=True)
 
+    vehicle_context = await resolve_vehicle_charging_context(
+        session,
+        site_id=site.id,
+        charger_id=charger.id,
+        timezone=config.timezone,
+        now=now,
+    )
+    if energy is not None:
+        energy, config = apply_vehicle_charging_context(charger, energy, config, vehicle_context)
+
     settings = get_settings()
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=charger.id)
@@ -405,6 +487,7 @@ async def load_energy_reasoning_for_charger(
         now=now,
         price_forecast=energy.price_forecast if energy else (),
         current_price=energy.electricity_price_eur_kwh if energy else None,
+        config=config,
     )
 
     return build_energy_reasoning(
@@ -415,6 +498,7 @@ async def load_energy_reasoning_for_charger(
         energy_flow_line=energy_flow_line,
         energy_balance_status=energy_balance_status,
         active_optimizations=active_optimizations,
+        vehicle_context=vehicle_context,
         now=now,
     )
 

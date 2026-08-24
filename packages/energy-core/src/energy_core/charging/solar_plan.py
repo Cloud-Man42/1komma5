@@ -210,10 +210,11 @@ async def load_solar_charging_plan_for_charger(
     now: datetime | None = None,
     price_forecast: tuple[tuple[datetime, float], ...] = (),
     current_price: float | None = None,
+    config: ChargingConfig | None = None,
 ) -> SolarChargingPlan | None:
     from energy_core.charging.optimizer import _deadline_from_departure
 
-    config = charging_config_from_models(charger, site)
+    config = config or charging_config_from_models(charger, site)
     now = now or datetime.now(UTC)
     deadline = config.deadline_at or _deadline_from_departure(
         now, config.departure_time, config.timezone

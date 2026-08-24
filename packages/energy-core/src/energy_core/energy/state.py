@@ -31,6 +31,11 @@ class EnergyState:
     departure_time: str | None = None
     deadline_at: datetime | None = None
     target_soc: float | None = None
+    ev_soc: float | None = None
+    vehicle_required_energy_kwh: float | None = None
+    vehicle_energy_quality: str | None = None
+    vehicle_linked: bool = False
+    vehicle_display_name: str | None = None
     data_age_seconds: float = 0.0
     raw_field_hints: tuple[str, ...] = ()
     stale: bool = False

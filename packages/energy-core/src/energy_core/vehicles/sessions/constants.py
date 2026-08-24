@@ -1,0 +1,8 @@
+"""Vehicle charge session constants."""
+
+from __future__ import annotations
+
+CALCULATION_VERSION = "vehicle-charge-v1"
+DEFAULT_SAVINGS_BASELINE = "IMMEDIATE_GRID_CHARGING"
+DEFAULT_BATTERY_CAPACITY_KWH = 90.0
+SOC_TO_KWH_FACTOR = DEFAULT_BATTERY_CAPACITY_KWH / 100.0

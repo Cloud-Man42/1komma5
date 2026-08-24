@@ -39,6 +39,7 @@ from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, get_model
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository, SiteEnergyConfigRepository
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
+from energy_core.heartbeat.ev_sync import HeartbeatEvSyncService
 from energy_core.heartbeat_client import CHARGING_MODES
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +48,13 @@ router = APIRouter(tags=["ev-chargers"])
 logger = logging.getLogger(__name__)
 
 CHARGING_MODE_VALUES = set(CHARGING_MODES)
+
+
+async def _push_heartbeat_sync(session: AsyncSession, charger, site) -> None:
+    try:
+        await HeartbeatEvSyncService(session).push_charger(charger, site)
+    except Exception:
+        logger.exception("Heartbeat push failed for charger_id=%s", charger.id)
 
 
 async def _enrich_charger(
@@ -152,6 +160,11 @@ def _charger_response(base, **kwargs) -> EvChargerResponse:
         "connection_status": base.connection_status,
         "last_connection_at": base.last_connection_at,
         "last_connection_test_at": base.last_connection_test_at,
+        "heartbeat_sync_enabled": base.heartbeat_sync_enabled,
+        "heartbeat_last_pushed_at": base.heartbeat_last_pushed_at,
+        "heartbeat_last_pulled_at": base.heartbeat_last_pulled_at,
+        "heartbeat_remote_updated_at": base.heartbeat_remote_updated_at,
+        "heartbeat_sync_error": base.heartbeat_sync_error,
     }
     payload.update(kwargs)
     if payload.get("charging_mode") is None:
@@ -445,8 +458,19 @@ async def update_ev_charger(
         integration_method=payload.integration_method,
         external_charger_id=payload.external_charger_id,
         connection_settings=payload.connection_settings,
+        heartbeat_sync_enabled=payload.heartbeat_sync_enabled,
     )
     await session.commit()
+    if payload.heartbeat_sync_enabled or any(
+        value is not None
+        for value in (
+            payload.charging_mode,
+            payload.departure_time,
+            payload.target_soc_pct,
+        )
+    ):
+        await _push_heartbeat_sync(session, charger, site)
+        await session.commit()
     return await _enrich_charger(session, charger, slug)
 
 
@@ -576,6 +600,8 @@ async def control_ev_charger(
         clear_override=clear_override,
     )
     await session.commit()
+    await _push_heartbeat_sync(session, charger, site)
+    await session.commit()
     return await _enrich_charger(session, charger, slug)
 
 
@@ -613,6 +639,8 @@ async def set_ev_charger_override(
             charging_mode=resume_mode,
         )
 
+    await session.commit()
+    await _push_heartbeat_sync(session, charger, site)
     await session.commit()
     return await _enrich_charger(session, charger, slug)
 

@@ -55,6 +55,13 @@ const reasoning = {
     "Elprisnivå: grönt (billigt).",
     "Prisregel säger ladda (cheap_now).",
   ],
+  vehicle_linked: false,
+  vehicle_display_name: null,
+  vehicle_soc_pct: null,
+  vehicle_target_soc_pct: null,
+  vehicle_required_energy_kwh: null,
+  vehicle_departure_time: null,
+  vehicle_energy_quality: null,
 };
 
 describe("EnergyReasoningPanel", () => {
@@ -78,6 +85,25 @@ describe("EnergyReasoningPanel", () => {
     expect(screen.getByText(/EMIC \(beslut\)/)).toBeInTheDocument();
     expect(screen.getByText(/Resonemang steg för steg/)).toBeInTheDocument();
     expect(screen.getByText(/EV_CHARGE_FROM_GRID/)).toBeInTheDocument();
+  });
+
+  it("renders vehicle smart charging block when linked", async () => {
+    mockFetchEnergyReasoning.mockResolvedValue({
+      ...reasoning,
+      vehicle_linked: true,
+      vehicle_display_name: "Mercedes EQE",
+      vehicle_soc_pct: 47,
+      vehicle_target_soc_pct: 80,
+      vehicle_required_energy_kwh: 29.7,
+      vehicle_departure_time: "07:30",
+      vehicle_energy_quality: "ESTIMATED",
+    });
+    render(<EnergyReasoningPanel siteSlug="akarp" chargerId={4} refreshSeconds={30} />);
+    await waitFor(() => {
+      expect(screen.getByTestId("energy-reasoning-vehicle")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Mercedes EQE/)).toBeInTheDocument();
+    expect(screen.getByText(/29\.7 kWh/)).toBeInTheDocument();
   });
 
   it("pauses charging when toggled off", async () => {

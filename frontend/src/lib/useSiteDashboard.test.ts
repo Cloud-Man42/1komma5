@@ -22,6 +22,7 @@ describe("useSiteDashboard", () => {
       optimization: null,
       alerts: [],
       spa_integration_enabled: false,
+      vehicle_integration_enabled: false,
     });
   });
 

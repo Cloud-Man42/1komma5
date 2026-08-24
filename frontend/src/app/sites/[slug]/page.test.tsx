@@ -42,6 +42,7 @@ const mockDashboard = {
   },
   alerts: [],
   spa_integration_enabled: false,
+  vehicle_integration_enabled: false,
 };
 
 vi.mock("@/lib/useSiteDashboard", () => ({

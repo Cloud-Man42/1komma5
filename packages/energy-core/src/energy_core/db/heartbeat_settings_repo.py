@@ -35,6 +35,7 @@ class HeartbeatSettingsRecord:
     api_token_configured: bool
     api_url: str | None
     updated_at: datetime | None
+    heartbeat_write_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +85,7 @@ class HeartbeatSettingsRepository:
         username: str,
         password: str | None = None,
         api_token: str | None = None,
+        heartbeat_write_enabled: bool | None = None,
     ) -> HeartbeatSettingsRecord:
         row = await self.get_or_create()
         row.connection_type = connection_type
@@ -98,6 +100,8 @@ class HeartbeatSettingsRepository:
             row.password = password
         if api_token is not None:
             row.api_token = api_token
+        if heartbeat_write_enabled is not None:
+            row.heartbeat_write_enabled = heartbeat_write_enabled
         row.updated_at = datetime.now(UTC)
         await self._session.flush()
         return self._to_record(row)
@@ -154,8 +158,13 @@ class HeartbeatSettingsRepository:
                 use_tls=row.use_tls,
                 api_path=row.api_path,
             ),
+            heartbeat_write_enabled=row.heartbeat_write_enabled,
             updated_at=row.updated_at,
         )
+
+    async def is_write_enabled(self) -> bool:
+        row = await self.get_or_create()
+        return bool(row.heartbeat_write_enabled)
 
     async def get_secrets(self) -> tuple[str, str]:
         row = await self.get_or_create()

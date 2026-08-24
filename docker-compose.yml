@@ -31,7 +31,11 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
+    volumes:
+      - emic_secrets:/var/lib/emic
     environment:
+      EMIC_SECRET_KEY: ${EMIC_SECRET_KEY:-}
+      EMIC_SECRET_KEY_PATH: /var/lib/emic/secret.key
       APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
       HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
@@ -60,7 +64,11 @@ services:
     build:
       context: .
       dockerfile: docker/collector.Dockerfile
+    volumes:
+      - emic_secrets:/var/lib/emic
     environment:
+      EMIC_SECRET_KEY: ${EMIC_SECRET_KEY:-}
+      EMIC_SECRET_KEY_PATH: /var/lib/emic/secret.key
       APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
       HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
@@ -83,6 +91,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   postgres:
@@ -104,3 +114,4 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  emic_secrets:

@@ -1,0 +1,191 @@
+"""Vehicle charge session persistence."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from energy_core.db.models import VehicleChargeSessionModel
+
+
+@dataclass(frozen=True, slots=True)
+class VehicleChargeSessionRecord:
+    id: int
+    vehicle_id: int
+    charger_id: int
+    site_id: int
+    connected_at: datetime
+    disconnected_at: datetime | None
+    charging_started_at: datetime | None
+    charging_stopped_at: datetime | None
+    start_soc: float | None
+    end_soc: float | None
+    target_soc: float | None
+    status: str
+    meter_start_kwh: float | None
+    meter_stop_kwh: float | None
+    halo_energy_kwh: float | None
+    estimated_battery_energy_delta_kwh: float | None
+    solar_direct_kwh: float | None
+    solar_battery_kwh: float | None
+    grid_battery_kwh: float | None
+    grid_direct_kwh: float | None
+    actual_cost_sek: float | None
+    reference_cost_sek: float | None
+    savings_sek: float | None
+    renewable_share_pct: float | None
+    grid_share_pct: float | None
+    identification_confidence: float | None
+    energy_quality: str | None
+    cost_quality: str | None
+    attribution_quality: str | None
+    savings_baseline: str
+    calculation_version: str
+    reconciliation_delta_kwh: float | None
+    reconciliation_note: str | None
+
+
+class VehicleChargeSessionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        vehicle_id: int,
+        charger_id: int,
+        site_id: int,
+        connected_at: datetime,
+        start_soc: float | None,
+        target_soc: float | None,
+        meter_start_kwh: float | None,
+        identification_confidence: float | None,
+        savings_baseline: str,
+        calculation_version: str,
+    ) -> VehicleChargeSessionRecord:
+        row = VehicleChargeSessionModel(
+            vehicle_id=vehicle_id,
+            charger_id=charger_id,
+            site_id=site_id,
+            connected_at=connected_at,
+            start_soc=start_soc,
+            target_soc=target_soc,
+            meter_start_kwh=meter_start_kwh,
+            identification_confidence=identification_confidence,
+            savings_baseline=savings_baseline,
+            calculation_version=calculation_version,
+            status="ACTIVE",
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return self._to_record(row)
+
+    async def get_active_for_vehicle(self, vehicle_id: int) -> VehicleChargeSessionRecord | None:
+        row = await self._session.scalar(
+            select(VehicleChargeSessionModel)
+            .where(
+                VehicleChargeSessionModel.vehicle_id == vehicle_id,
+                VehicleChargeSessionModel.status == "ACTIVE",
+            )
+            .order_by(VehicleChargeSessionModel.connected_at.desc())
+        )
+        return self._to_record(row) if row else None
+
+    async def list_active(self) -> list[VehicleChargeSessionRecord]:
+        rows = await self._session.scalars(
+            select(VehicleChargeSessionModel).where(VehicleChargeSessionModel.status == "ACTIVE")
+        )
+        return [self._to_record(row) for row in rows]
+
+    async def get_by_id(self, session_id: int) -> VehicleChargeSessionRecord | None:
+        row = await self._session.get(VehicleChargeSessionModel, session_id)
+        return self._to_record(row) if row else None
+
+    async def list_for_vehicle(
+        self,
+        vehicle_id: int,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[VehicleChargeSessionRecord]:
+        rows = await self._session.scalars(
+            select(VehicleChargeSessionModel)
+            .where(VehicleChargeSessionModel.vehicle_id == vehicle_id)
+            .order_by(VehicleChargeSessionModel.connected_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [self._to_record(row) for row in rows]
+
+    async def get_current_for_vehicle(self, vehicle_id: int) -> VehicleChargeSessionRecord | None:
+        return await self.get_active_for_vehicle(vehicle_id)
+
+    async def update_charging_timestamps(
+        self,
+        session_id: int,
+        *,
+        charging_started_at: datetime | None = None,
+        charging_stopped_at: datetime | None = None,
+        target_soc: float | None = None,
+    ) -> None:
+        row = await self._session.get(VehicleChargeSessionModel, session_id)
+        if row is None:
+            return
+        if charging_started_at is not None:
+            row.charging_started_at = charging_started_at
+        if charging_stopped_at is not None:
+            row.charging_stopped_at = charging_stopped_at
+        if target_soc is not None:
+            row.target_soc = target_soc
+        await self._session.flush()
+
+    async def complete(self, session_id: int, **fields) -> None:
+        row = await self._session.get(VehicleChargeSessionModel, session_id)
+        if row is None:
+            return
+        row.status = "COMPLETED"
+        for key, value in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, value)
+        await self._session.flush()
+
+    @staticmethod
+    def _to_record(row: VehicleChargeSessionModel) -> VehicleChargeSessionRecord:
+        return VehicleChargeSessionRecord(
+            id=row.id,
+            vehicle_id=row.vehicle_id,
+            charger_id=row.charger_id,
+            site_id=row.site_id,
+            connected_at=row.connected_at,
+            disconnected_at=row.disconnected_at,
+            charging_started_at=row.charging_started_at,
+            charging_stopped_at=row.charging_stopped_at,
+            start_soc=row.start_soc,
+            end_soc=row.end_soc,
+            target_soc=row.target_soc,
+            status=row.status,
+            meter_start_kwh=row.meter_start_kwh,
+            meter_stop_kwh=row.meter_stop_kwh,
+            halo_energy_kwh=row.halo_energy_kwh,
+            estimated_battery_energy_delta_kwh=row.estimated_battery_energy_delta_kwh,
+            solar_direct_kwh=row.solar_direct_kwh,
+            solar_battery_kwh=row.solar_battery_kwh,
+            grid_battery_kwh=row.grid_battery_kwh,
+            grid_direct_kwh=row.grid_direct_kwh,
+            actual_cost_sek=row.actual_cost_sek,
+            reference_cost_sek=row.reference_cost_sek,
+            savings_sek=row.savings_sek,
+            renewable_share_pct=row.renewable_share_pct,
+            grid_share_pct=row.grid_share_pct,
+            identification_confidence=row.identification_confidence,
+            energy_quality=row.energy_quality,
+            cost_quality=row.cost_quality,
+            attribution_quality=row.attribution_quality,
+            savings_baseline=row.savings_baseline,
+            calculation_version=row.calculation_version,
+            reconciliation_delta_kwh=row.reconciliation_delta_kwh,
+            reconciliation_note=row.reconciliation_note,
+        )

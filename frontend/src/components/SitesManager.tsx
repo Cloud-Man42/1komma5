@@ -14,6 +14,8 @@ import {
   updateSite,
 } from "@/lib/api";
 import { SolarSiteConfigPanel } from "@/components/SolarSiteConfigPanel";
+import { SpaAdminPanel } from "@/components/SpaAdminPanel";
+import { MercedesAdminPanel } from "@/components/MercedesAdminPanel";
 import { DeadlineInput } from "@/components/DeadlineInput";
 import { ChargerSetupWizard } from "@/components/ChargerSetupWizard";
 import {
@@ -147,6 +149,7 @@ export function SitesManager() {
         model_id: charger.model_id,
         integration_method: charger.integration_method,
         external_charger_id: charger.external_charger_id ?? charger.chargeamp_charger_id,
+        heartbeat_sync_enabled: charger.heartbeat_sync_enabled ?? false,
       });
       await load();
       setMessage(`Laddbox "${charger.name}" uppdaterad.`);
@@ -381,6 +384,8 @@ export function SitesManager() {
           ) : null}
 
           <SolarSiteConfigPanel siteSlug={site.slug} />
+          <SpaAdminPanel siteSlug={site.slug} />
+          <MercedesAdminPanel siteSlug={site.slug} />
 
           <h4 className="charger-section-title">EV-laddboxar</h4>
           {(chargersBySite[site.slug] ?? []).length === 0 && wizardSiteSlug !== site.slug ? (
@@ -490,6 +495,31 @@ export function SitesManager() {
                     }
                   />
                 </label>
+                <label className="form-field">
+                  <span>Heartbeat-synk (EV-profil)</span>
+                  <select
+                    value={charger.heartbeat_sync_enabled ? "true" : "false"}
+                    disabled={!charger.heartbeat_ev_id}
+                    onChange={(e) =>
+                      setChargersBySite((current) => ({
+                        ...current,
+                        [site.slug]: current[site.slug].map((c) =>
+                          c.id === charger.id
+                            ? { ...c, heartbeat_sync_enabled: e.target.value === "true" }
+                            : c,
+                        ),
+                      }))
+                    }
+                  >
+                    <option value="false">Av</option>
+                    <option value="true">På</option>
+                  </select>
+                </label>
+                {!charger.heartbeat_ev_id ? (
+                  <p className="muted form-field-wide">
+                    Ange HeartBeat EV-ID för att aktivera tvåvägssynk av laddinställningar.
+                  </p>
+                ) : null}
               </div>
 
               <details className="bridge-settings">

@@ -68,7 +68,7 @@ export function SpaAdminPanel({ siteSlug }: { siteSlug: string }) {
   return (
     <details className="card" open data-testid="spa-admin-panel">
       <summary>
-        <strong>Integrations → Arctic Spa</strong>
+        <strong>Arctic Spa</strong>
       </summary>
       <form className="form-grid" onSubmit={onSubmit}>
         <label className="form-field">

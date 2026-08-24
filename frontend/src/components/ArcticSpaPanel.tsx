@@ -78,7 +78,7 @@ export function ArcticSpaPanel({ siteSlug }: { siteSlug: string }) {
     return (
       <section className="card diagnostics-panel" data-testid="arctic-spa-panel">
         <h3>Arctic Spa</h3>
-        <p className="muted">Integrationen är inte aktiverad. Konfigurera under Admin → Integrations.</p>
+        <p className="muted">Integrationen är inte aktiverad. Konfigurera under Konfiguration → Anläggningar.</p>
       </section>
     );
   }

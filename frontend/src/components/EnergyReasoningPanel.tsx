@@ -185,6 +185,27 @@ export default function EnergyReasoningPanel({
         </div>
       </div>
 
+      {data.vehicle_linked && (
+        <div className="reasoning-vehicle" data-testid="energy-reasoning-vehicle">
+          <h4>Fordonsdata (SmartLaddning)</h4>
+          <ul>
+            <li>{data.vehicle_display_name ?? "Fordon"}</li>
+            <li>SoC: {data.vehicle_soc_pct != null ? `${Math.round(data.vehicle_soc_pct)} %` : "—"}</li>
+            <li>Mål: {data.vehicle_target_soc_pct != null ? `${Math.round(data.vehicle_target_soc_pct)} %` : "—"}</li>
+            <li>
+              Behov:{" "}
+              {data.vehicle_required_energy_kwh != null
+                ? `${data.vehicle_required_energy_kwh.toFixed(1)} kWh`
+                : "—"}
+              {data.vehicle_energy_quality && (
+                <span className="muted"> ({data.vehicle_energy_quality.toLowerCase()})</span>
+              )}
+            </li>
+            <li>Avresa: {data.vehicle_departure_time ?? "—"}</li>
+          </ul>
+        </div>
+      )}
+
       {data.energy_flow_line && (
         <p>
           <strong>Energiflöde:</strong> {data.energy_flow_line}

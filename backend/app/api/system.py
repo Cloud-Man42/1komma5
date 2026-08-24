@@ -10,11 +10,13 @@ from app.schemas import (
     HeartbeatConfigUpdateRequest,
     SiteHeartbeatMappingResponse,
     SpaReadinessResponse,
+    VehicleReadinessResponse,
 )
 from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
 from energy_core.charging.readiness import evaluate_charging_readiness
 from energy_core.config import get_settings
 from energy_core.db.consumer_repo import ConsumerRepository
+from energy_core.db.vehicle_repo import VehicleProviderRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.heartbeat_auth import HeartbeatAuthError
@@ -51,6 +53,7 @@ def _to_response(repo_record, sites, info) -> HeartbeatConfigResponse:
             for site in sites
         ],
         updated_at=repo_record.updated_at,
+        heartbeat_write_enabled=repo_record.heartbeat_write_enabled,
     )
 
 
@@ -133,6 +136,7 @@ async def update_heartbeat_config(
         username=payload.username,
         password=password,
         api_token=api_token,
+        heartbeat_write_enabled=payload.heartbeat_write_enabled,
     )
 
     for site_update in payload.sites:
@@ -186,4 +190,22 @@ async def get_spa_readiness(session: AsyncSession = Depends(get_db_session)) -> 
         configured_sites=len(rows),
         online_sites=online,
         error_sites=errors,
+    )
+
+
+@router.get("/system/integrations/vehicle-readiness", response_model=VehicleReadinessResponse)
+async def get_vehicle_readiness(session: AsyncSession = Depends(get_db_session)) -> VehicleReadinessResponse:
+    repo = VehicleProviderRepository(session)
+    rows = await repo.list_enabled()
+    connected = 0
+    degraded = 0
+    for row, _site in rows:
+        if row.connection_state == "CONNECTED":
+            connected += 1
+        elif row.connection_state in {"BACKOFF", "DEGRADED", "RECONNECTING"}:
+            degraded += 1
+    return VehicleReadinessResponse(
+        enabled_sites=len(rows),
+        connected_sites=connected,
+        degraded_sites=degraded,
     )

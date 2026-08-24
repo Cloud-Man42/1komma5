@@ -10,7 +10,9 @@ from datetime import UTC, datetime, timedelta
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
 from energy_core.config import get_settings
+from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
+from energy_core.heartbeat.ev_sync import HeartbeatEvSyncService
 from energy_core.db.repositories import (
     EnergyReadingRepository,
     MarketPriceRepository,
@@ -27,6 +29,8 @@ from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
+from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
+from energy_core.vehicles.sessions import VehicleChargeSessionCoordinator
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,8 @@ class Collector:
         self._spa_polling = ArcticSpaPollingService()
         self._solar_forecast = SolarForecastCoordinator()
         self._energy_balance = EnergyBalanceCoordinator()
+        self._vehicle_supervisor = VehicleIntegrationSupervisor(self._session_factory, self._settings)
+        self._vehicle_charge_sessions = VehicleChargeSessionCoordinator()
 
     async def setup(self) -> None:
         try:
@@ -52,7 +58,9 @@ class Collector:
         async with self._session_factory() as session:
             await seed_sites(session)
             await self._ev_accounting.setup(session)
+            await self._vehicle_charge_sessions.setup(session)
             await session.commit()
+        await self._vehicle_supervisor.start()
 
     async def poll_once(self) -> None:
         reading_count = 0
@@ -74,8 +82,10 @@ class Collector:
             await self._collect_market_prices(session, site_repo)
             await self._run_spa_integration(session, site_repo)
             await self._run_ev_accounting(session, site_repo)
+            await self._run_vehicle_charge_sessions(session, site_repo)
             await self._run_energy_balance(session, site_repo)
             await self._run_solar_forecast(session, site_repo)
+            await self._run_heartbeat_ev_sync_fallback(session)
             await session.commit()
 
         bridge_count = 0
@@ -145,6 +155,25 @@ class Collector:
         if total:
             logger.debug("EV accounting processed %d charger ticks", total)
 
+    async def _run_vehicle_charge_sessions(self, session, site_repo: SiteRepository) -> None:
+        client = await create_heartbeat_client(session)
+        total = 0
+        for site in await site_repo.list_all():
+            live_overview = None
+            if client is not None and site.external_system_id:
+                try:
+                    live_overview = await client.fetch_live_overview(site.external_system_id)
+                except Exception:
+                    logger.exception("Failed to fetch live overview for vehicle sessions site %s", site.slug)
+            total += await self._vehicle_charge_sessions.process_site(
+                session,
+                site=site,
+                live_overview=live_overview,
+                is_sqlite=self._settings.is_sqlite,
+            )
+        if total:
+            logger.debug("Vehicle charge sessions processed %d vehicle ticks", total)
+
     async def _run_energy_balance(self, session, site_repo: SiteRepository) -> None:
         from energy_core.db.ev_charger_repo import EvChargerRepository
 
@@ -181,6 +210,27 @@ class Collector:
         if count:
             logger.debug("Solar forecast refreshed for %d sites", count)
 
+    async def _run_heartbeat_ev_sync_fallback(self, session) -> None:
+        hb_repo = HeartbeatSettingsRepository(session)
+        if not await hb_repo.is_write_enabled():
+            return
+        charger_repo = EvChargerRepository(session)
+        sync_service = HeartbeatEvSyncService(session)
+        now = datetime.now(UTC)
+        synced = 0
+        for charger, site in await charger_repo.list_heartbeat_sync_enabled_with_sites():
+            if charger.last_bridge_run_at is not None:
+                elapsed = (now - charger.last_bridge_run_at).total_seconds()
+                if elapsed < 60:
+                    continue
+            try:
+                await sync_service.sync_charger(charger, site)
+                synced += 1
+            except Exception:
+                logger.exception("Heartbeat EV sync fallback failed charger_id=%s", charger.id)
+        if synced:
+            logger.debug("Heartbeat EV sync fallback processed %d chargers", synced)
+
     async def run(self) -> None:
         logging.basicConfig(level=self._settings.log_level)
         await self.setup()
@@ -202,6 +252,7 @@ class Collector:
         self._running = False
 
     async def shutdown(self) -> None:
+        await self._vehicle_supervisor.stop()
         await self._engine.dispose()
 
 

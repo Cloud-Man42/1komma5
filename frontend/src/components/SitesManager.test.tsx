@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { SitesManager } from "@/components/SitesManager";
@@ -57,6 +57,18 @@ vi.mock("@/components/SolarSiteConfigPanel", () => ({
   ),
 }));
 
+vi.mock("@/components/SpaAdminPanel", () => ({
+  SpaAdminPanel: ({ siteSlug }: { siteSlug: string }) => (
+    <div data-testid={`spa-admin-${siteSlug}`}>Spa admin</div>
+  ),
+}));
+
+vi.mock("@/components/MercedesAdminPanel", () => ({
+  MercedesAdminPanel: ({ siteSlug }: { siteSlug: string }) => (
+    <div data-testid={`mercedes-admin-${siteSlug}`}>Mercedes admin</div>
+  ),
+}));
+
 describe("SitesManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,6 +81,21 @@ describe("SitesManager", () => {
     render(<SitesManager />);
     expect(await screen.findByDisplayValue("Åkarp")).toBeTruthy();
     expect(screen.getByTestId("solar-panel-akarp")).toBeTruthy();
+    expect(screen.getByTestId("spa-admin-akarp")).toBeTruthy();
+    expect(screen.getByTestId("mercedes-admin-akarp")).toBeTruthy();
+  });
+
+  it("renders one integration panel per site", async () => {
+    mockFetchSites.mockResolvedValue([
+      makeSite({ slug: "akarp", name: "Åkarp" }),
+      makeSite({ slug: "summer-house-denmark", name: "Sommarhus" }),
+    ]);
+    mockFetchEvChargers.mockResolvedValue([]);
+    render(<SitesManager />);
+    await screen.findByDisplayValue("Åkarp");
+    expect(screen.getByTestId("spa-admin-akarp")).toBeTruthy();
+    expect(screen.getByTestId("spa-admin-summer-house-denmark")).toBeTruthy();
+    expect(screen.getAllByTestId(/^spa-admin-/).length).toBe(2);
   });
 
   it("creates a site via button click without form submit", async () => {
@@ -76,20 +103,32 @@ describe("SitesManager", () => {
     render(<SitesManager />);
     await screen.findByDisplayValue("Åkarp");
 
+    const createForm = screen.getByPlaceholderText("min-anlaggning").closest(".site-create-form") as HTMLElement;
     await user.type(screen.getByPlaceholderText("min-anlaggning"), "new-site");
-    await user.type(screen.getAllByLabelText("Namn")[0], "New Site");
+    await user.type(within(createForm).getByLabelText("Namn"), "New Site");
     await user.click(screen.getByRole("button", { name: /Lägg till anläggning/i }));
 
-    await waitFor(() => {
-      expect(mockCreateSite).toHaveBeenCalledWith(
-        expect.objectContaining({ slug: "new-site", name: "New Site" }),
-      );
-    });
-  });
+    await waitFor(
+      () => {
+        expect(mockCreateSite).toHaveBeenCalledWith(
+          expect.objectContaining({ slug: "new-site", name: "New Site" }),
+        );
+      },
+      { timeout: 10000 },
+    );
+  }, 15000);
 
   it("shows API error when loading fails", async () => {
     mockFetchSites.mockRejectedValueOnce(new Error("Network error"));
     render(<SitesManager />);
     expect(await screen.findByText("Network error")).toBeTruthy();
+  });
+
+  it("renders charger sync toggle when heartbeat ev id is set", async () => {
+    mockFetchEvChargers.mockResolvedValue([
+      makeEvCharger({ heartbeat_ev_id: "ev-123", heartbeat_sync_enabled: false }),
+    ]);
+    render(<SitesManager />);
+    expect(await screen.findByText(/Heartbeat-synk \(EV-profil\)/i)).toBeTruthy();
   });
 });

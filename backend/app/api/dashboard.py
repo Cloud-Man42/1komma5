@@ -475,6 +475,11 @@ async def get_site_dashboard(
     spa_row = await ConsumerRepository(session).get_spa_by_site_slug(slug)
     spa_enabled = bool(spa_row and spa_row[1].integration_enabled)
 
+    from energy_core.db.vehicle_repo import VehicleProviderRepository
+
+    vehicle_row = await VehicleProviderRepository(session).get_for_site(site.id)
+    vehicle_enabled = bool(vehicle_row and vehicle_row.enabled)
+
     alerts = _build_alerts(freshness, ev_section, live)
 
     return DashboardResponse(
@@ -488,4 +493,5 @@ async def get_site_dashboard(
         optimization=optimization_section,
         alerts=alerts,
         spa_integration_enabled=spa_enabled,
+        vehicle_integration_enabled=vehicle_enabled,
     )

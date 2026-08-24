@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.api import chargers_catalog, dashboard, ev_chargers, ev_sessions, prices, readings, semp, sites, solar_forecast, spa, system
+from app.api import chargers_catalog, dashboard, ev_chargers, ev_sessions, prices, readings, semp, sites, solar_forecast, spa, system, vehicles
 from app.deps import set_session_factory
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.config import Settings, get_settings
@@ -58,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ev_sessions.router, prefix="/api")
     app.include_router(solar_forecast.router, prefix="/api")
     app.include_router(spa.router, prefix="/api")
+    app.include_router(vehicles.router, prefix="/api")
     app.include_router(semp.router)
     return app
 

@@ -12,7 +12,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
 
   return (
     <section>
-      <SiteTabs slug={slug} spaEnabled={dashboard?.spa_integration_enabled} />
+      <SiteTabs slug={slug} spaEnabled={dashboard?.spa_integration_enabled} vehicleEnabled={dashboard?.vehicle_integration_enabled} />
       {children}
     </section>
   );
