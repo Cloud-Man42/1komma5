@@ -1,0 +1,45 @@
+{
+  "apiVersion": "1.0",
+  "site": {
+    "id": "akarp",
+    "name": "Åkarp"
+  },
+  "solar": {
+    "powerKw": 5.42,
+    "todayKwh": null
+  },
+  "house": {
+    "powerKw": 1.61,
+    "todayKwh": null
+  },
+  "battery": {
+    "socPercent": 74.0,
+    "powerKw": 0.0,
+    "state": "idle",
+    "stateText": "Vilar"
+  },
+  "grid": {
+    "powerKw": -1.47,
+    "direction": "export",
+    "importPowerKw": 0.0,
+    "exportPowerKw": 1.47
+  },
+  "ev": {
+    "state": "unavailable",
+    "stateText": "Ej tillgänglig",
+    "powerKw": null,
+    "energyTodayKwh": null
+  },
+  "economy": {
+    "savedTodaySek": null,
+    "savedMonthSek": null,
+    "economicDataQuality": "unavailable"
+  },
+  "smartCharging": null,
+  "emic": {
+    "mode": null,
+    "decisionText": "Säljer solelöverskott"
+  },
+  "systemStatus": "online",
+  "isStale": false
+}

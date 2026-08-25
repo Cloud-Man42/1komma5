@@ -1720,3 +1720,186 @@ export async function fetchSiteDashboard(slug: string): Promise<SiteDashboard> {
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
+
+export interface HeartbeatDiscoveryRunResult {
+  run_id: number;
+  report_text: string;
+  setup_classification: string;
+  bridge_lifecycle: string;
+  resolved_ev_id: string | null;
+  confidence_pct: number;
+  virtual_bridge_suitable: boolean;
+  charging_modes: string[];
+  emic_vehicle_lines: string[];
+  warnings: string[];
+}
+
+export interface HeartbeatBridgeDecision {
+  bridge_state: string;
+  heartbeat_ev_id: string | null;
+  heartbeat_mode: string | null;
+  ai_decision: string | null;
+  reason: string;
+  recorded_at: string;
+}
+
+export interface HeartbeatDiscoveryRunDetail {
+  id: number;
+  status: string;
+  system_id: string | null;
+  conclusion_class: string | null;
+  bridge_lifecycle: string | null;
+  resolved_ev_id: string | null;
+  confidence_pct: number | null;
+  report_text: string;
+  report: Record<string, unknown>;
+  observations: Array<Record<string, unknown>>;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface HeartbeatBridgeStatus {
+  heartbeat_connection: string;
+  ev_profile: string;
+  ev_id: string | null;
+  confidence_pct: number | null;
+  physical_hb_wallbox: string;
+  charge_amps_halo: string;
+  halo_online: boolean;
+  virtual_bridge: string;
+  setup_classification: string | null;
+  bridge_lifecycle: string;
+  simulation_mode: boolean;
+  physical_control: string;
+  write_enabled: boolean;
+  settings: Record<string, unknown>;
+  mappings: Array<Record<string, unknown>>;
+}
+
+export interface HeartbeatBridgeSettings {
+  site_id: number;
+  discovery_enabled: boolean;
+  write_enabled: boolean;
+  virtual_bridge_enabled: boolean;
+  physical_control_enabled: boolean;
+  soc_sync_enabled: boolean;
+  replay_enabled: boolean;
+  simulation_mode: boolean;
+  confidence_threshold_pct: number;
+  battery_priority_mode: string;
+}
+
+export async function runHeartbeatDiscovery(slug: string): Promise<HeartbeatDiscoveryRunResult> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/run`, { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchHeartbeatDiscoveryRun(
+  slug: string,
+  runId: number,
+): Promise<HeartbeatDiscoveryRunDetail> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/runs/${runId}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchHeartbeatBridgeStatus(slug: string): Promise<HeartbeatBridgeStatus> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchHeartbeatBridgeSettings(slug: string): Promise<HeartbeatBridgeSettings> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateHeartbeatBridgeSettings(
+  slug: string,
+  payload: Partial<HeartbeatBridgeSettings>,
+): Promise<HeartbeatBridgeSettings> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function runHeartbeatWriteTest(
+  slug: string,
+  dryRun: boolean,
+): Promise<{
+  classification: string;
+  http_status?: number | null;
+  error?: string | null;
+}> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/heartbeat/write-test/run?dry_run=${dryRun ? "true" : "false"}`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function runHeartbeatReplay(slug: string): Promise<{ report_text: string }> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/replay/run`, { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchHeartbeatBridgeDecisions(slug: string): Promise<HeartbeatBridgeDecision[]> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/decisions`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface AppleDevice {
+  id: number;
+  owner_label: string;
+  device_name: string;
+  device_type: string;
+  token_prefix: string;
+  scopes: string;
+  default_site_slug: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  status: string;
+}
+
+export interface AppleDeviceCreateResult extends AppleDevice {
+  token: string;
+}
+
+export async function fetchAppleDevices(): Promise<AppleDevice[]> {
+  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function createAppleDevice(payload: {
+  owner_label: string;
+  device_name: string;
+  device_type?: string;
+  default_site_slug?: string;
+}): Promise<AppleDeviceCreateResult> {
+  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function revokeAppleDevice(deviceId: number): Promise<AppleDevice> {
+  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices/${deviceId}/revoke`, { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}

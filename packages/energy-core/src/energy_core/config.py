@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     spa_energy_collection_enabled: bool = Field(default=True, alias="SPA_ENERGY_COLLECTION_ENABLED")
     spa_cost_calculation_enabled: bool = Field(default=True, alias="SPA_COST_CALCULATION_ENABLED")
 
+    widget_stale_seconds: int = Field(default=120, ge=30, alias="WIDGET_STALE_SECONDS")
+    widget_snapshot_cache_seconds: int = Field(default=15, ge=0, alias="WIDGET_SNAPSHOT_CACHE_SECONDS")
+    widget_savings_cache_seconds: int = Field(default=300, ge=0, alias="WIDGET_SAVINGS_CACHE_SECONDS")
+    widget_rate_limit_per_minute: int = Field(default=60, ge=1, alias="WIDGET_RATE_LIMIT_PER_MINUTE")
+
     @field_validator("heartbeat_provider", mode="before")
     @classmethod
     def normalize_provider(cls, value: str | HeartbeatProviderKind) -> HeartbeatProviderKind:

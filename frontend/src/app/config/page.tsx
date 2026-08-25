@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { SitesManager } from "@/components/SitesManager";
+import { AppleDevicesAdminPanel } from "@/components/AppleDevicesAdminPanel";
 import {
   ChargeAmpsConfig,
   ChargingReadiness,
@@ -371,6 +372,8 @@ export default function ConfigPage() {
           {saving ? "Sparar…" : "Spara konfiguration"}
         </button>
       </form>
+
+      <AppleDevicesAdminPanel />
 
       <SitesManager />
 

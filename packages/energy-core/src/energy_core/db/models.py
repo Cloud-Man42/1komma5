@@ -790,3 +790,146 @@ class VehicleChargingIntervalModel(Base):
     data_quality: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     session: Mapped[VehicleChargeSessionModel] = relationship(back_populates="intervals")
+
+
+class HeartbeatDiscoveryRunModel(Base):
+    __tablename__ = "heartbeat_discovery_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="COMPLETED")
+    system_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    conclusion_class: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    bridge_lifecycle: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolved_ev_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    confidence_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    report_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    report_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    error_message: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class HeartbeatApiObservationModel(Base):
+    __tablename__ = "heartbeat_api_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("heartbeat_discovery_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    method: Mapped[str] = mapped_column(String(16), nullable=False)
+    path: Mapped[str] = mapped_column(String(512), nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    observation_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    schema_fingerprint: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HeartbeatEvMappingModel(Base):
+    __tablename__ = "heartbeat_ev_mappings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    heartbeat_ev_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    heartbeat_ev_name: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    physical_charger_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ev_chargers.id", ondelete="SET NULL"), nullable=True
+    )
+    vehicle_id: Mapped[int | None] = mapped_column(ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="heartbeat")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confidence_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    last_discovery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class HeartbeatBridgeSettingsModel(Base):
+    __tablename__ = "heartbeat_bridge_settings"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    discovery_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    write_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    virtual_bridge_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    physical_control_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    soc_sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    replay_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    simulation_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    confidence_threshold_pct: Mapped[float] = mapped_column(Float, nullable=False, default=90.0)
+    battery_priority_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="BATTERY_FIRST")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class HeartbeatWriteTestModel(Base):
+    __tablename__ = "heartbeat_write_tests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    heartbeat_ev_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    steps_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    result_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class VirtualChargerDecisionModel(Base):
+    __tablename__ = "virtual_charger_decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    charger_id: Mapped[int | None] = mapped_column(ForeignKey("ev_chargers.id", ondelete="SET NULL"), nullable=True)
+    heartbeat_ev_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    bridge_state: Mapped[str] = mapped_column(String(64), nullable=False)
+    heartbeat_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ai_decision: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    decision_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    reason: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class VirtualChargerCommandModel(Base):
+    __tablename__ = "virtual_charger_commands"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    charger_id: Mapped[int | None] = mapped_column(ForeignKey("ev_chargers.id", ondelete="SET NULL"), nullable=True)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    current_a: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reason: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class VirtualChargerReplayRunModel(Base):
+    __tablename__ = "virtual_charger_replay_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
+    report_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    report_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AppleDeviceModel(Base):
+    __tablename__ = "apple_devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    device_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    device_type: Mapped[str] = mapped_column(String(64), nullable=False, default="iphone")
+    token_prefix: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    scopes: Mapped[str] = mapped_column(String(256), nullable=False, default="widget.read")
+    default_site_slug: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

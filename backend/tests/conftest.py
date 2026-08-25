@@ -51,10 +51,17 @@ def mock_open_meteo_forecast():
 def clear_dashboard_cache():
     """Every test gets a fresh database, so a cached section from an earlier test is stale."""
     from app.api.dashboard import _CACHE
+    from app.widget_service import clear_snapshot_cache
 
+    from app.widget_auth import WIDGET_RATE_LIMITER
+
+    WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
+    clear_snapshot_cache()
     yield
+    WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
+    clear_snapshot_cache()
 
 
 @pytest.fixture
