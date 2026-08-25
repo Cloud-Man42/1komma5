@@ -226,3 +226,148 @@ async def test_financial_stats_uses_fallback_and_ignores_long_data_gaps(sqlite_s
     assert stats[0].solar_self_consumed_kwh == pytest.approx(0.083, abs=0.001)
     assert stats[0].solar_savings_sek == 0.25
     assert stats[0].market_priced_fraction == 0.0
+
+
+@pytest.mark.asyncio
+async def test_financial_stats_does_not_double_count_solar_charged_into_battery(sqlite_session):
+    """Solar routed into the battery must not also count as direct solar self-consumption.
+
+    Previously min(solar_w, consumption_w) credited 2000 W of solar even when 500 W was
+    charging the battery, and the same energy was credited again later as battery savings.
+    """
+    session, settings = sqlite_session
+    site = await SiteRepository(session).upsert_site("akarp", "Åkarp", "UTC")
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    readings = [
+        (
+            datetime(2026, 8, 18, 10, 0, tzinfo=UTC),
+            2000,
+            3000,
+            1500,
+            0,
+            500,
+        ),
+        (
+            datetime(2026, 8, 18, 10, 5, tzinfo=UTC),
+            0,
+            500,
+            0,
+            0,
+            -500,
+        ),
+        (
+            datetime(2026, 8, 18, 10, 10, tzinfo=UTC),
+            0,
+            500,
+            0,
+            0,
+            0,
+        ),
+    ]
+    for recorded_at, solar, consumption, grid_import, grid_export, battery_power in readings:
+        await reading_repo.upsert_reading(
+            site.id,
+            NormalizedEnergyReading(
+                site_slug="akarp",
+                recorded_at=recorded_at,
+                solar_production_w=solar,
+                consumption_w=consumption,
+                grid_import_w=grid_import,
+                grid_export_w=grid_export,
+                battery_soc_pct=50,
+                battery_power_w=battery_power,
+            ),
+        )
+    await session.commit()
+
+    stats = await reading_repo.list_financial_stats(
+        site.id,
+        "day",
+        "UTC",
+        fallback_purchase_price_sek_kwh=2.0,
+        export_compensation_sek_kwh=0.8,
+    )
+
+    assert len(stats) == 1
+    # Old buggy attribution would have been solar=0.167, battery=0.042, import=0.125 (sum 0.334 kWh).
+    assert stats[0].solar_self_consumed_kwh == pytest.approx(0.125, abs=0.001)
+    assert stats[0].battery_self_consumed_kwh == pytest.approx(0.042, abs=0.001)
+    assert stats[0].imported_kwh == pytest.approx(0.125, abs=0.001)
+    attributed_kwh = (
+        stats[0].solar_self_consumed_kwh
+        + stats[0].battery_self_consumed_kwh
+        + stats[0].imported_kwh
+    )
+    measured_consumption_kwh = (3000 + 500) * (5 / 60) / 1000
+    assert attributed_kwh == pytest.approx(measured_consumption_kwh, abs=0.001)
+
+
+@pytest.mark.asyncio
+async def test_financial_stats_grid_charged_battery_keeps_balanced_result(sqlite_session):
+    """Grid-charged battery discharge is a cost at import and savings at discharge."""
+    session, settings = sqlite_session
+    site = await SiteRepository(session).upsert_site("akarp", "Åkarp", "UTC")
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    readings = [
+        (
+            datetime(2026, 8, 18, 22, 0, tzinfo=UTC),
+            0,
+            0,
+            1000,
+            0,
+            1000,
+        ),
+        (
+            datetime(2026, 8, 18, 22, 5, tzinfo=UTC),
+            0,
+            1000,
+            0,
+            0,
+            -1000,
+        ),
+        (
+            datetime(2026, 8, 18, 22, 10, tzinfo=UTC),
+            0,
+            0,
+            0,
+            0,
+            0,
+        ),
+    ]
+    for recorded_at, solar, consumption, grid_import, grid_export, battery_power in readings:
+        await reading_repo.upsert_reading(
+            site.id,
+            NormalizedEnergyReading(
+                site_slug="akarp",
+                recorded_at=recorded_at,
+                solar_production_w=solar,
+                consumption_w=consumption,
+                grid_import_w=grid_import,
+                grid_export_w=grid_export,
+                battery_soc_pct=50,
+                battery_power_w=battery_power,
+            ),
+        )
+    await session.commit()
+
+    stats = await reading_repo.list_financial_stats(
+        site.id,
+        "day",
+        "UTC",
+        fallback_purchase_price_sek_kwh=2.0,
+        export_compensation_sek_kwh=0.8,
+    )
+
+    assert len(stats) == 1
+    assert stats[0].solar_self_consumed_kwh == pytest.approx(0.0, abs=0.001)
+    assert stats[0].battery_self_consumed_kwh == pytest.approx(0.083, abs=0.001)
+    assert stats[0].imported_kwh == pytest.approx(0.083, abs=0.001)
+    assert stats[0].battery_savings_sek == pytest.approx(0.17, abs=0.01)
+    assert stats[0].grid_import_cost_sek == pytest.approx(0.17, abs=0.01)
+    net = (
+        stats[0].solar_savings_sek
+        + stats[0].battery_savings_sek
+        + stats[0].export_revenue_sek
+        - stats[0].grid_import_cost_sek
+    )
+    assert net == pytest.approx(0.0, abs=0.01)

@@ -660,10 +660,10 @@ class EnergyReadingRepository:
             solar_w = max(0.0, float(previous.solar_production_w or 0.0))
             consumption_w = max(0.0, float(previous.consumption_w or 0.0))
             discharge_w = max(0.0, -float(previous.battery_power_w or 0.0))
-            solar_self_w = min(solar_w, consumption_w)
-            battery_self_w = min(discharge_w, max(0.0, consumption_w - solar_self_w))
-            exported_w = max(0.0, float(previous.grid_export_w or 0.0))
             imported_w = max(0.0, float(previous.grid_import_w or 0.0))
+            exported_w = max(0.0, float(previous.grid_export_w or 0.0))
+            solar_self_w = min(solar_w, max(0.0, consumption_w - discharge_w - imported_w))
+            battery_self_w = min(discharge_w, max(0.0, consumption_w - solar_self_w))
             solar_kwh = solar_self_w * hours / 1000.0
             battery_kwh = battery_self_w * hours / 1000.0
             export_kwh = exported_w * hours / 1000.0

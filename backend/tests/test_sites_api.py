@@ -169,7 +169,7 @@ async def test_site_financial_stats_returns_savings_and_export_revenue(client):
     body = response.json()
     assert body["fallback_purchase_price_sek_kwh"] == 2.0
     assert body["export_compensation_sek_kwh"] == 0.8
-    assert body["stats"][0]["solar_savings_sek"] == 0.17
+    assert body["stats"][0]["solar_savings_sek"] == 0.12
     assert body["stats"][0]["export_revenue_sek"] == 0.03
     assert body["stats"][0]["imported_kwh"] == 0.021
     assert body["stats"][0]["grid_import_cost_sek"] == 0.04

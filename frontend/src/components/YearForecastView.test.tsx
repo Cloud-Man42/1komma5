@@ -68,10 +68,12 @@ describe("YearForecastView", () => {
     expect(screen.getByText("12%")).toBeTruthy();
     expect(screen.getByText("Sol: 100 kWh")).toBeTruthy();
     expect(screen.getByText("Batteri: 20 kWh")).toBeTruthy();
+    expect(screen.getByText("Solen har sparat")).toBeTruthy();
+    expect(screen.getByText("Prognostiserat ekonomiskt resultat")).toBeTruthy();
     expect(screen.getByText("Sparat: 240 kr")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("12");
     expect(screen.getAllByText("184 kr").length).toBeGreaterThan(0);
-    expect(screen.getByText("januari 2026")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Resultat" })).toBeTruthy();
     expect(screen.getByText("december 2026")).toBeTruthy();
   });
 

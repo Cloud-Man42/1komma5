@@ -47,8 +47,8 @@ function ForecastCard({
   return (
     <div className={negative ? "forecast-card forecast-card-cost" : "forecast-card"}>
       <dt>{label}</dt>
-      <dd>{negative ? "−" : ""}{currency(total)}</dd>
-      <span>varav prognos {negative ? "−" : ""}{currency(projected)}</span>
+      <dd>{currency(total)}</dd>
+      <span>varav prognos {currency(projected)}</span>
     </div>
   );
 }
@@ -185,28 +185,28 @@ export function YearForecastView({ siteSlug }: YearForecastViewProps) {
 
           <dl className="forecast-summary">
             <ForecastCard
-              label="Sparat med sol"
+              label="Solen har sparat"
               total={total.solar_savings_sek}
               projected={forecast.solar_savings_sek}
             />
             <ForecastCard
-              label="Sparat med batteri"
+              label="Batteriet har sparat"
               total={total.battery_savings_sek}
               projected={forecast.battery_savings_sek}
             />
             <ForecastCard
-              label="Såld el"
+              label="Du har tjänat på såld el"
               total={total.export_revenue_sek}
               projected={forecast.export_revenue_sek}
             />
             <ForecastCard
-              label="Köpt el"
+              label="Kostnad köpt el"
               total={total.grid_import_cost_sek}
               projected={forecast.grid_import_cost_sek}
               negative
             />
             <div className="forecast-card forecast-card-net">
-              <dt>Prognostiserat netto</dt>
+              <dt>Prognostiserat ekonomiskt resultat</dt>
               <dd>{currency(total.net_sek)}</dd>
               <span>intervall cirka {currency(netRange[0])}–{currency(netRange[1])}</span>
             </div>
@@ -230,7 +230,7 @@ export function YearForecastView({ siteSlug }: YearForecastViewProps) {
                   <th scope="col">Batteri</th>
                   <th scope="col">Såld el</th>
                   <th scope="col">Köpt el</th>
-                  <th scope="col">Netto</th>
+                  <th scope="col">Resultat</th>
                 </tr>
               </thead>
               <tbody>
