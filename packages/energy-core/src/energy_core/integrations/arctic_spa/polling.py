@@ -152,6 +152,7 @@ class ArcticSpaPollingService:
                 last_sample_at=now,
                 backoff_until=None,
                 polling_active=True,
+                last_error_message="",
             )
             return 1
         except ArcticSpaApiError as exc:

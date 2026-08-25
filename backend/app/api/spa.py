@@ -383,7 +383,11 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
     if config.integration_enabled and not settings.arctic_spa_enabled:
         api_status = "DISABLED"
     spa_status = "ONLINE" if latest and latest.spa_connected else "OFFLINE"
-    last_error = poll.last_error_message if poll and poll.last_error_message and poll.last_error_message.strip() else None
+    last_error = poll.last_error_message if poll else None
+    if last_error is not None:
+        last_error = last_error.strip()
+        if not last_error or last_error == "Request failed after retries:":
+            last_error = None
     return SpaHealthResponse(
         consumer_id=consumer.id,
         api_status=api_status,
