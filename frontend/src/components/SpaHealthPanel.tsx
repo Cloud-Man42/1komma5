@@ -15,12 +15,17 @@ export function SpaHealthPanel({ health }: { health: SpaHealth }) {
         <li>Polling: {health.polling_status}</li>
         <li>Databas: {health.database_status}</li>
         <li>Samples senaste 24h: {health.samples_last_24h}</li>
+        <li>Samples med effekt: {health.samples_with_power_24h}</li>
+        <li>Sample-energi 24h: {health.sample_energy_kwh_24h.toFixed(2)} kWh</li>
+        <li>Intervall senaste 24h: {health.intervals_last_24h}</li>
         <li>Datakvalitet: {health.data_quality}</li>
       </ul>
       {lowQuality && (
         <p className="form-error">Varning: datakvaliteten är låg (estimerad/saknad data).</p>
       )}
-      {health.last_error && <p className="muted">Senaste fel: {health.last_error}</p>}
+      {health.last_error && health.last_error.trim().length > 0 && (
+        <p className="muted">Senaste fel: {health.last_error}</p>
+      )}
     </section>
   );
 }

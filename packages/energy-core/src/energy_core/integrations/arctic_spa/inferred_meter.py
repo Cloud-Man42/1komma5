@@ -48,16 +48,15 @@ class InferredArcticSpaMeter:
 
         breakdown = self._component_breakdown(status)
         power_w = min(sum(breakdown.values()), self.profiles.max_plausible_power_w)
-        quality = DataQuality.CALCULATED
         if elapsed_seconds <= 0:
             energy_delta_wh = 0.0
-        elif elapsed_seconds > poll_interval_seconds * 2:
-            quality = DataQuality.ESTIMATED
-            energy_delta_wh = 0.0
+            quality = DataQuality.CALCULATED
         else:
+            effective_elapsed = min(elapsed_seconds, poll_interval_seconds * 2)
+            quality = DataQuality.ESTIMATED if elapsed_seconds > poll_interval_seconds * 2 else DataQuality.CALCULATED
             prev_power = self._power_from_status(prev_status) if prev_status else power_w
             avg_power = (prev_power + power_w) / 2.0
-            energy_delta_wh = max(0.0, avg_power * (elapsed_seconds / 3600.0) * 1000.0)
+            energy_delta_wh = max(0.0, avg_power * (effective_elapsed / 3600.0) * 1000.0)
 
         return SpaEnergySample(
             power_w=power_w,

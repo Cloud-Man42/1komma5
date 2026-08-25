@@ -252,6 +252,38 @@ class ConsumerSampleRepository:
         )
         return int(result.scalar_one())
 
+    async def list_for_period(
+        self,
+        consumer_id: int,
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> list[ConsumerSampleModel]:
+        result = await self._session.execute(
+            select(ConsumerSampleModel)
+            .where(
+                ConsumerSampleModel.consumer_id == consumer_id,
+                ConsumerSampleModel.recorded_at >= start,
+                ConsumerSampleModel.recorded_at < end,
+            )
+            .order_by(ConsumerSampleModel.recorded_at)
+        )
+        return list(result.scalars().all())
+
+    async def sum_for_period(self, consumer_id: int, *, start: datetime, end: datetime) -> dict:
+        rows = await self.list_for_period(consumer_id, start=start, end=end)
+        if not rows:
+            return {}
+        energy_kwh = sum((row.energy_delta_wh or 0.0) for row in rows) / 1000.0
+        powered = [row for row in rows if (row.power_w or 0.0) > 0]
+        return {
+            "energy_kwh": energy_kwh,
+            "max_power_w": max((row.power_w or 0.0 for row in rows), default=0.0),
+            "avg_power_w": (sum(row.power_w or 0.0 for row in powered) / len(powered)) if powered else None,
+            "samples_with_energy": sum(1 for row in rows if (row.energy_delta_wh or 0.0) > 0),
+            "samples_with_power": len(powered),
+        }
+
 
 class ConsumerIntervalRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -299,6 +331,51 @@ class ConsumerIntervalRepository:
             "pump_runtime_seconds": sum(r.pump_runtime_seconds for r in rows),
             "max_power_w": max((r.average_power_w or 0.0 for r in rows), default=0.0),
         }
+
+    async def has_interval_for_window(
+        self,
+        consumer_id: int,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> bool:
+        tolerance_seconds = 5.0
+        result = await self._session.execute(
+            select(ConsumerIntervalModel.id)
+            .where(
+                ConsumerIntervalModel.consumer_id == consumer_id,
+                ConsumerIntervalModel.start_time >= start_time,
+                ConsumerIntervalModel.end_time <= end_time,
+            )
+            .limit(1)
+        )
+        if result.scalar_one_or_none() is not None:
+            return True
+        delta = abs((end_time - start_time).total_seconds())
+        if delta <= tolerance_seconds:
+            return False
+        result = await self._session.execute(
+            select(ConsumerIntervalModel.id)
+            .where(
+                ConsumerIntervalModel.consumer_id == consumer_id,
+                ConsumerIntervalModel.end_time > start_time,
+                ConsumerIntervalModel.start_time < end_time,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def count_for_period(self, consumer_id: int, *, start: datetime, end: datetime) -> int:
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ConsumerIntervalModel)
+            .where(
+                ConsumerIntervalModel.consumer_id == consumer_id,
+                ConsumerIntervalModel.start_time >= start,
+                ConsumerIntervalModel.start_time < end,
+            )
+        )
+        return int(result.scalar_one())
 
 
 class ConsumerAggregateRepository:

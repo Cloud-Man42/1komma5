@@ -27,6 +27,7 @@ from energy_core.consumer_accounting.aggregator import (
     spa_cost_split,
     sum_interval_fields,
 )
+from energy_core.consumer_accounting.coordinator import ConsumerAccountingCoordinator
 from energy_core.db.consumer_repo import (
     ConsumerAggregateRepository,
     ConsumerIntervalRepository,
@@ -138,6 +139,55 @@ def _breakdown_granularity(period: str) -> str:
     return "day"
 
 
+async def _ensure_spa_intervals(session: AsyncSession, site, consumer_id: int) -> None:
+    interval_repo = ConsumerIntervalRepository(session)
+    since = datetime.now(UTC) - timedelta(days=30)
+    if await interval_repo.count_for_period(consumer_id, start=since, end=datetime.now(UTC)) > 0:
+        return
+    sample_repo = ConsumerSampleRepository(session)
+    sample_totals = await sample_repo.sum_for_period(consumer_id, start=since, end=datetime.now(UTC))
+    if (sample_totals.get("samples_with_power", 0) or 0) <= 0:
+        return
+    created = await ConsumerAccountingCoordinator().rebuild_spa_intervals_for_site(session, site=site)
+    if created:
+        await session.commit()
+
+
+async def _period_energy_totals(
+    session: AsyncSession,
+    consumer_id: int,
+    *,
+    start: datetime,
+    end: datetime,
+    fallback_price_sek_kwh: float,
+    site,
+) -> dict:
+    interval_repo = ConsumerIntervalRepository(session)
+    totals = await interval_repo.sum_for_period(consumer_id, start=start, end=end)
+    if totals:
+        return totals
+
+    sample_repo = ConsumerSampleRepository(session)
+    sample_totals = await sample_repo.sum_for_period(consumer_id, start=start, end=end)
+    energy = sample_totals.get("energy_kwh", 0.0) or 0.0
+    if energy <= 0:
+        return {}
+    return {
+        "energy_kwh": energy,
+        "solar_direct_kwh": 0.0,
+        "solar_battery_kwh": 0.0,
+        "grid_battery_kwh": 0.0,
+        "grid_direct_kwh": energy,
+        "unknown_kwh": 0.0,
+        "actual_cost_sek": energy * fallback_price_sek_kwh,
+        "reference_cost_sek": energy * fallback_price_sek_kwh,
+        "savings_sek": 0.0,
+        "heater_runtime_seconds": 0.0,
+        "pump_runtime_seconds": 0.0,
+        "max_power_w": sample_totals.get("max_power_w"),
+    }
+
+
 @router.get("/sites/{slug}/spa/status", response_model=SpaStatusResponse)
 async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaStatusResponse:
     site, consumer, config = await _get_spa_context(session, slug)
@@ -176,6 +226,7 @@ async def get_spa_energy_breakdown(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyBreakdownResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
+    await _ensure_spa_intervals(session, site, consumer.id)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -215,9 +266,16 @@ async def get_spa_energy_period(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyPeriodResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
+    await _ensure_spa_intervals(session, site, consumer.id)
     start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
-    interval_repo = ConsumerIntervalRepository(session)
-    totals = await interval_repo.sum_for_period(consumer.id, start=start, end=end)
+    totals = await _period_energy_totals(
+        session,
+        consumer.id,
+        start=start,
+        end=end,
+        fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+        site=site,
+    )
     if not totals:
         return _build_period_response(period, {}, fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh)
     return _build_period_response(
@@ -239,6 +297,7 @@ async def get_spa_history(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaHistoryResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
+    await _ensure_spa_intervals(session, site, consumer.id)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -303,6 +362,8 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
     poll = await repo.get_poll_state(consumer.id)
     since = datetime.now(UTC) - timedelta(hours=24)
     samples_24h = await sample_repo.count_since(consumer.id, since)
+    sample_totals_24h = await sample_repo.sum_for_period(consumer.id, start=since, end=datetime.now(UTC))
+    intervals_24h = await ConsumerIntervalRepository(session).count_for_period(consumer.id, start=since, end=datetime.now(UTC))
     latest = await sample_repo.get_latest(consumer.id)
     settings = get_settings()
     agg_repo = ConsumerAggregateRepository(session)
@@ -314,6 +375,7 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
     if config.integration_enabled and not settings.arctic_spa_enabled:
         api_status = "DISABLED"
     spa_status = "ONLINE" if latest and latest.spa_connected else "OFFLINE"
+    last_error = poll.last_error_message if poll and poll.last_error_message and poll.last_error_message.strip() else None
     return SpaHealthResponse(
         consumer_id=consumer.id,
         api_status=api_status,
@@ -323,12 +385,15 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
         last_success_at=poll.last_success_at if poll else None,
         last_sample_at=poll.last_sample_at if poll else None,
         samples_last_24h=samples_24h,
+        samples_with_power_24h=sample_totals_24h.get("samples_with_power", 0),
+        sample_energy_kwh_24h=round(sample_totals_24h.get("energy_kwh", 0.0) or 0.0, 3),
+        intervals_last_24h=intervals_24h,
         data_quality=latest.quality if latest else "MISSING",
         measured_pct=agg.measured_pct if agg else None,
         calculated_pct=agg.calculated_pct if agg else None,
         estimated_pct=agg.estimated_pct if agg else None,
         missing_pct=agg.missing_pct if agg else None,
-        last_error=poll.last_error_message if poll else None,
+        last_error=last_error,
     )
 
 

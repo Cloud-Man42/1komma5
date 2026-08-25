@@ -89,7 +89,8 @@ class ArcticSpaPollingService:
         )
         service = ArcticSpaService(cfg)
         prev_status = ConsumerSampler.parse_last_status(config.last_status_json)
-        start_time = config.last_status_at or now
+        latest_sample = await sample_repo.get_latest(consumer.id)
+        start_time = latest_sample.recorded_at if latest_sample else (config.last_status_at or now)
         try:
             status = await service.fetch_status()
             await repo.save_status_snapshot(

@@ -12,7 +12,7 @@ def fahrenheit_to_celsius(value: float | int | None) -> float | None:
     return round((float(value) - 32.0) * 5.0 / 9.0, 2)
 
 
-HEATER_FILTER_STATUSES = frozenset({"Filtering", "Boost", "Resuming", "Overtemperature"})
+HEATER_FILTER_STATUSES = frozenset({"Filtering", "Boost", "Resuming", "Overtemperature", "Sanitize", "Purge"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +65,7 @@ class ArcticSpaStatus:
         if self.filter_status in HEATER_FILTER_STATUSES:
             return True
         if self.temperature_c is not None and self.setpoint_c is not None:
-            return self.temperature_c < self.setpoint_c - 0.5
+            return self.temperature_c < self.setpoint_c - 0.2
         return False
 
     @property

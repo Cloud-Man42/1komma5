@@ -45,7 +45,7 @@ def test_offline_sample_is_missing():
     assert sample.energy_delta_wh == 0
 
 
-def test_large_gap_marks_estimated_without_energy():
+def test_large_gap_marks_estimated_with_capped_energy():
     meter = InferredArcticSpaMeter(profiles=SpaPowerProfiles())
     sample = meter.estimate_sample(
         _status(pump1="high"),
@@ -54,4 +54,4 @@ def test_large_gap_marks_estimated_without_energy():
         poll_interval_seconds=60,
     )
     assert sample.quality == DataQuality.ESTIMATED
-    assert sample.energy_delta_wh == 0
+    assert sample.energy_delta_wh > 0

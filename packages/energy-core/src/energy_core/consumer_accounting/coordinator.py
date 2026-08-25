@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.consumer_accounting.aggregator import merge_interval_into_bucket, period_bounds, quality_percentages
+from energy_core.consumer_accounting.sample_backfill import SpaSampleBackfillService
 from energy_core.db.consumer_repo import ConsumerAggregateRepository, ConsumerIntervalRepository, ConsumerRepository
 from energy_core.db.models import SiteModel
 
@@ -15,6 +16,35 @@ logger = logging.getLogger(__name__)
 
 
 class ConsumerAccountingCoordinator:
+    def __init__(self) -> None:
+        self._backfill = SpaSampleBackfillService()
+
+    async def rebuild_spa_intervals_for_site(
+        self,
+        db: AsyncSession,
+        *,
+        site: SiteModel,
+        live_overview: dict | None = None,
+        since_days: int = 30,
+    ) -> int:
+        repo = ConsumerRepository(db)
+        spa_row = await repo.get_spa_for_site(site.id)
+        if spa_row is None:
+            return 0
+        consumer, config = spa_row
+        if not config.energy_collection_enabled:
+            return 0
+        since = datetime.now(UTC) - timedelta(days=since_days)
+        return await self._backfill.rebuild_missing_intervals(
+            db,
+            consumer_id=consumer.id,
+            site=site,
+            cost_enabled=config.cost_calculation_enabled,
+            is_sqlite=db.bind.dialect.name == "sqlite" if db.bind else True,
+            since=since,
+            live_overview=live_overview,
+        )
+
     async def update_aggregates_for_site(self, db: AsyncSession, *, site: SiteModel) -> int:
         repo = ConsumerRepository(db)
         spa_row = await repo.get_spa_for_site(site.id)

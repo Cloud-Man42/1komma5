@@ -1439,6 +1439,9 @@ export interface SpaHealth {
   last_success_at: string | null;
   last_sample_at: string | null;
   samples_last_24h: number;
+  samples_with_power_24h: number;
+  sample_energy_kwh_24h: number;
+  intervals_last_24h: number;
   data_quality: string;
   measured_pct: number | null;
   calculated_pct: number | null;

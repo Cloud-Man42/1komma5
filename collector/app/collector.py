@@ -147,6 +147,11 @@ class Collector:
                         logger.exception("Failed to fetch live overview for spa site %s", site.slug)
             polled = await self._spa_polling.poll_due_consumers(session, live_overviews=live_overviews)
             for site in await site_repo.list_all():
+                await self._consumer_accounting.rebuild_spa_intervals_for_site(
+                    session,
+                    site=site,
+                    live_overview=live_overviews.get(site.slug),
+                )
                 await self._consumer_accounting.update_aggregates_for_site(session, site=site)
             if polled:
                 logger.debug("Arctic Spa polled %d consumers", polled)

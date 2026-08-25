@@ -937,6 +937,9 @@ class SpaHealthResponse(BaseModel):
     last_success_at: datetime | None = None
     last_sample_at: datetime | None = None
     samples_last_24h: int = 0
+    samples_with_power_24h: int = 0
+    sample_energy_kwh_24h: float = 0.0
+    intervals_last_24h: int = 0
     data_quality: str = "MISSING"
     measured_pct: float | None = None
     calculated_pct: float | None = None

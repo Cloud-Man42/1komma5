@@ -57,6 +57,9 @@ describe("ArcticSpaPanel", () => {
       polling_status: "IDLE",
       database_status: "OK",
       samples_last_24h: 0,
+      samples_with_power_24h: 0,
+      sample_energy_kwh_24h: 0,
+      intervals_last_24h: 0,
       data_quality: "MISSING",
     });
     mockFetchSpaHistory.mockResolvedValue({ period: "today", points: [] });
