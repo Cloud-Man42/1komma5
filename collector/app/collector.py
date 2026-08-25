@@ -21,7 +21,10 @@ from energy_core.ev_accounting import EVAccountingCoordinator
 from energy_core.consumer_accounting import ConsumerAccountingCoordinator
 from energy_core.integrations.arctic_spa.polling import ArcticSpaPollingService
 from energy_core.energy_balance.coordinator import EnergyBalanceCoordinator
-from energy_core.heartbeat.market_prices import parse_market_prices
+from energy_core.heartbeat.bridge.decision_engine import VirtualChargerDecisionEngine
+from energy_core.heartbeat.bridge.constraints import BridgeConstraints
+from energy_core.db.ev_charger_repo import EvChargerRepository
+from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.heartbeat_client_factory import create_heartbeat_client
 from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
@@ -91,6 +94,13 @@ class Collector:
                 bridge_count = await self._charging_engine.run_cycle(session)
         except Exception:
             logger.exception("Smart charging cycle failed")
+
+        try:
+            async with self._session_factory() as session:
+                await self._run_virtual_bridge_cycle(session)
+                await self._run_ems_shadow_simulation(session)
+        except Exception:
+            logger.exception("Virtual Heartbeat bridge cycle failed")
 
         logger.info("Stored %d readings, smart charging processed %d chargers", reading_count, bridge_count)
 
@@ -200,6 +210,143 @@ class Collector:
                     logger.exception("Energy balance failed charger_id=%s", charger.id)
         if total:
             logger.debug("Energy balance processed %d chargers", total)
+
+    async def _run_virtual_bridge_cycle(self, session) -> None:
+        site_repo = SiteRepository(session)
+        charger_repo = EvChargerRepository(session)
+        bridge_repo = HeartbeatDiscoveryRepository(session)
+        client = await create_heartbeat_client(session)
+        if client is None:
+            return
+
+        engine = VirtualChargerDecisionEngine(session)
+        processed = 0
+        for site in await site_repo.list_all():
+            if not site.external_system_id:
+                continue
+            settings = await bridge_repo.get_or_create_bridge_settings(site.id)
+            if not settings.virtual_bridge_enabled:
+                continue
+            mappings = await bridge_repo.list_mappings(site.id)
+            enabled = [m for m in mappings if m.enabled]
+            if not enabled:
+                continue
+            try:
+                evs = await client.list_evs(site.external_system_id)
+                ems = await client.fetch_ems_settings(site.external_system_id)
+                now = datetime.now(UTC)
+                opts = await client.fetch_optimizations(
+                    site.external_system_id,
+                    from_iso=(now - timedelta(minutes=30)).isoformat(),
+                    to_iso=now.isoformat(),
+                )
+            except Exception as exc:
+                logger.exception("Virtual bridge Heartbeat fetch failed site=%s", site.slug)
+                for mapping in enabled:
+                    await engine.record_failsafe(
+                        site.id,
+                        charger_id=mapping.physical_charger_id,
+                        heartbeat_ev_id=mapping.heartbeat_ev_id,
+                        reason=str(exc),
+                    )
+                await session.commit()
+                continue
+
+            for mapping in enabled:
+                ev_profile = next((ev for ev in evs if str(ev.get("id")) == mapping.heartbeat_ev_id), None)
+                charger = None
+                if mapping.physical_charger_id:
+                    charger = await charger_repo.get_by_id(mapping.physical_charger_id)
+                max_power = (charger.max_power_w if charger and charger.max_power_w else 11000.0)
+                await engine.evaluate(
+                    site.id,
+                    charger_id=mapping.physical_charger_id,
+                    heartbeat_ev_id=mapping.heartbeat_ev_id,
+                    ev_profile=ev_profile,
+                    ems_settings=ems,
+                    optimizations=opts,
+                    constraints=BridgeConstraints(
+                        heartbeat_requested_power_w=max_power,
+                        solar_available_power_w=max_power,
+                        smart_charging_allowed_power_w=max_power,
+                        load_balancer_allowed_power_w=max_power,
+                        halo_hardware_limit_w=max_power,
+                        vehicle_limit_w=max_power,
+                        site_limit_w=max_power,
+                    ),
+                    confidence=mapping.confidence_pct,
+                )
+                processed += 1
+        if processed:
+            await session.commit()
+            logger.debug("Virtual Heartbeat bridge processed %d mappings", processed)
+
+    async def _run_ems_shadow_simulation(self, session) -> None:
+        """EMS-only simulation when bridge is in discovery mode without EV mapping."""
+        site_repo = SiteRepository(session)
+        charger_repo = EvChargerRepository(session)
+        bridge_repo = HeartbeatDiscoveryRepository(session)
+        client = await create_heartbeat_client(session)
+        if client is None:
+            return
+
+        engine = VirtualChargerDecisionEngine(session)
+        processed = 0
+        for site in await site_repo.list_all():
+            if not site.external_system_id:
+                continue
+            settings = await bridge_repo.get_or_create_bridge_settings(site.id)
+            if not settings.simulation_mode:
+                continue
+            enabled_mappings = [m for m in await bridge_repo.list_mappings(site.id) if m.enabled]
+            if enabled_mappings:
+                continue
+            chargers = await charger_repo.list_for_site(site.id)
+            if not chargers:
+                continue
+            try:
+                ems = await client.fetch_ems_settings(site.external_system_id)
+                now = datetime.now(UTC)
+                opts = await client.fetch_optimizations(
+                    site.external_system_id,
+                    from_iso=(now - timedelta(minutes=30)).isoformat(),
+                    to_iso=now.isoformat(),
+                )
+            except Exception as exc:
+                logger.exception("EMS shadow simulation Heartbeat fetch failed site=%s", site.slug)
+                await engine.record_failsafe(
+                    site.id,
+                    charger_id=chargers[0].id,
+                    heartbeat_ev_id=None,
+                    reason=str(exc),
+                )
+                await session.commit()
+                continue
+
+            charger = chargers[0]
+            max_power = charger.max_power_w if charger.max_power_w else 11000.0
+            await engine.evaluate(
+                site.id,
+                charger_id=charger.id,
+                heartbeat_ev_id=None,
+                ev_profile=None,
+                ems_settings=ems,
+                optimizations=opts[:1] if opts else [],
+                constraints=BridgeConstraints(
+                    heartbeat_requested_power_w=max_power,
+                    solar_available_power_w=max_power,
+                    smart_charging_allowed_power_w=max_power,
+                    load_balancer_allowed_power_w=max_power,
+                    halo_hardware_limit_w=max_power,
+                    vehicle_limit_w=max_power,
+                    site_limit_w=max_power,
+                ),
+                confidence=0.0,
+            )
+            processed += 1
+        if processed:
+            await session.commit()
+            logger.debug("EMS shadow simulation processed %d sites", processed)
 
     async def _run_solar_forecast(self, session, site_repo: SiteRepository) -> None:
         sites = await site_repo.list_all()

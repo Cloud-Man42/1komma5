@@ -23,3 +23,5 @@ Thumbs.db
 cookies.txt
 scripts/deploy.local.ps1
 emic-secret.key
+windows/**/bin/
+windows/**/obj/

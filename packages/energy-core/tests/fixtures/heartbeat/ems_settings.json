@@ -1,0 +1,10 @@
+{
+  "activeChargingMode": "SMART_CHARGE",
+  "devices": [
+    {
+      "id": "ems-ev-1",
+      "type": "EV_CHARGER",
+      "name": "EV charging"
+    }
+  ]
+}

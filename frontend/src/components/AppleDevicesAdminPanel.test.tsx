@@ -71,6 +71,39 @@ describe("AppleDevicesAdminPanel", () => {
     expect(screen.getByText("emic_secret_token_value")).toBeInTheDocument();
   });
 
+  it("creates windows device with selected platform", async () => {
+    mockCreateAppleDevice.mockResolvedValue({
+      id: 3,
+      owner_label: "Henrik",
+      device_name: "Henriks PC",
+      device_type: "windows",
+      token_prefix: "emic_win",
+      scopes: "widget.read",
+      default_site_slug: "akarp",
+      created_at: "2026-08-25T07:10:00Z",
+      last_seen_at: null,
+      revoked_at: null,
+      status: "active",
+      token: "emic_windows_token",
+    });
+    render(<AppleDevicesAdminPanel />);
+    await waitFor(() => screen.getByText("Henriks iPhone"));
+
+    fireEvent.change(screen.getByLabelText("Ägare"), { target: { value: "Henrik" } });
+    fireEvent.change(screen.getByLabelText("Enhetsnamn"), { target: { value: "Henriks PC" } });
+    fireEvent.change(screen.getByLabelText("Plattform"), { target: { value: "windows" } });
+    fireEvent.click(screen.getByRole("button", { name: "Skapa enhet" }));
+
+    await waitFor(() => {
+      expect(mockCreateAppleDevice).toHaveBeenCalledWith({
+        owner_label: "Henrik",
+        device_name: "Henriks PC",
+        device_type: "windows",
+        default_site_slug: "akarp",
+      });
+    });
+  });
+
   it("shows error when list fails", async () => {
     mockFetchAppleDevices.mockRejectedValue(new Error("Serverfel"));
     render(<AppleDevicesAdminPanel />);

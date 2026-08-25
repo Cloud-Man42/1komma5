@@ -1,0 +1,11 @@
+[
+  {
+    "id": "wallbox-1",
+    "gridxHardwareId": "halo-hardware-123",
+    "assignedEvId": "72903b13-aaaa-bbbb-cccc-ddddeeeeffff",
+    "name": "Charge Amps Halo",
+    "manufacturer": "ChargeAmps",
+    "model": "Halo",
+    "status": "ONLINE"
+  }
+]

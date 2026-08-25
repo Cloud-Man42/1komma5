@@ -1,0 +1,18 @@
+[
+  {
+    "id": "72903b13-aaaa-bbbb-cccc-ddddeeeeffff",
+    "profile": {
+      "name": "Mercedes EQE 500",
+      "manufacturer": "Mercedes-Benz",
+      "model": "EQE 500",
+      "batteryCapacity": 90
+    },
+    "manualSoc": 0.72,
+    "chargeSettings": {
+      "chargingMode": "SMART_CHARGE",
+      "targetSoc": 0.8,
+      "primaryScheduleDepartureTime": "07:00"
+    },
+    "assignedChargerId": null
+  }
+]

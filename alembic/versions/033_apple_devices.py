@@ -7,7 +7,7 @@ import sqlalchemy as sa
 
 
 revision = "033_apple_devices"
-down_revision = "031_drop_heartbeat_ev_sync"
+down_revision = "032_heartbeat_virtual_bridge"
 branch_labels = None
 depends_on = None
 

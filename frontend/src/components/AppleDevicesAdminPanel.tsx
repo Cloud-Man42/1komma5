@@ -14,6 +14,7 @@ export function AppleDevicesAdminPanel() {
   const [devices, setDevices] = useState<AppleDevice[]>([]);
   const [ownerLabel, setOwnerLabel] = useState("");
   const [deviceName, setDeviceName] = useState("");
+  const [deviceType, setDeviceType] = useState<"iphone" | "windows">("iphone");
   const [defaultSiteSlug, setDefaultSiteSlug] = useState("akarp");
   const [createdToken, setCreatedToken] = useState<AppleDeviceCreateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export function AppleDevicesAdminPanel() {
     try {
       setDevices(await fetchAppleDevices());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kunde inte ladda Apple-enheter");
+      setError(err instanceof Error ? err.message : "Kunde inte ladda widget-enheter");
     } finally {
       setLoading(false);
     }
@@ -47,7 +48,7 @@ export function AppleDevicesAdminPanel() {
       const created = await createAppleDevice({
         owner_label: ownerLabel.trim(),
         device_name: deviceName.trim(),
-        device_type: "iphone",
+        device_type: deviceType,
         default_site_slug: defaultSiteSlug || undefined,
       });
       setCreatedToken(created);
@@ -84,9 +85,9 @@ export function AppleDevicesAdminPanel() {
 
   return (
     <div className="card config-card" data-testid="apple-devices-admin-panel">
-      <h3 className="config-section-title">Apple-enheter</h3>
+      <h3 className="config-section-title">Widget-enheter</h3>
       <p className="muted config-env-intro">
-        Registrera iPhone-enheter för EMIC-widgeten. Token visas bara en gång vid skapande.
+        Registrera iPhone- och Windows-enheter för EMIC-widgeten. Token visas bara en gång vid skapande.
       </p>
 
       <form className="form-grid" onSubmit={onCreate}>
@@ -97,6 +98,13 @@ export function AppleDevicesAdminPanel() {
         <label className="form-field">
           <span>Enhetsnamn</span>
           <input value={deviceName} onChange={(e) => setDeviceName(e.target.value)} required />
+        </label>
+        <label className="form-field">
+          <span>Plattform</span>
+          <select value={deviceType} onChange={(e) => setDeviceType(e.target.value as "iphone" | "windows")}>
+            <option value="iphone">iPhone (Apple Widget)</option>
+            <option value="windows">Windows (taskbar)</option>
+          </select>
         </label>
         <label className="form-field">
           <span>Standardplats</span>
@@ -115,7 +123,9 @@ export function AppleDevicesAdminPanel() {
 
       {createdToken && (
         <div className="card" data-testid="apple-device-token-once">
-          <p className="form-success">Visas bara en gång — spara i Keychain via EMIC-appen.</p>
+          <p className="form-success">
+            Visas bara en gång — spara i Keychain (iPhone) eller EMIC Windows-inställningar.
+          </p>
           <code>{createdToken.token}</code>
           <button type="button" className="btn-secondary" onClick={() => void copyToken()}>
             Kopiera token
@@ -131,6 +141,7 @@ export function AppleDevicesAdminPanel() {
             <tr>
               <th>Enhet</th>
               <th>Ägare</th>
+              <th>Plattform</th>
               <th>Skapad</th>
               <th>Senast sedd</th>
               <th>Status</th>
@@ -142,6 +153,7 @@ export function AppleDevicesAdminPanel() {
               <tr key={device.id}>
                 <td>{device.device_name}</td>
                 <td>{device.owner_label}</td>
+                <td>{device.device_type === "windows" ? "Windows" : "iPhone"}</td>
                 <td>{new Date(device.created_at).toLocaleString("sv-SE")}</td>
                 <td>
                   {device.last_seen_at

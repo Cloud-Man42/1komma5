@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.api import apple_devices, chargers_catalog, dashboard, ev_chargers, ev_sessions, prices, readings, semp, sites, solar_forecast, spa, system, vehicles, widget
+from app.api import apple_devices, chargers_catalog, dashboard, ev_chargers, ev_sessions, heartbeat_bridge, prices, readings, semp, sites, solar_forecast, spa, system, vehicles, widget
 from app.deps import set_session_factory
 from app.widget_service import configure_snapshot_cache
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
@@ -63,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(vehicles.router, prefix="/api")
     app.include_router(widget.router, prefix="/api")
     app.include_router(apple_devices.router, prefix="/api")
+    app.include_router(heartbeat_bridge.router, prefix="/api")
     app.include_router(semp.router)
     return app
 

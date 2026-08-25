@@ -16,6 +16,7 @@ import {
 import { SolarSiteConfigPanel } from "@/components/SolarSiteConfigPanel";
 import { SpaAdminPanel } from "@/components/SpaAdminPanel";
 import { MercedesAdminPanel } from "@/components/MercedesAdminPanel";
+import { HeartbeatVirtualBridgePanel } from "@/components/HeartbeatVirtualBridgePanel";
 import { DeadlineInput } from "@/components/DeadlineInput";
 import { ChargerSetupWizard } from "@/components/ChargerSetupWizard";
 import {
@@ -385,6 +386,7 @@ export function SitesManager() {
           <SolarSiteConfigPanel siteSlug={site.slug} />
           <SpaAdminPanel siteSlug={site.slug} />
           <MercedesAdminPanel siteSlug={site.slug} />
+          <HeartbeatVirtualBridgePanel siteSlug={site.slug} />
 
           <h4 className="charger-section-title">EV-laddboxar</h4>
           {(chargersBySite[site.slug] ?? []).length === 0 && wizardSiteSlug !== site.slug ? (

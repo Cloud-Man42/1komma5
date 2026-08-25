@@ -1,0 +1,74 @@
+<Window x:Class="EMIC.Tray.Views.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EMIC — Inställningar"
+        Height="440"
+        Width="460"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <TextBlock Grid.Row="0"
+               Text="Anslut EMIC taskbar-widget"
+               FontSize="20"
+               FontWeight="SemiBold"
+               Margin="0,0,0,12" />
+    <TextBlock Grid.Row="1"
+               Text="Skapa en Windows-enhet under /config → Widget-enheter. Dra chipet längs taskbar som väder-widgeten."
+               TextWrapping="Wrap"
+               Foreground="#FF666666"
+               Margin="0,0,0,16" />
+
+    <StackPanel Grid.Row="2" Margin="0,0,0,8">
+      <TextBlock Text="Visning" Margin="0,0,0,4" />
+      <ComboBox x:Name="DisplayModeBox" MinHeight="32" SelectedIndex="2">
+        <ComboBoxItem Content="Taskbar (som väder)" Tag="Taskbar" />
+        <ComboBoxItem Content="Meddelandefält (^)" Tag="Tray" />
+        <ComboBoxItem Content="Båda (rekommenderas)" Tag="Both" IsSelected="True" />
+      </ComboBox>
+    </StackPanel>
+
+    <StackPanel Grid.Row="3" Margin="0,0,0,8">
+      <TextBlock Text="Server-URL" Margin="0,0,0,4" />
+      <TextBox x:Name="ServerUrlBox" MinHeight="32" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="4" Margin="0,0,0,8">
+      <TextBlock Text="Device-token (emic_…)" Margin="0,0,0,4" />
+      <PasswordBox x:Name="TokenBox" MinHeight="32" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="5" Margin="0,0,0,8">
+      <TextBlock Text="Standardplats (slug)" Margin="0,0,0,4" />
+      <TextBox x:Name="SiteBox" MinHeight="32" />
+    </StackPanel>
+
+    <TextBlock x:Name="ErrorText"
+               Grid.Row="6"
+               Foreground="#FFB00020"
+               TextWrapping="Wrap"
+               Margin="0,0,0,8"
+               Visibility="Collapsed" />
+
+    <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button Content="Avbryt"
+              Click="CancelButton_Click"
+              Margin="0,0,8,0"
+              Padding="14,8" />
+      <Button Content="Spara"
+              Click="SaveButton_Click"
+              Padding="14,8"
+              IsDefault="True" />
+    </StackPanel>
+  </Grid>
+</Window>

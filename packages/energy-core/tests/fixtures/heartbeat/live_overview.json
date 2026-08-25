@@ -1,0 +1,10 @@
+{
+  "evChargersAggregated": {
+    "power": { "value": 7200 }
+  },
+  "liveHeroView": {
+    "evChargersAggregated": {
+      "power": { "value": 7200 }
+    }
+  }
+}
