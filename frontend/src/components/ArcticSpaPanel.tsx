@@ -15,6 +15,7 @@ import { formatSekAmount } from "@/lib/prices";
 import { useDashboardRefreshSeconds } from "@/lib/useDashboardRefresh";
 
 import { SpaEnergyAnalysis } from "@/components/SpaEnergyAnalysis";
+import { SpaEnergyBreakdown } from "@/components/SpaEnergyBreakdown";
 import { SpaEnergyHistory } from "@/components/SpaEnergyHistory";
 import { SpaHealthPanel } from "@/components/SpaHealthPanel";
 
@@ -148,6 +149,7 @@ export function ArcticSpaPanel({ siteSlug }: { siteSlug: string }) {
       </div>
 
       <SpaEnergyHistory siteSlug={siteSlug} period={period} />
+      <SpaEnergyBreakdown siteSlug={siteSlug} period={period} />
       <SpaEnergyAnalysis siteSlug={siteSlug} period={period} />
       {health && <SpaHealthPanel health={health} />}
       {error && <p className="form-error">{error}</p>}

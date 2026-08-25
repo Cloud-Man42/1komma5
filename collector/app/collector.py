@@ -135,7 +135,17 @@ class Collector:
         if not self._settings.arctic_spa_enabled:
             return
         try:
-            polled = await self._spa_polling.poll_due_consumers(session)
+            client = await create_heartbeat_client(session)
+            live_overviews: dict[str, dict] = {}
+            if client is not None:
+                for site in await site_repo.list_all():
+                    if not site.external_system_id:
+                        continue
+                    try:
+                        live_overviews[site.slug] = await client.fetch_live_overview(site.external_system_id)
+                    except Exception:
+                        logger.exception("Failed to fetch live overview for spa site %s", site.slug)
+            polled = await self._spa_polling.poll_due_consumers(session, live_overviews=live_overviews)
             for site in await site_repo.list_all():
                 await self._consumer_accounting.update_aggregates_for_site(session, site=site)
             if polled:

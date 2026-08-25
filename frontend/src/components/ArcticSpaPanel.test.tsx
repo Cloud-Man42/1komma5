@@ -6,6 +6,8 @@ import { ArcticSpaPanel } from "@/components/ArcticSpaPanel";
 const mockFetchSpaStatus = vi.fn();
 const mockFetchSpaEnergyPeriod = vi.fn();
 const mockFetchSpaHealth = vi.fn();
+const mockFetchSpaHistory = vi.fn();
+const mockFetchSpaEnergyBreakdown = vi.fn();
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -14,6 +16,8 @@ vi.mock("@/lib/api", async () => {
     fetchSpaStatus: (...args: unknown[]) => mockFetchSpaStatus(...args),
     fetchSpaEnergyPeriod: (...args: unknown[]) => mockFetchSpaEnergyPeriod(...args),
     fetchSpaHealth: (...args: unknown[]) => mockFetchSpaHealth(...args),
+    fetchSpaHistory: (...args: unknown[]) => mockFetchSpaHistory(...args),
+    fetchSpaEnergyBreakdown: (...args: unknown[]) => mockFetchSpaEnergyBreakdown(...args),
   };
 });
 
@@ -22,6 +26,8 @@ describe("ArcticSpaPanel", () => {
     mockFetchSpaStatus.mockReset();
     mockFetchSpaEnergyPeriod.mockReset();
     mockFetchSpaHealth.mockReset();
+    mockFetchSpaHistory.mockReset();
+    mockFetchSpaEnergyBreakdown.mockReset();
     mockFetchSpaStatus.mockResolvedValue({
       consumer_id: 1,
       site_slug: "akarp",
@@ -52,6 +58,13 @@ describe("ArcticSpaPanel", () => {
       database_status: "OK",
       samples_last_24h: 0,
       data_quality: "MISSING",
+    });
+    mockFetchSpaHistory.mockResolvedValue({ period: "today", points: [] });
+    mockFetchSpaEnergyBreakdown.mockResolvedValue({
+      period: "today",
+      granularity: "day",
+      rows: [],
+      total: { has_data: false, energy_kwh: 0, solar_kwh: 0, battery_kwh: 0, grid_kwh: 0, grid_cost_sek: 0, solar_value_sek: 0, battery_value_sek: 0 },
     });
   });
 

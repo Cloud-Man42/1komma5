@@ -101,3 +101,58 @@ def quality_percentages(counts: dict[str, int]) -> dict[str, float]:
         "estimated_pct": round(100.0 * counts.get("ESTIMATED", 0) / total, 1),
         "missing_pct": round(100.0 * counts.get("MISSING", 0) / total, 1),
     }
+
+
+def sum_interval_fields(intervals: list) -> dict:
+    if not intervals:
+        return {}
+    return {
+        "energy_kwh": sum(r.energy_kwh for r in intervals),
+        "solar_direct_kwh": sum(r.solar_direct_kwh for r in intervals),
+        "solar_battery_kwh": sum(r.solar_battery_kwh for r in intervals),
+        "grid_battery_kwh": sum(r.grid_battery_kwh for r in intervals),
+        "grid_direct_kwh": sum(r.grid_direct_kwh for r in intervals),
+        "unknown_kwh": sum(r.unknown_kwh for r in intervals),
+        "actual_cost_sek": sum(r.actual_cost_sek for r in intervals),
+        "reference_cost_sek": sum(r.reference_cost_sek or 0.0 for r in intervals),
+        "savings_sek": sum(r.savings_sek or 0.0 for r in intervals),
+        "heater_runtime_seconds": sum(r.heater_runtime_seconds for r in intervals),
+        "pump_runtime_seconds": sum(r.pump_runtime_seconds for r in intervals),
+        "max_power_w": max((r.average_power_w or 0.0 for r in intervals), default=0.0),
+    }
+
+
+def group_intervals_by_local_period(
+    intervals: list,
+    *,
+    granularity: str,
+    timezone: str,
+) -> list[tuple[datetime, list]]:
+    """Group intervals by local day or month. Returns (period_start_utc, rows) sorted ascending."""
+    tz = ZoneInfo(timezone)
+    buckets: dict[datetime, list] = {}
+    for interval in intervals:
+        local = interval.start_time.astimezone(tz)
+        if granularity == "month":
+            key_local = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            key_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
+        key_utc = key_local.astimezone(UTC)
+        buckets.setdefault(key_utc, []).append(interval)
+    return sorted(buckets.items(), key=lambda item: item[0])
+
+
+def spa_cost_split(totals: dict, *, fallback_price_sek_kwh: float) -> dict[str, float]:
+    energy = totals.get("energy_kwh", 0.0) or 0.0
+    avg_price = (totals.get("actual_cost_sek", 0.0) / energy) if energy > 0 else fallback_price_sek_kwh
+    solar_direct = totals.get("solar_direct_kwh", 0.0) or 0.0
+    solar_battery = totals.get("solar_battery_kwh", 0.0) or 0.0
+    grid_battery = totals.get("grid_battery_kwh", 0.0) or 0.0
+    return {
+        "solar_kwh": round(solar_direct, 3),
+        "battery_kwh": round(solar_battery + grid_battery, 3),
+        "grid_kwh": round(totals.get("grid_direct_kwh", 0.0) or 0.0, 3),
+        "grid_cost_sek": round(totals.get("actual_cost_sek", 0.0) or 0.0, 2),
+        "solar_value_sek": round((solar_direct + solar_battery) * avg_price, 2),
+        "battery_value_sek": round((solar_battery + grid_battery) * avg_price, 2),
+    }

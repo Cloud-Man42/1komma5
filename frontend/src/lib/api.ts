@@ -1375,6 +1375,12 @@ export interface SpaEnergyPeriod {
   grid_battery_kwh: number;
   grid_direct_kwh: number;
   unknown_kwh: number;
+  solar_kwh: number;
+  battery_kwh: number;
+  grid_kwh: number;
+  grid_cost_sek: number;
+  solar_value_sek: number;
+  battery_value_sek: number;
   max_power_w: number | null;
   avg_power_w: number | null;
   heater_runtime_hours: number;
@@ -1383,11 +1389,38 @@ export interface SpaEnergyPeriod {
   has_data: boolean;
 }
 
+export interface SpaEnergyBreakdownRow {
+  period_start: string;
+  period_label: string;
+  energy_kwh: number;
+  solar_kwh: number;
+  battery_kwh: number;
+  grid_kwh: number;
+  grid_cost_sek: number;
+  solar_value_sek: number;
+  battery_value_sek: number;
+  savings_sek: number | null;
+}
+
+export interface SpaEnergyBreakdown {
+  period: string;
+  granularity: string;
+  rows: SpaEnergyBreakdownRow[];
+  total: SpaEnergyPeriod;
+}
+
 export interface SpaHistoryPoint {
   timestamp: string;
+  period_label?: string | null;
   power_w: number | null;
   energy_kwh: number | null;
   cost_sek: number | null;
+  solar_kwh?: number | null;
+  battery_kwh?: number | null;
+  grid_kwh?: number | null;
+  grid_cost_sek?: number | null;
+  solar_value_sek?: number | null;
+  battery_value_sek?: number | null;
   temperature_c: number | null;
   price_sek_kwh: number | null;
 }
@@ -1443,6 +1476,14 @@ export async function fetchSpaStatus(slug: string): Promise<SpaStatus> {
 
 export async function fetchSpaEnergyPeriod(slug: string, period: string): Promise<SpaEnergyPeriod> {
   const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/${period}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchSpaEnergyBreakdown(slug: string, period: string): Promise<SpaEnergyBreakdown> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/breakdown?period=${period}`, {
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

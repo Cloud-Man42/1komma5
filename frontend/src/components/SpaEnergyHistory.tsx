@@ -5,6 +5,11 @@ import { useEffect, useState } from "react";
 import { SpaHistory, fetchSpaHistory } from "@/lib/api";
 import { formatSekAmount } from "@/lib/prices";
 
+function pointLabel(point: SpaHistory["points"][number]): string {
+  if (point.period_label) return point.period_label;
+  return new Date(point.timestamp).toLocaleString("sv-SE");
+}
+
 export function SpaEnergyHistory({ siteSlug, period }: { siteSlug: string; period: string }) {
   const [history, setHistory] = useState<SpaHistory | null>(null);
 
@@ -26,7 +31,11 @@ export function SpaEnergyHistory({ siteSlug, period }: { siteSlug: string; perio
           const maxPower = Math.max(...history.points.map((p) => p.power_w ?? 0), 1);
           const height = point.power_w ? Math.max(4, (point.power_w / maxPower) * 100) : 0;
           return (
-            <div key={point.timestamp} className="spa-history-bar" title={`${point.energy_kwh?.toFixed(2) ?? 0} kWh`}>
+            <div
+              key={point.timestamp}
+              className="spa-history-bar"
+              title={`${point.energy_kwh?.toFixed(2) ?? 0} kWh`}
+            >
               <div className="spa-history-bar-fill" style={{ height: `${height}%` }} />
             </div>
           );
@@ -35,8 +44,14 @@ export function SpaEnergyHistory({ siteSlug, period }: { siteSlug: string; perio
       <ul className="spa-history-list">
         {history.points.slice(-5).map((point) => (
           <li key={point.timestamp}>
-            {new Date(point.timestamp).toLocaleString("sv-SE")} — {point.energy_kwh?.toFixed(2) ?? "0"} kWh
-            {point.cost_sek != null ? ` · ${formatSekAmount(point.cost_sek).label}` : ""}
+            {pointLabel(point)} — {point.energy_kwh?.toFixed(2) ?? "0"} kWh
+            {point.grid_cost_sek != null ? ` · köpt el ${formatSekAmount(point.grid_cost_sek).label}` : ""}
+            {point.solar_value_sek != null && point.solar_value_sek > 0
+              ? ` · solel ${formatSekAmount(point.solar_value_sek).label}`
+              : ""}
+            {point.battery_value_sek != null && point.battery_value_sek > 0
+              ? ` · batteri ${formatSekAmount(point.battery_value_sek).label}`
+              : ""}
           </li>
         ))}
       </ul>

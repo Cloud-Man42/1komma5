@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from app.deps import get_db_session
 from app.schemas import (
     SpaConfigResponse,
     SpaConfigUpdateRequest,
     SpaConnectionTestResponse,
+    SpaEnergyBreakdownResponse,
+    SpaEnergyBreakdownRow,
     SpaEnergyPeriodResponse,
     SpaHealthResponse,
     SpaHistoryPoint,
@@ -18,7 +21,12 @@ from app.schemas import (
     SpaStatusResponse,
 )
 from energy_core.config import get_settings
-from energy_core.consumer_accounting.aggregator import period_bounds
+from energy_core.consumer_accounting.aggregator import (
+    group_intervals_by_local_period,
+    period_bounds,
+    spa_cost_split,
+    sum_interval_fields,
+)
 from energy_core.db.consumer_repo import (
     ConsumerAggregateRepository,
     ConsumerIntervalRepository,
@@ -72,7 +80,12 @@ def _period_range(period: str, timezone: str) -> tuple[datetime, datetime, str]:
     raise HTTPException(status_code=422, detail="Invalid period")
 
 
-def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse:
+def _build_period_response(
+    period: str,
+    totals: dict,
+    *,
+    fallback_price_sek_kwh: float,
+) -> SpaEnergyPeriodResponse:
     energy = totals.get("energy_kwh", 0.0) or 0.0
     actual = totals.get("actual_cost_sek", 0.0) or 0.0
     reference = totals.get("reference_cost_sek")
@@ -81,6 +94,7 @@ def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse
     own_pct = round(100.0 * renewable / energy, 1) if energy > 0 else None
     savings_pct = round(100.0 * savings / reference, 1) if savings and reference else None
     avg_cost = round(actual / energy, 4) if energy > 0 else None
+    costs = spa_cost_split(totals, fallback_price_sek_kwh=fallback_price_sek_kwh)
     return SpaEnergyPeriodResponse(
         period=period,
         energy_kwh=round(energy, 3),
@@ -94,6 +108,12 @@ def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse
         grid_battery_kwh=round(totals.get("grid_battery_kwh", 0.0) or 0.0, 3),
         grid_direct_kwh=round(totals.get("grid_direct_kwh", 0.0) or 0.0, 3),
         unknown_kwh=round(totals.get("unknown_kwh", 0.0) or 0.0, 3),
+        solar_kwh=costs["solar_kwh"],
+        battery_kwh=costs["battery_kwh"],
+        grid_kwh=costs["grid_kwh"],
+        grid_cost_sek=costs["grid_cost_sek"],
+        solar_value_sek=costs["solar_value_sek"],
+        battery_value_sek=costs["battery_value_sek"],
         max_power_w=totals.get("max_power_w"),
         avg_power_w=totals.get("avg_power_w"),
         heater_runtime_hours=round((totals.get("heater_runtime_seconds", 0.0) or 0.0) / 3600.0, 2),
@@ -101,6 +121,21 @@ def _build_period_response(period: str, totals: dict) -> SpaEnergyPeriodResponse
         avg_cost_sek_kwh=avg_cost,
         has_data=energy > 0,
     )
+
+
+def _format_period_label(timestamp: datetime, granularity: str, timezone: str) -> str:
+    from zoneinfo import ZoneInfo
+
+    local = timestamp.astimezone(ZoneInfo(timezone))
+    if granularity == "month":
+        return local.strftime("%B %Y")
+    return local.strftime("%Y-%m-%d")
+
+
+def _breakdown_granularity(period: str) -> str:
+    if period in {"year", "total", "rolling12"}:
+        return "month"
+    return "day"
 
 
 @router.get("/sites/{slug}/spa/status", response_model=SpaStatusResponse)
@@ -134,6 +169,45 @@ async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_sessi
     )
 
 
+@router.get("/sites/{slug}/spa/energy/breakdown", response_model=SpaEnergyBreakdownResponse)
+async def get_spa_energy_breakdown(
+    slug: str,
+    period: str = Query(default="month"),
+    session: AsyncSession = Depends(get_db_session),
+) -> SpaEnergyBreakdownResponse:
+    site, consumer, _config = await _get_spa_context(session, slug)
+    timezone = consumer.timezone or site.timezone
+    start, end, _gran = _period_range(period, timezone)
+    interval_repo = ConsumerIntervalRepository(session)
+    intervals = await interval_repo.list_for_period(consumer.id, start=start, end=end)
+    granularity = _breakdown_granularity(period)
+    grouped = group_intervals_by_local_period(intervals, granularity=granularity, timezone=timezone)
+    rows: list[SpaEnergyBreakdownRow] = []
+    for period_start, bucket in grouped:
+        totals = sum_interval_fields(bucket)
+        costs = spa_cost_split(totals, fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh)
+        rows.append(
+            SpaEnergyBreakdownRow(
+                period_start=period_start,
+                period_label=_format_period_label(period_start, granularity, timezone),
+                energy_kwh=round(totals.get("energy_kwh", 0.0) or 0.0, 3),
+                solar_kwh=costs["solar_kwh"],
+                battery_kwh=costs["battery_kwh"],
+                grid_kwh=costs["grid_kwh"],
+                grid_cost_sek=costs["grid_cost_sek"],
+                solar_value_sek=costs["solar_value_sek"],
+                battery_value_sek=costs["battery_value_sek"],
+                savings_sek=round(totals.get("savings_sek", 0.0) or 0.0, 2) or None,
+            )
+        )
+    total = _build_period_response(
+        period,
+        sum_interval_fields(intervals),
+        fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+    )
+    return SpaEnergyBreakdownResponse(period=period, granularity=granularity, rows=rows, total=total)
+
+
 @router.get("/sites/{slug}/spa/energy/{period}", response_model=SpaEnergyPeriodResponse)
 async def get_spa_energy_period(
     slug: str,
@@ -145,8 +219,12 @@ async def get_spa_energy_period(
     interval_repo = ConsumerIntervalRepository(session)
     totals = await interval_repo.sum_for_period(consumer.id, start=start, end=end)
     if not totals:
-        return _build_period_response(period, {})
-    return _build_period_response(period, totals)
+        return _build_period_response(period, {}, fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh)
+    return _build_period_response(
+        period,
+        totals,
+        fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+    )
 
 
 @router.get("/sites/{slug}/spa/energy/today", response_model=SpaEnergyPeriodResponse)
@@ -161,20 +239,50 @@ async def get_spa_history(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaHistoryResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
+    timezone = consumer.timezone or site.timezone
+    start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
     intervals = await interval_repo.list_for_period(consumer.id, start=start, end=end)
-    points = [
-        SpaHistoryPoint(
-            timestamp=row.end_time,
-            power_w=row.average_power_w,
-            energy_kwh=row.energy_kwh,
-            cost_sek=row.actual_cost_sek,
-            temperature_c=None,
-            price_sek_kwh=row.electricity_price_sek_kwh,
-        )
-        for row in intervals
-    ]
+    granularity = _breakdown_granularity(period) if period not in {"today"} else "hour"
+    if period in {"today", "week"}:
+        points = [
+            SpaHistoryPoint(
+                timestamp=row.end_time,
+                period_label=row.end_time.astimezone(ZoneInfo(timezone)).strftime("%H:%M"),
+                power_w=row.average_power_w,
+                energy_kwh=row.energy_kwh,
+                cost_sek=row.actual_cost_sek,
+                solar_kwh=round(row.solar_direct_kwh + row.solar_battery_kwh, 3),
+                battery_kwh=round(row.solar_battery_kwh + row.grid_battery_kwh, 3),
+                grid_kwh=round(row.grid_direct_kwh, 3),
+                grid_cost_sek=round(row.actual_cost_sek, 2),
+                solar_value_sek=round((row.solar_direct_kwh + row.solar_battery_kwh) * (row.electricity_price_sek_kwh or 0.0), 2),
+                battery_value_sek=round((row.solar_battery_kwh + row.grid_battery_kwh) * (row.electricity_price_sek_kwh or 0.0), 2),
+                price_sek_kwh=row.electricity_price_sek_kwh,
+            )
+            for row in intervals
+        ]
+    else:
+        grouped = group_intervals_by_local_period(intervals, granularity=granularity, timezone=timezone)
+        points = []
+        for period_start, bucket in grouped:
+            totals = sum_interval_fields(bucket)
+            costs = spa_cost_split(totals, fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh)
+            points.append(
+                SpaHistoryPoint(
+                    timestamp=period_start,
+                    period_label=_format_period_label(period_start, granularity, timezone),
+                    power_w=totals.get("max_power_w"),
+                    energy_kwh=round(totals.get("energy_kwh", 0.0) or 0.0, 3),
+                    cost_sek=costs["grid_cost_sek"],
+                    solar_kwh=costs["solar_kwh"],
+                    battery_kwh=costs["battery_kwh"],
+                    grid_kwh=costs["grid_kwh"],
+                    grid_cost_sek=costs["grid_cost_sek"],
+                    solar_value_sek=costs["solar_value_sek"],
+                    battery_value_sek=costs["battery_value_sek"],
+                )
+            )
     return SpaHistoryResponse(period=period, points=points)
 
 

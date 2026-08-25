@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from energy_core.consumer_accounting.site_sample import build_site_energy_sample
 from energy_core.consumer_accounting.sampler import ConsumerSampler
 from energy_core.db.consumer_repo import ConsumerRepository, ConsumerSampleRepository
 from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
@@ -23,7 +24,12 @@ class ArcticSpaPollingService:
         self._lock = asyncio.Lock()
         self._sampler = ConsumerSampler()
 
-    async def poll_due_consumers(self, session: AsyncSession) -> int:
+    async def poll_due_consumers(
+        self,
+        session: AsyncSession,
+        *,
+        live_overviews: dict[str, dict] | None = None,
+    ) -> int:
         if self._lock.locked():
             return 0
         async with self._lock:
@@ -52,6 +58,7 @@ class ArcticSpaPollingService:
                         site=site,
                         is_sqlite=session.bind.dialect.name == "sqlite" if session.bind else True,
                         now=now,
+                        live_overview=(live_overviews or {}).get(site.slug),
                     )
                 except Exception:
                     logger.exception("Arctic Spa poll failed consumer_id=%s site=%s", consumer.id, site.slug)
@@ -68,6 +75,7 @@ class ArcticSpaPollingService:
         site,
         is_sqlite: bool,
         now: datetime,
+        live_overview: dict | None = None,
     ) -> int:
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
@@ -116,24 +124,14 @@ class ArcticSpaPollingService:
                 component_breakdown=spa_sample.component_breakdown,
             )
             if spa_sample.energy_delta_kwh > 0 and start_time < now:
-                from energy_core.db.repositories import MarketPriceRepository
-                from energy_core.ev_accounting.models import SiteEnergySample
-
-                price_repo = MarketPriceRepository(session, is_sqlite=is_sqlite)
-                hour = now.replace(minute=0, second=0, microsecond=0)
-                mp = await price_repo.get_at(site.id, hour)
-                price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
                 duration_hours = max(0.0, (now - start_time).total_seconds() / 3600.0)
-                site_sample = SiteEnergySample(
-                    pv_power_w=0.0,
-                    house_consumption_w=spa_sample.power_w,
-                    grid_import_w=spa_sample.power_w,
-                    grid_export_w=0.0,
-                    battery_charge_w=0.0,
-                    battery_discharge_w=0.0,
-                    ev_power_w=0.0,
-                    electricity_price_sek_kwh=price,
+                site_sample = await build_site_energy_sample(
+                    session,
+                    site=site,
+                    live_overview=live_overview,
+                    is_sqlite=is_sqlite,
                     duration_hours=duration_hours,
+                    reference_time=now,
                 )
                 await self._sampler.record_interval(
                     session,

@@ -873,6 +873,12 @@ class SpaEnergyPeriodResponse(BaseModel):
     grid_battery_kwh: float = 0.0
     grid_direct_kwh: float = 0.0
     unknown_kwh: float = 0.0
+    solar_kwh: float = 0.0
+    battery_kwh: float = 0.0
+    grid_kwh: float = 0.0
+    grid_cost_sek: float = 0.0
+    solar_value_sek: float = 0.0
+    battery_value_sek: float = 0.0
     max_power_w: float | None = None
     avg_power_w: float | None = None
     heater_runtime_hours: float = 0.0
@@ -881,11 +887,38 @@ class SpaEnergyPeriodResponse(BaseModel):
     has_data: bool = False
 
 
+class SpaEnergyBreakdownRow(BaseModel):
+    period_start: datetime
+    period_label: str
+    energy_kwh: float = 0.0
+    solar_kwh: float = 0.0
+    battery_kwh: float = 0.0
+    grid_kwh: float = 0.0
+    grid_cost_sek: float = 0.0
+    solar_value_sek: float = 0.0
+    battery_value_sek: float = 0.0
+    savings_sek: float | None = None
+
+
+class SpaEnergyBreakdownResponse(BaseModel):
+    period: str
+    granularity: str
+    rows: list[SpaEnergyBreakdownRow] = Field(default_factory=list)
+    total: SpaEnergyPeriodResponse
+
+
 class SpaHistoryPoint(BaseModel):
     timestamp: datetime
+    period_label: str | None = None
     power_w: float | None = None
     energy_kwh: float | None = None
     cost_sek: float | None = None
+    solar_kwh: float | None = None
+    battery_kwh: float | None = None
+    grid_kwh: float | None = None
+    grid_cost_sek: float | None = None
+    solar_value_sek: float | None = None
+    battery_value_sek: float | None = None
     temperature_c: float | None = None
     price_sek_kwh: float | None = None
 

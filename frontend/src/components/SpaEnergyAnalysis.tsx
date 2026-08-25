@@ -32,14 +32,19 @@ export function SpaEnergyAnalysis({ siteSlug, period }: { siteSlug: string; peri
         Förbrukning: <strong>{formatKwh(data.energy_kwh)}</strong>
       </p>
       <ul>
-        <li>Från sol: {formatKwh(data.solar_direct_kwh)} ({pct(data.solar_direct_kwh)} %)</li>
-        <li>Från batteri: {formatKwh(data.solar_battery_kwh + data.grid_battery_kwh)} ({pct(data.solar_battery_kwh + data.grid_battery_kwh)} %)</li>
-        <li>Från nät: {formatKwh(data.grid_direct_kwh)} ({pct(data.grid_direct_kwh)} %)</li>
+        <li>Från sol: {formatKwh(data.solar_kwh)} ({pct(data.solar_kwh)} %)</li>
+        <li>Från batteri: {formatKwh(data.battery_kwh)} ({pct(data.battery_kwh)} %)</li>
+        <li>Från nät: {formatKwh(data.grid_kwh)} ({pct(data.grid_kwh)} %)</li>
         {data.unknown_kwh > 0 && <li>Okänd: {formatKwh(data.unknown_kwh)}</li>}
       </ul>
-      <p>
-        Faktisk kostnad: <strong>{formatSekAmount(data.actual_cost_sek).label}</strong>
-      </p>
+      <h5>Kostnadsfördelning</h5>
+      <ul>
+        <li>
+          Kostnad köpt el: <strong>{formatSekAmount(data.grid_cost_sek).label}</strong>
+        </li>
+        <li>Värde solel: {formatSekAmount(data.solar_value_sek).label}</li>
+        <li>Värde batteri: {formatSekAmount(data.battery_value_sek).label}</li>
+      </ul>
       {data.reference_cost_sek != null && (
         <p>Kostnad utan egen energi: {formatSekAmount(data.reference_cost_sek).label}</p>
       )}
