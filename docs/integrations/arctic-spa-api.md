@@ -56,6 +56,6 @@ Configurable W profiles per site/spa:
 - `pump_low_w`, `pump_high_w` — per active pump
 - `circulation_w` — when Filtering without high pumps
 
-`energy_delta_wh = avg(power_prev, power_now) × elapsed_hours × 1000`
+`energy_delta_wh = avg(power_prev, power_now) × elapsed_hours` (power in W, result in Wh)
 
 Quality: `CALCULATED` (normal), `ESTIMATED` (gap > 2× poll interval), `MISSING` (offline).

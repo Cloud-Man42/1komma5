@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -331,6 +331,21 @@ class ConsumerIntervalRepository:
             "pump_runtime_seconds": sum(r.pump_runtime_seconds for r in rows),
             "max_power_w": max((r.average_power_w or 0.0 for r in rows), default=0.0),
         }
+
+    async def delete_for_consumer(self, consumer_id: int) -> int:
+        result = await self._session.execute(
+            delete(ConsumerIntervalModel).where(ConsumerIntervalModel.consumer_id == consumer_id)
+        )
+        return int(result.rowcount or 0)
+
+    async def max_energy_kwh(self, consumer_id: int) -> float:
+        result = await self._session.execute(
+            select(func.max(ConsumerIntervalModel.energy_kwh)).where(
+                ConsumerIntervalModel.consumer_id == consumer_id
+            )
+        )
+        value = result.scalar_one_or_none()
+        return float(value or 0.0)
 
     async def has_interval_for_window(
         self,

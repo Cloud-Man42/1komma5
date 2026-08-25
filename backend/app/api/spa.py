@@ -28,6 +28,7 @@ from energy_core.consumer_accounting.aggregator import (
     sum_interval_fields,
 )
 from energy_core.consumer_accounting.coordinator import ConsumerAccountingCoordinator
+from energy_core.consumer_accounting.sample_backfill import MAX_PLAUSIBLE_INTERVAL_KWH
 from energy_core.db.consumer_repo import (
     ConsumerAggregateRepository,
     ConsumerIntervalRepository,
@@ -139,17 +140,18 @@ def _breakdown_granularity(period: str) -> str:
     return "day"
 
 
-async def _ensure_spa_intervals(session: AsyncSession, site, consumer_id: int) -> None:
+async def _ensure_spa_intervals(session: AsyncSession, site, consumer_id: int, poll_interval_seconds: int = 60) -> None:
     interval_repo = ConsumerIntervalRepository(session)
+    corrupt = await interval_repo.max_energy_kwh(consumer_id) > MAX_PLAUSIBLE_INTERVAL_KWH
     since = datetime.now(UTC) - timedelta(days=30)
-    if await interval_repo.count_for_period(consumer_id, start=since, end=datetime.now(UTC)) > 0:
+    if not corrupt and await interval_repo.count_for_period(consumer_id, start=since, end=datetime.now(UTC)) > 0:
         return
     sample_repo = ConsumerSampleRepository(session)
     sample_totals = await sample_repo.sum_for_period(consumer_id, start=since, end=datetime.now(UTC))
     if (sample_totals.get("samples_with_power", 0) or 0) <= 0:
         return
     created = await ConsumerAccountingCoordinator().rebuild_spa_intervals_for_site(session, site=site)
-    if created:
+    if created or corrupt:
         await session.commit()
 
 
@@ -226,7 +228,7 @@ async def get_spa_energy_breakdown(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyBreakdownResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id)
+    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -266,7 +268,7 @@ async def get_spa_energy_period(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyPeriodResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id)
+    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
     totals = await _period_energy_totals(
         session,
@@ -297,7 +299,7 @@ async def get_spa_history(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaHistoryResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id)
+    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -362,7 +364,13 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
     poll = await repo.get_poll_state(consumer.id)
     since = datetime.now(UTC) - timedelta(hours=24)
     samples_24h = await sample_repo.count_since(consumer.id, since)
-    sample_totals_24h = await sample_repo.sum_for_period(consumer.id, start=since, end=datetime.now(UTC))
+    recent_samples = await sample_repo.list_for_period(consumer.id, start=since, end=datetime.now(UTC))
+    from energy_core.consumer_accounting.sample_backfill import SpaSampleBackfillService
+
+    sample_totals_24h = SpaSampleBackfillService.sample_totals(
+        recent_samples,
+        poll_interval_seconds=config.poll_interval_seconds or 60,
+    )
     intervals_24h = await ConsumerIntervalRepository(session).count_for_period(consumer.id, start=since, end=datetime.now(UTC))
     latest = await sample_repo.get_latest(consumer.id)
     settings = get_settings()

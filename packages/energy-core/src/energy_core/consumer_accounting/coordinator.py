@@ -41,6 +41,7 @@ class ConsumerAccountingCoordinator:
             site=site,
             cost_enabled=config.cost_calculation_enabled,
             is_sqlite=db.bind.dialect.name == "sqlite" if db.bind else True,
+            poll_interval_seconds=config.poll_interval_seconds or 60,
             since=since,
             live_overview=live_overview,
         )
