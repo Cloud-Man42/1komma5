@@ -13,6 +13,8 @@ from energy_core.solar_forecast.calibration import (
     compute_correction_factor,
     compute_mae,
     compute_mape,
+    compute_rmse,
+    compute_wape,
     metrics_insufficient,
 )
 from energy_core.solar_forecast.types import (
@@ -152,3 +154,14 @@ def test_mae_computation():
     obs = [_obs(0, actual=30, raw=33, corrected=32), _obs(1, actual=20, raw=22, corrected=21)]
     mae = compute_mae(obs)
     assert mae == pytest.approx(1.5, abs=0.01)
+
+
+def test_wape_and_rmse():
+    obs = [_obs(i, actual=20, raw=18, corrected=19) for i in range(7)]
+    wape = compute_wape(obs)
+    rmse = compute_rmse(obs)
+    assert wape is not None
+    assert rmse is not None
+    profile = build_model_profile(1, obs, now=datetime(2026, 6, 30, tzinfo=UTC))
+    assert profile.wape_30d is not None
+    assert profile.rmse_30d is not None

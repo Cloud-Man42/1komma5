@@ -1,19 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { EnergyFlowDiagram } from "./EnergyFlowDiagram";
-import { hydrateEnergySceneConfig, resetEnergySceneConfigStore } from "@/lib/energySceneConfigStore";
-
-vi.mock("next/dynamic", () => ({
-  default: () => () => null,
-}));
-
-vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...props}>
-      {children}
-    </a>
-  ),
-}));
 
 const reading = {
   recorded_at: "2026-08-13T18:00:00Z",
@@ -26,63 +13,29 @@ const reading = {
 };
 
 describe("EnergyFlowDiagram", () => {
-  beforeEach(async () => {
-    resetEnergySceneConfigStore();
-    localStorage.clear();
-    await hydrateEnergySceneConfig();
-  });
-
-  it("renders photorealistic scene with callouts in full mode", async () => {
+  it("renders four analog power gauges in full mode", () => {
     render(<EnergyFlowDiagram reading={reading} size="full" />);
-    await waitFor(() => {
-      expect(screen.getByLabelText("Energiflöde visualisering")).toBeTruthy();
-    });
-    expect(screen.getAllByText(/Hushåll/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Solenergi/)).toBeTruthy();
-    expect(screen.getByText(/Batteriladdning/)).toBeTruthy();
-    expect(screen.getByText(/Nätinmatning/)).toBeTruthy();
+    expect(screen.getByLabelText("Energiflöde visualisering")).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Solenergi" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Hushåll" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Batteri" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Nät" })).toBeInTheDocument();
   });
 
-  it("uses the photorealistic background image", async () => {
+  it("does not render house photo scene", () => {
     render(<EnergyFlowDiagram reading={reading} size="full" />);
-    await waitFor(() => {
-      const img = document.querySelector(".energy-flow-photo-img") as HTMLImageElement;
-      expect(img).toBeTruthy();
-      expect(img.src).toContain("energy-scene-photo.png");
-    });
+    expect(document.querySelector(".energy-flow-photo-img")).toBeNull();
+    expect(document.querySelector(".energy-wire-flow-glow")).toBeNull();
   });
 
-  it("renders compact HUD labels", async () => {
+  it("renders compact gauge panel", () => {
     render(<EnergyFlowDiagram reading={reading} size="compact" />);
-    await waitFor(() => {
-      expect(screen.getByText("Sol")).toBeTruthy();
-    });
-    expect(screen.getByText("Hus")).toBeTruthy();
-    expect(screen.getByText("Batteri")).toBeTruthy();
-    expect(screen.getByText("Nät")).toBeTruthy();
+    expect(screen.getByText("Solenergi")).toBeInTheDocument();
+    expect(screen.getByText("Hushåll")).toBeInTheDocument();
   });
 
-  it("shows active flow legend when power is moving", async () => {
+  it("shows active flow notes when power is moving", () => {
     render(<EnergyFlowDiagram reading={reading} size="full" />);
-    await waitFor(() => {
-      expect(screen.getByText(/Sol → Växelriktare/)).toBeTruthy();
-    });
-  });
-
-  it("renders HeartBeat-style pulse overlays for active flows", async () => {
-    render(<EnergyFlowDiagram reading={reading} size="full" />);
-    await waitFor(() => {
-      const pulses = document.querySelectorAll(".energy-wire-flow-glow");
-      expect(pulses.length).toBeGreaterThan(0);
-    });
-    expect(document.querySelectorAll(".energy-wire-flow-track").length).toBeGreaterThan(0);
-  });
-
-  it("links to scene customization page", async () => {
-    render(<EnergyFlowDiagram reading={reading} size="full" siteSlug="hemma" />);
-    await waitFor(() => {
-      const link = screen.getByRole("link", { name: /Anpassa scen/i }) as HTMLAnchorElement;
-      expect(link.href).toContain("/calibrate?site=hemma");
-    });
+    expect(screen.getByText(/Sol → hus/)).toBeInTheDocument();
   });
 });

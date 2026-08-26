@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from energy_core.consumer_accounting.site_sample import build_site_energy_sample
 from energy_core.consumer_accounting.sampler import ConsumerSampler
 from energy_core.db.consumer_repo import ConsumerRepository, ConsumerSampleRepository
+from energy_core.db.flexible_load_plan_repo import FlexibleLoadPlanRepository
+from energy_core.db.spa_actuator_repo import SpaActuatorStateRepository
+from energy_core.spa_energy.runtime import SpaActuatorState
 from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
 from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration
 from energy_core.integrations.arctic_spa.inferred_meter import InferredArcticSpaMeter
@@ -29,6 +32,7 @@ class ArcticSpaPollingService:
         session: AsyncSession,
         *,
         live_overviews: dict[str, dict] | None = None,
+        active_cleaning_poll_interval_seconds: int = 15,
     ) -> int:
         if self._lock.locked():
             return 0
@@ -46,7 +50,10 @@ class ArcticSpaPollingService:
                     continue
                 if poll_state and poll_state.last_success_at:
                     elapsed = (now - poll_state.last_success_at).total_seconds()
-                    if elapsed < config.poll_interval_seconds:
+                    poll_interval = config.poll_interval_seconds
+                    if await self._needs_fast_poll(session, consumer.id, site.id, now):
+                        poll_interval = min(poll_interval, active_cleaning_poll_interval_seconds)
+                    if elapsed < poll_interval:
                         continue
                 try:
                     polled += await self._poll_one(
@@ -103,11 +110,18 @@ class ArcticSpaPollingService:
             elapsed = 0.0
             if config.last_status_at:
                 elapsed = max(0.0, (now - config.last_status_at).total_seconds())
+            site_house_w = None
+            if live_overview:
+                from energy_core.heartbeat.live_overview import parse_live_overview
+
+                parsed_overview = parse_live_overview(live_overview)
+                site_house_w = parsed_overview.get("home_consumption_w")
             spa_sample = meter.estimate_sample(
                 status,
                 prev_status=prev_status,
                 elapsed_seconds=elapsed,
                 poll_interval_seconds=float(config.poll_interval_seconds),
+                site_house_consumption_w=site_house_w,
             )
             await sample_repo.insert_sample(
                 consumer_id=consumer.id,
@@ -171,3 +185,18 @@ class ArcticSpaPollingService:
     async def _failure_count(self, repo: ConsumerRepository, consumer_id: int) -> int:
         state = await repo.get_poll_state(consumer_id)
         return state.consecutive_failures if state else 0
+
+    async def _needs_fast_poll(
+        self,
+        session: AsyncSession,
+        consumer_id: int,
+        site_id: int,
+        now: datetime,
+    ) -> bool:
+        runtime = await SpaActuatorStateRepository(session).get_or_create(consumer_id)
+        if runtime.state == SpaActuatorState.CLEANING:
+            return True
+        plan = await FlexibleLoadPlanRepository(session).get_latest_for_site(site_id)
+        if plan and plan.window_start and plan.window_end:
+            return plan.window_start <= now <= plan.window_end
+        return False

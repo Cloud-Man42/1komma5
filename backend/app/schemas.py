@@ -730,6 +730,7 @@ class SolarSiteConfigResponse(BaseModel):
     tilt_estimated: bool = False
     azimuth_estimated: bool = False
     complete: bool = False
+    solar_intelligence_enabled: bool = False
 
 
 class SolarSiteConfigUpdate(BaseModel):
@@ -743,6 +744,7 @@ class SolarSiteConfigUpdate(BaseModel):
     enabled: bool = False
     tilt_estimated: bool = False
     azimuth_estimated: bool = False
+    solar_intelligence_enabled: bool | None = None
 
 
 class SolarForecastPointResponse(BaseModel):
@@ -808,6 +810,12 @@ class SolarAccuracyResponse(BaseModel):
     raw_mae_30d: float | None = None
     corrected_mae_30d: float | None = None
     improvement_pct_30d: float | None = None
+    wape_7d_pct: float | None = None
+    wape_30d_pct: float | None = None
+    rmse_kwh_7d: float | None = None
+    rmse_kwh_30d: float | None = None
+    r2_30d: float | None = None
+    insufficient_reason: str | None = None
     min_samples_for_calibrated: int = 30
 
 
@@ -843,6 +851,65 @@ class SolarEnergyBudgetResponse(BaseModel):
     consumption_source: str = "unavailable"
 
 
+class SolarHourlyPointResponse(BaseModel):
+    timestamp: datetime
+    physical_w: float
+    corrected_w: float
+    lower_w: float
+    upper_w: float
+    confidence: float
+
+
+class SolarHourlyForecastResponse(BaseModel):
+    site_slug: str
+    points: list[SolarHourlyPointResponse] = Field(default_factory=list)
+
+
+class SolarPerformanceResponse(BaseModel):
+    site_slug: str
+    days: list[dict] = Field(default_factory=list)
+
+
+class SolarRadiationResponse(BaseModel):
+    site_slug: str
+    provider: str
+    samples: list[dict] = Field(default_factory=list)
+
+
+class SolarModelResponse(BaseModel):
+    site_slug: str
+    model_version: str | None = None
+    sample_count: int = 0
+    trained_at: datetime | None = None
+    role: str | None = None
+
+
+class SolarModelMetricsResponse(BaseModel):
+    site_slug: str
+    model_version: str
+    mae: float | None = None
+    mape: float | None = None
+    wape: float | None = None
+    rmse: float | None = None
+    r2: float | None = None
+    bias_pct: float | None = None
+    metrics_insufficient: bool = True
+    insufficient_reason: str | None = None
+    historical_samples: int = 0
+
+
+class SolarProviderStatusResponse(BaseModel):
+    site_slug: str
+    providers: list[dict] = Field(default_factory=list)
+
+
+class SolarIntelligenceForecastResponse(BaseModel):
+    site_slug: str
+    expected_today_kwh: float = 0.0
+    status: str = "UNAVAILABLE"
+    point_count: int = 0
+
+
 class SpaStatusResponse(BaseModel):
     consumer_id: int
     site_slug: str
@@ -854,9 +921,12 @@ class SpaStatusResponse(BaseModel):
     filter_status: str | None = None
     errors: list[str] = Field(default_factory=list)
     current_power_w: float | None = None
+    power_breakdown: dict[str, float] = Field(default_factory=dict)
+    site_house_consumption_w: float | None = None
     last_updated: datetime | None = None
     data_source: str = "ARCTIC_SPA_REST"
     data_quality: str = "MISSING"
+    power_note_sv: str = ""
     integration_enabled: bool = False
 
 
@@ -946,6 +1016,9 @@ class SpaHealthResponse(BaseModel):
     estimated_pct: float | None = None
     missing_pct: float | None = None
     last_error: str | None = None
+    actuator_state: str | None = None
+    integration_degraded: bool = False
+    integration_degraded_message_sv: str = ""
 
 
 class SpaConfigUpdateRequest(BaseModel):
@@ -984,6 +1057,199 @@ class SpaReadinessResponse(BaseModel):
     configured_sites: int = 0
     online_sites: int = 0
     error_sites: int = 0
+
+
+class SpaControlConfigUpdateRequest(BaseModel):
+    smart_control_enabled: bool | None = None
+    strategy: str | None = None
+    dry_run: bool | None = None
+    shadow_mode: bool | None = None
+    min_cleaning_hours_per_day: float | None = Field(default=None, ge=0.5, le=24.0)
+    allowed_window_start: str | None = None
+    allowed_window_end: str | None = None
+    prefer_solar: bool | None = None
+    allow_battery: bool | None = None
+    min_battery_soc_pct: float | None = Field(default=None, ge=10.0, le=90.0)
+    min_run_minutes: int | None = Field(default=None, ge=15, le=240)
+    min_stop_minutes: int | None = Field(default=None, ge=10, le=240)
+    max_starts_per_day: int | None = Field(default=None, ge=1, le=8)
+    filter_cycles_per_day: int | None = Field(default=None, ge=1, le=8)
+    filter_duration_minutes: int | None = Field(default=None, ge=30, le=240)
+    minimum_cycle_separation_minutes: int | None = Field(default=None, ge=10, le=240)
+    filter_optimization_enabled: bool | None = None
+    load_priority: int | None = Field(default=None, ge=0, le=100)
+    smart_preheat_enabled: bool | None = None
+    normal_temperature_c: float | None = Field(default=None, ge=30.0, le=42.0)
+    max_preheat_temperature_c: float | None = Field(default=None, ge=30.0, le=42.0)
+    min_comfort_temperature_c: float | None = Field(default=None, ge=30.0, le=42.0)
+    fixed_schedule_start: str | None = None
+    fixed_schedule_end: str | None = None
+
+
+class SpaControlConfigResponse(BaseModel):
+    consumer_id: int
+    smart_control_enabled: bool
+    strategy: str
+    dry_run: bool
+    shadow_mode: bool
+    shadow_mode_until: datetime | None = None
+    min_cleaning_hours_per_day: float
+    allowed_window_start: str
+    allowed_window_end: str
+    prefer_solar: bool
+    allow_battery: bool
+    min_battery_soc_pct: float
+    min_run_minutes: int
+    min_stop_minutes: int
+    max_starts_per_day: int
+    filter_cycles_per_day: int
+    filter_duration_minutes: int
+    minimum_cycle_separation_minutes: int
+    filter_optimization_enabled: bool
+    safety_floor_frequency_per_day: float
+    safety_floor_duration_hours: float
+    smart_preheat_enabled: bool
+    normal_temperature_c: float
+    max_preheat_temperature_c: float
+    min_comfort_temperature_c: float
+    load_priority: int
+    fixed_schedule_start: str | None = None
+    fixed_schedule_end: str | None = None
+
+
+class SpaPlanBlockResponse(BaseModel):
+    timestamp: datetime
+    score: float
+    solar_forecast_w: float
+    house_load_forecast_w: float
+    available_surplus_w: float
+    marginal_cost_sek_kwh: float
+    expected_energy_source: str
+    price_estimated: bool
+
+
+class SpaCleaningWindowResponse(BaseModel):
+    start: datetime
+    end: datetime
+    duration_hours: float
+    energy_source_label_sv: str
+    solar_share_pct: float | None = None
+
+
+class SpaPlanResponse(BaseModel):
+    enabled: bool
+    consumer_id: int | None = None
+    load_id: str = "spa_cleaning"
+    strategy: str | None = None
+    next_cleaning_start: datetime | None = None
+    next_cleaning_end: datetime | None = None
+    duration_hours: float | None = None
+    planned_energy_source: str | None = None
+    estimated_energy_kwh: float | None = None
+    estimated_cost_sek: float | None = None
+    baseline_cost_sek: float | None = None
+    savings_sek: float | None = None
+    explanation_sv: str = ""
+    reason: str | None = None
+    reason_sv: str | None = None
+    fallback_from_solar_only: bool = False
+    dry_run: bool = True
+    data_quality: str = "ESTIMATED"
+    blocks: list[SpaPlanBlockResponse] = Field(default_factory=list)
+    daily_windows: list[SpaCleaningWindowResponse] = Field(default_factory=list)
+    daily_target_hours: float | None = None
+    daily_completed_hours: float | None = None
+    daily_progress_pct: float | None = None
+    planned_starts: int | None = None
+    max_starts_per_day: int | None = None
+    starts_used_today: int | None = None
+    config_summary_sv: str | None = None
+    config_validation_warning_sv: str | None = None
+    filter_control_source_sv: str | None = None
+    timing_optimization_source_sv: str | None = None
+    filter_policy_summary_sv: str | None = None
+    optimization_hint_sv: str | None = None
+    cycles_planned: int | None = None
+    cycles_completed_today: int | None = None
+    hours_planned: float | None = None
+    next_cycle_starts_in_minutes: int | None = None
+    remaining_cycles_today: int | None = None
+
+
+class SpaTimelineEntry(BaseModel):
+    timestamp: datetime
+    hour_label: str
+    action: str
+    action_sv: str
+    load_id: str | None = None
+    energy_source: str | None = None
+
+
+class SpaTimelineResponse(BaseModel):
+    entries: list[SpaTimelineEntry] = Field(default_factory=list)
+
+
+class SpaEnergyEventResponse(BaseModel):
+    id: int
+    timestamp: datetime
+    event_type: str
+    start_time: datetime | None = None
+    stop_time: datetime | None = None
+    runtime_seconds: float | None = None
+    estimated_kwh: float | None = None
+    actual_kwh: float | None = None
+    estimated_cost: float | None = None
+    actual_cost: float | None = None
+    solar_share: float | None = None
+    battery_share: float | None = None
+    grid_share: float | None = None
+    reason: str
+    reason_sv: str
+    strategy: str
+    decision_score: float | None = None
+    manual_override: bool = False
+    dry_run: bool = True
+    data_quality: str = "ESTIMATED"
+
+
+class SpaEventsResponse(BaseModel):
+    events: list[SpaEnergyEventResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class SpaEconomicsResponse(BaseModel):
+    period: str
+    energy_kwh: float = 0.0
+    cost_sek: float = 0.0
+    baseline_cost_sek: float | None = None
+    savings_sek: float | None = None
+    solar_share_pct: float | None = None
+    battery_share_pct: float | None = None
+    grid_share_pct: float | None = None
+    data_quality: str = "ESTIMATED"
+
+
+class SpaShadowDayResponse(BaseModel):
+    date_label: str
+    actual_cost_sek: float
+    optimized_cost_sek: float
+    potential_saving_sek: float
+
+
+class SpaShadowResponse(BaseModel):
+    shadow_mode_active: bool
+    total_actual_cost_sek: float
+    total_optimized_cost_sek: float
+    total_potential_saving_sek: float
+    days: list[SpaShadowDayResponse] = Field(default_factory=list)
+    integration_degraded: bool = False
+    integration_degraded_message_sv: str = ""
+
+
+class SpaRunCleaningResponse(BaseModel):
+    success: bool
+    message: str
+    dry_run: bool = True
 
 
 class ChargerManufacturerResponse(BaseModel):
@@ -1085,6 +1351,7 @@ class DashboardSolarSection(DashboardSectionMeta):
     peak_power_w: float | None = None
     peak_at: datetime | None = None
     confidence_pct: float | None = None
+    inverter_max_power_kw: float | None = None
 
 
 class DashboardPriceSection(DashboardSectionMeta):
@@ -1401,3 +1668,33 @@ class HeartbeatWriteTestResponse(BaseModel):
 class HeartbeatReplayResponse(BaseModel):
     report: dict[str, Any] = Field(default_factory=dict)
     report_text: str = ""
+
+
+class EnergyOrchestrationLoadResponse(BaseModel):
+    load_id: str
+    name: str
+    load_type: str
+    priority: int
+    strategy: str
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    expected_energy_kwh: float | None = None
+    expected_cost_sek: float | None = None
+    expected_energy_source: str | None = None
+    reason_sv: str | None = None
+    explanation_sv: str | None = None
+    dry_run: bool = True
+
+
+class EnergyOrchestrationResponse(BaseModel):
+    site_slug: str
+    loads: list[EnergyOrchestrationLoadResponse] = Field(default_factory=list)
+
+
+class EnergyOrchestrationPriorityItem(BaseModel):
+    load_id: str
+    priority: int = Field(ge=0, le=100)
+
+
+class EnergyOrchestrationPrioritiesUpdateRequest(BaseModel):
+    loads: list[EnergyOrchestrationPriorityItem] = Field(default_factory=list)

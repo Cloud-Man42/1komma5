@@ -202,52 +202,28 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 
 async def _forecast_response(session, site, forecast, settings) -> SolarForecastResponse:
 
+    from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
     from energy_core.solar_forecast.historical import actual_solar_kwh_today_from_readings
 
-
-
     now = datetime.now(UTC)
-
-    forecast_so_far_kwh = round(
-
-        max(0.0, forecast.expected_today_kwh - forecast.remaining_today_kwh),
-
-        3,
-
-    )
-
-
+    day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone, now=now)
+    forecast_so_far_kwh = day_metrics.forecast_so_far_kwh
 
     from zoneinfo import ZoneInfo
-
     from datetime import time
 
-
-
     tz = ZoneInfo(site.timezone)
-
     day_start = datetime.combine(now.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(UTC)
-
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-
     readings = await reading_repo.list_readings(site.id, from_time=day_start, to_time=now, limit=50000)
-
     actual_today_kwh = actual_solar_kwh_today_from_readings(
-
         [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings],
-
         timezone=site.timezone,
-
         now=now,
-
     )
-
     remaining_vs_expected_kwh = round(
-
-        max(0.0, forecast.expected_today_kwh - actual_today_kwh),
-
+        max(0.0, day_metrics.expected_today_kwh - actual_today_kwh),
         3,
-
     )
 
 
@@ -286,15 +262,15 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
 
         weather_source=forecast.weather_source,
 
-        expected_today_kwh=forecast.expected_today_kwh,
+        expected_today_kwh=day_metrics.expected_today_kwh,
 
-        remaining_today_kwh=forecast.remaining_today_kwh,
+        remaining_today_kwh=day_metrics.remaining_today_kwh,
 
         expected_tomorrow_kwh=forecast.expected_tomorrow_kwh,
 
-        peak_power_w=forecast.peak_power_w,
+        peak_power_w=day_metrics.peak_power_w,
 
-        peak_time=forecast.peak_time,
+        peak_time=day_metrics.peak_time,
 
         confidence=forecast.confidence,
 
@@ -428,6 +404,8 @@ async def get_solar_config(
 
         complete=complete,
 
+        solar_intelligence_enabled=getattr(row, "solar_intelligence_enabled", False),
+
     )
 
 
@@ -533,6 +511,8 @@ async def update_solar_config(
         tilt_estimated=payload.tilt_estimated,
 
         azimuth_estimated=payload.azimuth_estimated,
+
+        solar_intelligence_enabled=payload.solar_intelligence_enabled,
 
     )
 
@@ -711,6 +691,26 @@ async def get_solar_accuracy(
         corrected_mae_30d=None if insufficient else profile.corrected_mae_30d,
 
         improvement_pct_30d=None if insufficient else profile.improvement_pct_30d,
+
+        wape_7d_pct=None if insufficient else profile.wape_7d,
+
+        wape_30d_pct=None if insufficient else profile.wape_30d,
+
+        rmse_kwh_7d=None if insufficient else profile.rmse_7d,
+
+        rmse_kwh_30d=None if insufficient else profile.rmse_30d,
+
+        r2_30d=None if insufficient else profile.r2_30d,
+
+        insufficient_reason=(
+            "no_training_samples"
+            if profile.historical_samples <= 0
+            else "model_learning"
+            if profile.model_state.value in ("NO_DATA", "LEARNING")
+            else "insufficient_samples"
+            if insufficient
+            else None
+        ),
 
         min_samples_for_calibrated=settings.solar_forecast_min_samples_calibrated,
 

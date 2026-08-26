@@ -39,6 +39,8 @@ describe("ArcticSpaPanel", () => {
       filter_status: "Filtering",
       errors: [],
       current_power_w: 3200,
+      power_breakdown: { heater: 3000, pump1: 200 },
+      power_note_sv: "Beräknad effekt utifrån spa-läge och effektprofil — inte en direktmätning.",
       last_updated: "2026-08-21T12:00:00Z",
       data_source: "ARCTIC_SPA_REST",
       data_quality: "CALCULATED",
@@ -78,6 +80,7 @@ describe("ArcticSpaPanel", () => {
     });
     expect(screen.getByText("Förbrukning idag")).toBeInTheDocument();
     expect(screen.getAllByText(/Väntar på mätdata/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Beräknad effekt/).length).toBeGreaterThan(0);
   });
 
   it("shows disabled message when integration off", async () => {

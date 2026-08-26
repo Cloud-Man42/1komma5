@@ -119,7 +119,8 @@ def determine_training_eligibility(
     cfg = settings or get_settings()
     if actual_kwh is None:
         return False, "actual_missing"
-    if data_completeness_pct < cfg.solar_forecast_min_data_completeness_pct:
+    min_training = cfg.solar_forecast_min_training_completeness_pct
+    if data_completeness_pct < min_training:
         return False, "incomplete_data"
     if raw_kwh is not None and raw_kwh > 0:
         ratio = actual_kwh / raw_kwh
@@ -139,6 +140,9 @@ def build_observation_from_day(
     correction_factor_used: float = 1.0,
     site_configuration_version: int = 1,
     settings: Settings | None = None,
+    physical_kwh: float | None = None,
+    radiation_kwh_m2: float | None = None,
+    provenance: str | None = None,
 ) -> SolarForecastObservation:
     cfg = settings or get_settings()
     now = datetime.now(UTC)
@@ -151,6 +155,11 @@ def build_observation_from_day(
         raw_kwh, corrected_kwh = forecast_kwh_for_day(forecast, day, timezone)
         generated_at = forecast.generated_at
         weather_meta = weather_snapshot_for_day(forecast, day, timezone)
+
+    if physical_kwh is not None and (raw_kwh is None or raw_kwh <= 0):
+        raw_kwh = physical_kwh
+        corrected_kwh = physical_kwh * correction_factor_used
+        provenance = provenance or "recomputed_physical"
 
     eligible, reason = determine_training_eligibility(
         actual_kwh=actual_kwh,
@@ -186,6 +195,9 @@ def build_observation_from_day(
         data_completeness_pct=data_completeness_pct,
         training_eligible=eligible,
         exclusion_reason=reason,
+        physical_kwh=physical_kwh,
+        radiation_kwh_m2=radiation_kwh_m2,
+        provenance=provenance,
         model_version=MODEL_VERSION,
         site_configuration_version=site_configuration_version,
         created_at=now,

@@ -49,8 +49,8 @@ export function SpaEnergyBreakdown({ siteSlug, period }: { siteSlug: string; per
               <th scope="col">Batteri</th>
               <th scope="col">Nät</th>
               <th scope="col">Kostnad köpt el</th>
-              <th scope="col">Värde solel</th>
-              <th scope="col">Värde batteri</th>
+              <th scope="col">Besparing solel</th>
+              <th scope="col">Besparing batteri</th>
             </tr>
           </thead>
           <tbody>

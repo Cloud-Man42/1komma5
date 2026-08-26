@@ -20,6 +20,7 @@ from energy_core.db.session import create_engine, create_session_factory
 from energy_core.ev_accounting import EVAccountingCoordinator
 from energy_core.consumer_accounting import ConsumerAccountingCoordinator
 from energy_core.integrations.arctic_spa.polling import ArcticSpaPollingService
+from energy_core.spa_energy.service import SmartSpaEnergyService
 from energy_core.energy_balance.coordinator import EnergyBalanceCoordinator
 from energy_core.heartbeat.bridge.decision_engine import VirtualChargerDecisionEngine
 from energy_core.heartbeat.bridge.constraints import BridgeConstraints
@@ -46,6 +47,7 @@ class Collector:
         self._ev_accounting = EVAccountingCoordinator()
         self._consumer_accounting = ConsumerAccountingCoordinator()
         self._spa_polling = ArcticSpaPollingService()
+        self._spa_energy = SmartSpaEnergyService(self._settings)
         self._solar_forecast = SolarForecastCoordinator()
         self._energy_balance = EnergyBalanceCoordinator()
         self._vehicle_supervisor = VehicleIntegrationSupervisor(self._session_factory, self._settings)
@@ -145,7 +147,11 @@ class Collector:
                         live_overviews[site.slug] = await client.fetch_live_overview(site.external_system_id)
                     except Exception:
                         logger.exception("Failed to fetch live overview for spa site %s", site.slug)
-            polled = await self._spa_polling.poll_due_consumers(session, live_overviews=live_overviews)
+            polled = await self._spa_polling.poll_due_consumers(
+                session,
+                live_overviews=live_overviews,
+                active_cleaning_poll_interval_seconds=self._settings.spa_active_cleaning_poll_interval_seconds,
+            )
             for site in await site_repo.list_all():
                 await self._consumer_accounting.rebuild_spa_intervals_for_site(
                     session,
@@ -155,6 +161,12 @@ class Collector:
                 await self._consumer_accounting.update_aggregates_for_site(session, site=site)
             if polled:
                 logger.debug("Arctic Spa polled %d consumers", polled)
+            try:
+                planned = await self._spa_energy.run_cycle(session)
+                if planned:
+                    logger.debug("Spa energy planned for %d consumers", planned)
+            except Exception:
+                logger.exception("Spa smart energy planning failed")
         except Exception:
             logger.exception("Arctic Spa integration failed")
 

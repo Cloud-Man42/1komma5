@@ -338,6 +338,15 @@ class ConsumerIntervalRepository:
         )
         return int(result.rowcount or 0)
 
+    async def delete_since(self, consumer_id: int, since: datetime) -> int:
+        result = await self._session.execute(
+            delete(ConsumerIntervalModel).where(
+                ConsumerIntervalModel.consumer_id == consumer_id,
+                ConsumerIntervalModel.start_time >= since,
+            )
+        )
+        return int(result.rowcount or 0)
+
     async def max_energy_kwh(self, consumer_id: int) -> float:
         result = await self._session.execute(
             select(func.max(ConsumerIntervalModel.energy_kwh)).where(

@@ -82,6 +82,7 @@ class EvChargerModel(Base):
     departure_time: Mapped[str | None] = mapped_column(String(8), nullable=True)
     target_soc_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    load_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=40)
     solar_start_threshold_w: Mapped[float] = mapped_column(Float, nullable=False, default=1000.0)
     solar_stop_threshold_w: Mapped[float] = mapped_column(Float, nullable=False, default=600.0)
     solar_start_delay_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
@@ -279,6 +280,11 @@ class SolarSiteConfigurationModel(Base):
     azimuth_estimated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     config_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_forecast_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    solar_intelligence_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    commissioning_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    panel_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    panel_wp: Mapped[float | None] = mapped_column(Float, nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
 
     site: Mapped[SiteModel] = relationship(back_populates="solar_configuration")
 
@@ -387,6 +393,10 @@ class SolarForecastObservationModel(Base):
     data_completeness_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     training_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     exclusion_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    physical_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    learned_correction_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    radiation_kwh_m2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    provenance: Mapped[str | None] = mapped_column(String(32), nullable=True)
     model_version: Mapped[str] = mapped_column(String(32), nullable=False, default="solar-forecast-v2")
     site_configuration_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -412,6 +422,15 @@ class SolarForecastModelProfileModel(Base):
     bias_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
     bias_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
     bias_90d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wape_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wape_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wape_90d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rmse_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rmse_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rmse_90d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r2_7d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r2_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r2_90d: Mapped[float | None] = mapped_column(Float, nullable=True)
     raw_mae_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
     corrected_mae_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
     improvement_pct_30d: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -442,6 +461,134 @@ class SolarSiteConfigurationVersionModel(Base):
     version: Mapped[int] = mapped_column(Integer, primary_key=True)
     effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     config_snapshot_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class SolarDailyForecastSnapshotModel(Base):
+    __tablename__ = "solar_daily_forecast_snapshots"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    forecast_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    forecast_kwh_raw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_kwh_corrected: Mapped[float | None] = mapped_column(Float, nullable=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("solar_forecast_runs.id", ondelete="SET NULL"), nullable=True)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False, default="solar-forecast-v2")
+    weather_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SolarRadiationSampleModel(Base):
+    __tablename__ = "solar_radiation_samples"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    ts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    parameter: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value_wm2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality: Mapped[str] = mapped_column(String(16), nullable=False, default="GOOD")
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SolarWeatherSnapshotModel(Base):
+    __tablename__ = "solar_weather_snapshots"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    ts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cloud_cover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    precipitation_mm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    humidity_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wind_speed_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SolarTrainingSampleModel(Base):
+    __tablename__ = "solar_training_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    sample_date: Mapped[date] = mapped_column(Date, nullable=False)
+    hour_utc: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    physical_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ghi_wm2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dni_wm2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dhi_wm2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    poa_wm2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    solar_elevation_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cloud_cover_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality: Mapped[str] = mapped_column(String(16), nullable=False, default="GOOD")
+    provenance: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SolarModelRecordModel(Base):
+    __tablename__ = "solar_models"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="challenger")
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    training_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    training_to: Mapped[date | None] = mapped_column(Date, nullable=True)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mae: Mapped[float | None] = mapped_column(Float, nullable=True)
+    mape: Mapped[float | None] = mapped_column(Float, nullable=True)
+    wape: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rmse: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bias_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    features_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    coefficients_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    configuration_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    promoted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SolarForecastHourlyModel(Base):
+    __tablename__ = "solar_forecast_hourly"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    physical_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    corrected_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    lower_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    upper_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    engine_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    breakdown_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class SolarPerformanceDailyModel(Base):
+    __tablename__ = "solar_performance_daily"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    performance_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    actual_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_normalized_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    performance_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    anomaly_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    anomaly_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SolarProviderHealthModel(Base):
+    __tablename__ = "solar_provider_health"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SiteEnergyConfigModel(Base):
@@ -607,6 +754,125 @@ class ConsumerAggregateModel(Base):
     measured_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     calculated_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class SpaControlConfigModel(Base):
+    __tablename__ = "spa_control_config"
+
+    consumer_id: Mapped[int] = mapped_column(
+        ForeignKey("energy_consumers.id", ondelete="CASCADE"), primary_key=True
+    )
+    smart_control_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="SMART")
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    shadow_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    shadow_mode_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    min_cleaning_hours_per_day: Mapped[float] = mapped_column(Float, nullable=False, default=8.0)
+    allowed_window_start: Mapped[str] = mapped_column(String(8), nullable=False, default="07:00")
+    allowed_window_end: Mapped[str] = mapped_column(String(8), nullable=False, default="22:00")
+    prefer_solar: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allow_battery: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    min_battery_soc_pct: Mapped[float] = mapped_column(Float, nullable=False, default=40.0)
+    min_run_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    min_stop_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    max_starts_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    filter_cycles_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    filter_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
+    minimum_cycle_separation_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    filter_optimization_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_known_safe_filter_schedule_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    safety_floor_frequency_per_day: Mapped[float] = mapped_column(Float, nullable=False, default=4.0)
+    safety_floor_duration_hours: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    smart_preheat_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    normal_temperature_c: Mapped[float] = mapped_column(Float, nullable=False, default=38.0)
+    max_preheat_temperature_c: Mapped[float] = mapped_column(Float, nullable=False, default=39.0)
+    min_comfort_temperature_c: Mapped[float] = mapped_column(Float, nullable=False, default=37.0)
+    load_priority: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    fixed_schedule_start: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    fixed_schedule_end: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SpaEnergyEventModel(Base):
+    __tablename__ = "spa_energy_event"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    consumer_id: Mapped[int] = mapped_column(ForeignKey("energy_consumers.id", ondelete="CASCADE"), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stop_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    runtime_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    estimated_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    estimated_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    actual_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    solar_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    battery_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    grid_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    reason_sv: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="SMART")
+    decision_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    shadow: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class SpaActuatorStateModel(Base):
+    __tablename__ = "spa_actuator_state"
+
+    consumer_id: Mapped[int] = mapped_column(
+        ForeignKey("energy_consumers.id", ondelete="CASCADE"), primary_key=True
+    )
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="IDLE")
+    runtime_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    integration_degraded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    integration_degraded_message_sv: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class FlexibleLoadPlanModel(Base):
+    __tablename__ = "flexible_load_plan"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    consumer_id: Mapped[int | None] = mapped_column(ForeignKey("energy_consumers.id", ondelete="SET NULL"), nullable=True)
+    load_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    reason_sv: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    explanation_sv: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    window_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_cost_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_cost_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
+    savings_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_energy_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    fallback_from_solar_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    windows_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class FlexibleLoadPlanBlockModel(Base):
+    __tablename__ = "flexible_load_plan_block"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("flexible_load_plan.id", ondelete="CASCADE"), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    solar_forecast_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    house_load_forecast_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    available_surplus_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    marginal_cost_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    expected_energy_source: Mapped[str] = mapped_column(String(16), nullable=False, default="GRID")
+    price_estimated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
 class VehicleProviderConnectionModel(Base):

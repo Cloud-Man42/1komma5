@@ -32,6 +32,7 @@ class InferredArcticSpaMeter:
         prev_status: ArcticSpaStatus | None,
         elapsed_seconds: float,
         poll_interval_seconds: float,
+        site_house_consumption_w: float | None = None,
     ) -> SpaEnergySample:
         if not status.connected:
             return SpaEnergySample(
@@ -48,12 +49,22 @@ class InferredArcticSpaMeter:
 
         breakdown = self._component_breakdown(status)
         power_w = min(sum(breakdown.values()), self.profiles.max_plausible_power_w)
+        quality = DataQuality.CALCULATED
+
+        if site_house_consumption_w is not None and site_house_consumption_w > 100:
+            cap = site_house_consumption_w * 1.1
+            if power_w > cap:
+                scale = cap / power_w
+                breakdown = {key: value * scale for key, value in breakdown.items()}
+                power_w = min(sum(breakdown.values()), cap)
+                quality = DataQuality.ESTIMATED
+
         if elapsed_seconds <= 0:
             energy_delta_wh = 0.0
-            quality = DataQuality.CALCULATED
         else:
             effective_elapsed = min(elapsed_seconds, poll_interval_seconds * 2)
-            quality = DataQuality.ESTIMATED if elapsed_seconds > poll_interval_seconds * 2 else DataQuality.CALCULATED
+            if elapsed_seconds > poll_interval_seconds * 2:
+                quality = DataQuality.ESTIMATED
             prev_power = self._power_from_status(prev_status) if prev_status else power_w
             avg_power = (prev_power + power_w) / 2.0
             energy_delta_wh = max(0.0, avg_power * (effective_elapsed / 3600.0))
@@ -61,7 +72,7 @@ class InferredArcticSpaMeter:
         return SpaEnergySample(
             power_w=power_w,
             energy_delta_wh=energy_delta_wh,
-            heater_active=status.heater_active,
+            heater_active=status.heater_element_active,
             pump_states=status.pump_states,
             water_temperature_c=status.temperature_c,
             set_temperature_c=status.setpoint_c,
@@ -77,7 +88,7 @@ class InferredArcticSpaMeter:
 
     def _component_breakdown(self, status: ArcticSpaStatus) -> dict[str, float]:
         breakdown: dict[str, float] = {}
-        if status.heater_active:
+        if status.heater_element_active:
             breakdown["heater"] = self.profiles.heater_w
         for name, state in status.pump_states.items():
             if state == "low":
@@ -85,6 +96,8 @@ class InferredArcticSpaMeter:
             elif state in {"high", "on"}:
                 breakdown[name] = self.profiles.pump_high_w
         if status.filter_status == "Filtering" and "heater" not in breakdown:
+            breakdown["circulation"] = self.profiles.circulation_w
+        elif status.filter_cycle_active and "circulation" not in breakdown and "heater" not in breakdown:
             breakdown["circulation"] = self.profiles.circulation_w
         for blower in ("blower1", "blower2"):
             value = getattr(status, blower)

@@ -27,7 +27,23 @@ def test_evaluate_point_computes_absolute_and_percentage_error():
 
 def test_evaluate_point_skips_percentage_for_tiny_actual():
     ev = _evaluation(actual=0.005, forecast=0.01)
+    assert ev is not None
     assert ev.percentage_error is None
+
+
+def test_evaluate_point_skips_night_buckets():
+    ev = evaluate_point(
+        1,
+        EvaluationInput(
+            bucket_start=datetime(2026, 8, 18, 2, 0, tzinfo=UTC),
+            forecasted_energy_kwh=0.0,
+            actual_energy_kwh=0.0,
+            model_version="solar-forecast-v2",
+        ),
+        solar_elevation_deg=2.0,
+        night_elevation_threshold=5.0,
+    )
+    assert ev is None
 
 
 def test_summarize_accuracy_empty_returns_zeros():

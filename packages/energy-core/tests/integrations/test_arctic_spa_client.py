@@ -42,5 +42,16 @@ async def test_unauthorized_error_type():
 
 
 def test_status_heater_from_filtering():
-    status = ArcticSpaStatus.from_api({"connected": True, "filter_status": "Filtering", "temperatureF": 98, "setpointF": 100})
-    assert status.heater_active is True
+    status = ArcticSpaStatus.from_api(
+        {"connected": True, "filter_status": "Filtering", "temperatureF": 100, "setpointF": 100},
+    )
+    assert status.filter_cycle_active is True
+    assert status.heater_element_active is False
+    assert status.heater_active is False
+
+
+def test_status_heater_when_below_setpoint():
+    status = ArcticSpaStatus.from_api(
+        {"connected": True, "filter_status": "Filtering", "temperatureF": 98, "setpointF": 100},
+    )
+    assert status.heater_element_active is True

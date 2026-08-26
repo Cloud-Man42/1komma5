@@ -61,8 +61,8 @@ async def test_spa_energy_breakdown_and_cost_split(client):
     body = month.json()
     assert body["has_data"] is True
     assert body["energy_kwh"] == pytest.approx(3.0)
-    assert body["solar_kwh"] == pytest.approx(1.4)
-    assert body["battery_kwh"] == pytest.approx(0.8)
+    assert body["solar_kwh"] == pytest.approx(1.6)
+    assert body["battery_kwh"] == pytest.approx(0.6)
     assert body["grid_kwh"] == pytest.approx(0.8)
     assert body["grid_cost_sek"] == pytest.approx(1.6)
 

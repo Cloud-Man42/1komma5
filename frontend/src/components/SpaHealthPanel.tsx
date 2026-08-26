@@ -26,6 +26,10 @@ export function SpaHealthPanel({ health }: { health: SpaHealth }) {
       {health.last_error && health.last_error.trim().length > 0 && (
         <p className="muted">Senaste fel: {health.last_error}</p>
       )}
+      {health.integration_degraded && (
+        <p className="form-error">{health.integration_degraded_message_sv || "Smartstyrning är tillfälligt otillgänglig."}</p>
+      )}
+      {health.actuator_state && <p className="muted">Actuator: {health.actuator_state}</p>}
     </section>
   );
 }

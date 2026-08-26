@@ -1,6 +1,6 @@
 "use client";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SolarForecastCard } from "@/components/SolarForecastCard";
 
@@ -31,16 +31,11 @@ vi.mock("@/lib/api", () => ({
     forecast_so_far_kwh: 13.4,
     remaining_vs_expected_kwh: 19.3,
     expected_tomorrow_kwh: 28.0,
-    raw_forecast_tomorrow_kwh: 30.0,
-    corrected_forecast_tomorrow_kwh: 28.0,
-    correction_factor: 0.93,
-    model_state: "CALIBRATED",
-    confidence_score: 81,
-    confidence_label: "High",
-    historical_samples: 38,
     peak_power_w: 5900,
     peak_time: "2026-06-15T11:45:00Z",
     confidence: 0.87,
+    confidence_score: 81,
+    confidence_label: "High",
     lower_today_kwh: 27.0,
     upper_today_kwh: 35.0,
     weather_summary: "Sol förhållanden: bra",
@@ -50,13 +45,19 @@ vi.mock("@/lib/api", () => ({
 }));
 
 describe("SolarForecastCard", () => {
-  it("renders forecast summary when config is complete", async () => {
+  it("renders compact forecast summary", async () => {
     render(<SolarForecastCard siteSlug="akarp" />);
-    expect(await screen.findByText("Solprognos")).toBeTruthy();
-    expect(await screen.findByText(/28 kWh/)).toBeTruthy();
-    expect(await screen.findByText(/12,5 kWh faktiskt · 13,4 kWh prognos/)).toBeTruthy();
-    expect(await screen.findByText(/19,3 kWh/)).toBeTruthy();
-    expect(await screen.findByText(/81 % High/)).toBeTruthy();
+    expect(await screen.findByText(/Solprognos idag/i)).toBeTruthy();
+    expect(await screen.findByText(/31,8 kWh/)).toBeTruthy();
+    expect(await screen.findByText(/Producerat hittills/)).toBeTruthy();
+    expect(await screen.findByText(/Confidence High · 81 %/)).toBeTruthy();
+  });
+
+  it("expands details on click", async () => {
+    render(<SolarForecastCard siteSlug="akarp" />);
+    fireEvent.click(await screen.findByText(/Visa detaljer/));
+    expect(await screen.findByText(/Imorgon/)).toBeTruthy();
+    expect(await screen.findByText(/Solar Intelligence/)).toBeTruthy();
   });
 
   it("prompts for setup when config is incomplete", async () => {
@@ -78,6 +79,5 @@ describe("SolarForecastCard", () => {
 
     render(<SolarForecastCard siteSlug="akarp" />);
     expect(await screen.findByText(/inte konfigurerad/i)).toBeTruthy();
-    expect(screen.getByText("Gå till solprofil →")).toBeTruthy();
   });
 });

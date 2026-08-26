@@ -25,6 +25,9 @@ class WindowMetrics:
     mae: float | None
     mape: float | None
     bias: float | None
+    wape: float | None
+    rmse: float | None
+    r2: float | None
     valid_mape_days: int
     sample_count: int
 
@@ -88,6 +91,71 @@ def compute_mape(
     return sum(pct_errors) / len(pct_errors), len(pct_errors)
 
 
+def compute_wape(
+    observations: list[SolarForecastObservation],
+    *,
+    use_raw: bool = False,
+) -> float | None:
+    sum_actual = 0.0
+    sum_abs_err = 0.0
+    for obs in observations:
+        if obs.actual_kwh is None or obs.actual_kwh <= 0:
+            continue
+        forecast = obs.forecast_kwh_raw if use_raw else obs.forecast_kwh_corrected
+        if forecast is None:
+            continue
+        sum_actual += obs.actual_kwh
+        sum_abs_err += abs(obs.actual_kwh - forecast)
+    if sum_actual <= 0:
+        return None
+    return sum_abs_err / sum_actual * 100.0
+
+
+def compute_rmse(
+    observations: list[SolarForecastObservation],
+    *,
+    use_raw: bool = False,
+) -> float | None:
+    sq_errors: list[float] = []
+    for obs in observations:
+        if obs.actual_kwh is None:
+            continue
+        forecast = obs.forecast_kwh_raw if use_raw else obs.forecast_kwh_corrected
+        if forecast is None:
+            continue
+        err = obs.actual_kwh - forecast
+        sq_errors.append(err * err)
+    if not sq_errors:
+        return None
+    import math
+
+    return math.sqrt(sum(sq_errors) / len(sq_errors))
+
+
+def compute_r2(
+    observations: list[SolarForecastObservation],
+    *,
+    use_raw: bool = False,
+) -> float | None:
+    pairs: list[tuple[float, float]] = []
+    for obs in observations:
+        if obs.actual_kwh is None:
+            continue
+        forecast = obs.forecast_kwh_raw if use_raw else obs.forecast_kwh_corrected
+        if forecast is None:
+            continue
+        pairs.append((obs.actual_kwh, forecast))
+    if len(pairs) < 2:
+        return None
+    actuals = [a for a, _ in pairs]
+    mean_a = sum(actuals) / len(actuals)
+    ss_tot = sum((a - mean_a) ** 2 for a in actuals)
+    if ss_tot <= 0:
+        return None
+    ss_res = sum((a - f) ** 2 for a, f in pairs)
+    return 1.0 - ss_res / ss_tot
+
+
 def compute_bias(
     observations: list[SolarForecastObservation],
     *,
@@ -123,6 +191,9 @@ def compute_window_metrics(
         mae=compute_mae(eligible),
         mape=mape,
         bias=compute_bias(eligible),
+        wape=compute_wape(eligible),
+        rmse=compute_rmse(eligible),
+        r2=compute_r2(eligible),
         valid_mape_days=valid_days,
         sample_count=len(eligible),
     )
@@ -302,6 +373,15 @@ def build_model_profile(
         bias_7d=gated(m7.bias, m7.sample_count),
         bias_30d=gated(m30.bias, m30.sample_count),
         bias_90d=gated(m90.bias, m90.sample_count),
+        wape_7d=gated(m7.wape, m7.sample_count),
+        wape_30d=gated(m30.wape, m30.sample_count),
+        wape_90d=gated(m90.wape, m90.sample_count),
+        rmse_7d=gated(m7.rmse, m7.sample_count),
+        rmse_30d=gated(m30.rmse, m30.sample_count),
+        rmse_90d=gated(m90.rmse, m90.sample_count),
+        r2_7d=gated(m7.r2, m7.sample_count),
+        r2_30d=gated(m30.r2, m30.sample_count),
+        r2_90d=gated(m90.r2, m90.sample_count),
         raw_mae_30d=gated(bench.raw_mae, m30.sample_count),
         corrected_mae_30d=gated(bench.corrected_mae, m30.sample_count),
         improvement_pct_30d=gated(bench.improvement_pct, m30.sample_count),
@@ -346,6 +426,9 @@ __all__ = [
     "compute_correction_factor",
     "compute_mae",
     "compute_mape",
+    "compute_r2",
+    "compute_rmse",
+    "compute_wape",
     "confidence_label_from_score",
     "is_outlier_ratio",
     "metrics_insufficient",

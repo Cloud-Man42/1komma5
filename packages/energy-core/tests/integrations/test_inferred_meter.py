@@ -20,6 +20,32 @@ def _status(**kwargs) -> ArcticSpaStatus:
     return ArcticSpaStatus.from_api(payload)
 
 
+def test_filtering_at_setpoint_uses_circulation_not_full_heater():
+    meter = InferredArcticSpaMeter(
+        profiles=SpaPowerProfiles(heater_w=3000, pump_low_w=150, pump_high_w=400, circulation_w=200),
+    )
+    sample = meter.estimate_sample(
+        _status(filter_status="Filtering", temperatureF=100, setpointF=100, pump1="high"),
+        prev_status=None,
+        elapsed_seconds=60,
+        poll_interval_seconds=60,
+    )
+    assert sample.power_w == 600
+    assert sample.heater_active is False
+
+
+def test_site_house_consumption_caps_inferred_power():
+    meter = InferredArcticSpaMeter(profiles=SpaPowerProfiles(heater_w=3000, pump_high_w=400))
+    sample = meter.estimate_sample(
+        _status(pump1="high", temperatureF=98, setpointF=102),
+        prev_status=None,
+        elapsed_seconds=60,
+        poll_interval_seconds=60,
+        site_house_consumption_w=1500,
+    )
+    assert sample.power_w <= 1500 * 1.1
+
+
 def test_pump_and_heater_power_summed():
     meter = InferredArcticSpaMeter(profiles=SpaPowerProfiles(heater_w=3000, pump_low_w=150, pump_high_w=400))
     sample = meter.estimate_sample(

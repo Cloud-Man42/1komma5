@@ -63,6 +63,7 @@ class SolarSiteConfiguration:
     tilt_estimated: bool = False
     azimuth_estimated: bool = False
     timezone: str = "UTC"
+    solar_intelligence_enabled: bool = False
 
     def is_complete(self) -> bool:
         return (
@@ -155,6 +156,10 @@ class SolarForecastObservation:
     data_completeness_pct: float | None = None
     training_eligible: bool = True
     exclusion_reason: str | None = None
+    physical_kwh: float | None = None
+    learned_correction_pct: float | None = None
+    radiation_kwh_m2: float | None = None
+    provenance: str | None = None
     model_version: str = MODEL_VERSION
     site_configuration_version: int = 1
     created_at: datetime | None = None
@@ -179,6 +184,15 @@ class SolarForecastModelProfile:
     bias_7d: float | None = None
     bias_30d: float | None = None
     bias_90d: float | None = None
+    wape_7d: float | None = None
+    wape_30d: float | None = None
+    wape_90d: float | None = None
+    rmse_7d: float | None = None
+    rmse_30d: float | None = None
+    rmse_90d: float | None = None
+    r2_7d: float | None = None
+    r2_30d: float | None = None
+    r2_90d: float | None = None
     raw_mae_30d: float | None = None
     corrected_mae_30d: float | None = None
     improvement_pct_30d: float | None = None

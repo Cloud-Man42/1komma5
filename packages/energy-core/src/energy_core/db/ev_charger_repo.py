@@ -43,6 +43,7 @@ class EvChargerRecord:
     departure_time: str | None = None
     target_soc_pct: float | None = None
     deadline_at: datetime | None = None
+    load_priority: int = 40
     solar_start_threshold_w: float = 1000.0
     solar_stop_threshold_w: float = 600.0
     solar_start_delay_seconds: int = 15
@@ -237,6 +238,7 @@ class EvChargerRepository:
         target_soc_pct: float | None = None,
         deadline_at: datetime | None = None,
         clear_deadline_at: bool = False,
+        load_priority: int | None = None,
         solar_start_threshold_w: float | None = None,
         solar_stop_threshold_w: float | None = None,
         solar_start_delay_seconds: int | None = None,
@@ -332,6 +334,8 @@ class EvChargerRepository:
             charger.deadline_at = deadline_at
         elif clear_deadline_at:
             charger.deadline_at = None
+        if load_priority is not None:
+            charger.load_priority = load_priority
         if solar_start_threshold_w is not None:
             charger.solar_start_threshold_w = solar_start_threshold_w
         if solar_stop_threshold_w is not None:
@@ -452,6 +456,7 @@ class EvChargerRepository:
             departure_time=charger.departure_time,
             target_soc_pct=charger.target_soc_pct,
             deadline_at=charger.deadline_at,
+            load_priority=charger.load_priority,
             solar_start_threshold_w=charger.solar_start_threshold_w,
             solar_stop_threshold_w=charger.solar_stop_threshold_w,
             solar_start_delay_seconds=charger.solar_start_delay_seconds,

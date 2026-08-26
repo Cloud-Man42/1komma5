@@ -42,6 +42,26 @@ def test_actual_kwh_for_day_sums_buckets():
     assert completeness > 0
 
 
+def test_training_eligible_at_80_pct_completeness():
+    eligible, reason = determine_training_eligibility(
+        actual_kwh=20.0,
+        data_completeness_pct=85.0,
+        raw_kwh=18.0,
+    )
+    assert eligible is True
+    assert reason is None
+
+
+def test_training_ineligible_below_80_pct():
+    eligible, reason = determine_training_eligibility(
+        actual_kwh=20.0,
+        data_completeness_pct=70.0,
+        raw_kwh=18.0,
+    )
+    assert eligible is False
+    assert reason == "incomplete_data"
+
+
 def test_evaluate_observation_errors():
     errors = evaluate_observation_errors(actual_kwh=30, raw_kwh=33, corrected_kwh=31)
     assert errors["absolute_error_kwh"] == 1.0
@@ -51,7 +71,7 @@ def test_evaluate_observation_errors():
 def test_incomplete_actual_excluded():
     eligible, reason = determine_training_eligibility(
         actual_kwh=10,
-        data_completeness_pct=80,
+        data_completeness_pct=70,
         raw_kwh=12,
     )
     assert eligible is False

@@ -19,7 +19,13 @@ class EvaluationInput:
 def evaluate_point(
     site_id: int,
     inp: EvaluationInput,
-) -> ForecastEvaluation:
+    *,
+    solar_elevation_deg: float | None = None,
+    night_elevation_threshold: float = 5.0,
+) -> ForecastEvaluation | None:
+    """Return None when bucket is at night (excluded from MAPE)."""
+    if solar_elevation_deg is not None and solar_elevation_deg <= night_elevation_threshold:
+        return None
     forecast_ts = inp.bucket_start
     actual = inp.actual_energy_kwh
     forecast = inp.forecasted_energy_kwh

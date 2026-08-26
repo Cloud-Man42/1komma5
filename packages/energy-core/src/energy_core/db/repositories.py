@@ -305,6 +305,32 @@ class MarketPriceRepository:
             all_in_price_sek_kwh=row.all_in_price_sek_kwh,
         )
 
+    async def list_between(
+        self,
+        site_id: int,
+        *,
+        from_time: datetime,
+        to_time: datetime,
+    ) -> list[MarketPriceRecord]:
+        result = await self._session.scalars(
+            select(MarketPriceModel)
+            .where(
+                MarketPriceModel.site_id == site_id,
+                MarketPriceModel.recorded_at >= from_time,
+                MarketPriceModel.recorded_at <= to_time,
+            )
+            .order_by(MarketPriceModel.recorded_at)
+        )
+        return [
+            MarketPriceRecord(
+                site_id=row.site_id,
+                recorded_at=row.recorded_at,
+                spot_price_sek_kwh=row.spot_price_sek_kwh,
+                all_in_price_sek_kwh=row.all_in_price_sek_kwh,
+            )
+            for row in result
+        ]
+
 
 class HistoricalEnergyRepository:
     def __init__(self, session: AsyncSession, is_sqlite: bool) -> None:

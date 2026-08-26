@@ -47,7 +47,7 @@ export function SpaEnergyHistory({ siteSlug, period }: { siteSlug: string; perio
             {pointLabel(point)} — {point.energy_kwh?.toFixed(2) ?? "0"} kWh
             {point.grid_cost_sek != null ? ` · köpt el ${formatSekAmount(point.grid_cost_sek).label}` : ""}
             {point.solar_value_sek != null && point.solar_value_sek > 0
-              ? ` · solel ${formatSekAmount(point.solar_value_sek).label}`
+              ? ` · besparing solel ${formatSekAmount(point.solar_value_sek).label}`
               : ""}
             {point.battery_value_sek != null && point.battery_value_sek > 0
               ? ` · batteri ${formatSekAmount(point.battery_value_sek).label}`

@@ -42,8 +42,8 @@ export function SpaEnergyAnalysis({ siteSlug, period }: { siteSlug: string; peri
         <li>
           Kostnad köpt el: <strong>{formatSekAmount(data.grid_cost_sek).label}</strong>
         </li>
-        <li>Värde solel: {formatSekAmount(data.solar_value_sek).label}</li>
-        <li>Värde batteri: {formatSekAmount(data.battery_value_sek).label}</li>
+        <li>Besparing solel: {formatSekAmount(data.solar_value_sek).label}</li>
+        <li>Besparing batteri: {formatSekAmount(data.battery_value_sek).label}</li>
       </ul>
       {data.reference_cost_sek != null && (
         <p>Kostnad utan egen energi: {formatSekAmount(data.reference_cost_sek).label}</p>

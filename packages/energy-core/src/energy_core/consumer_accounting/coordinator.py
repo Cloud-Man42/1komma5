@@ -26,6 +26,7 @@ class ConsumerAccountingCoordinator:
         site: SiteModel,
         live_overview: dict | None = None,
         since_days: int = 30,
+        rebuild_existing: bool = False,
     ) -> int:
         repo = ConsumerRepository(db)
         spa_row = await repo.get_spa_for_site(site.id)
@@ -44,6 +45,7 @@ class ConsumerAccountingCoordinator:
             poll_interval_seconds=config.poll_interval_seconds or 60,
             since=since,
             live_overview=live_overview,
+            rebuild_existing=rebuild_existing,
         )
 
     async def update_aggregates_for_site(self, db: AsyncSession, *, site: SiteModel) -> int:

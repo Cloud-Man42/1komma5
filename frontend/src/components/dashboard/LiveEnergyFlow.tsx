@@ -1,4 +1,4 @@
-import { DashboardLiveSection, Reading } from "@/lib/api";
+import { DashboardLiveSection, DashboardSolarSection, DashboardTodaySection, Reading } from "@/lib/api";
 import { formatPower, formatPercent } from "@/lib/format";
 import { EnergyFlowDiagram } from "@/components/EnergyFlowDiagram";
 import { Icon } from "@/components/dashboard/Icon";
@@ -31,11 +31,17 @@ export function LiveEnergyFlow({
   live,
   reading,
   evPowerW,
+  solar,
+  today,
+  mainFuseA,
 }: {
   siteSlug: string;
   live: DashboardLiveSection | null;
   reading: Reading | null;
   evPowerW?: number;
+  solar?: DashboardSolarSection | null;
+  today?: DashboardTodaySection | null;
+  mainFuseA?: number | null;
 }) {
   if (!reading) {
     return null;
@@ -50,6 +56,9 @@ export function LiveEnergyFlow({
         size="full"
         siteSlug={siteSlug}
         evPowerW={evPowerW ?? live?.ev_power_w ?? 0}
+        solar={solar}
+        today={today}
+        mainFuseA={mainFuseA}
       />
       {items.length > 0 && (
         <div className="live-status-row" aria-label="Live status">

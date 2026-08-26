@@ -219,6 +219,8 @@ async def _compute_solar(session: AsyncSession, site) -> DashboardSolarSection:
         _cache_set(site.slug, "solar", section)
         return section
 
+    from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
+
     forecast_repo = SolarForecastRepository(session)
     forecast = await forecast_repo.get_latest(site.id)
     if forecast is None:
@@ -226,13 +228,15 @@ async def _compute_solar(session: AsyncSession, site) -> DashboardSolarSection:
         _cache_set(site.slug, "solar", section)
         return section
 
+    day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone)
     confidence_pct = round(float(forecast.confidence or 0) * 100, 1) if forecast.confidence is not None else None
     section = DashboardSolarSection(
-        expected_today_kwh=round(float(forecast.expected_today_kwh or 0), 1),
-        remaining_kwh=round(float(forecast.remaining_today_kwh or 0), 1),
-        peak_power_w=float(forecast.peak_power_w or 0) or None,
-        peak_at=forecast.peak_time,
+        expected_today_kwh=round(float(day_metrics.expected_today_kwh or 0), 1),
+        remaining_kwh=round(float(day_metrics.remaining_today_kwh or 0), 1),
+        peak_power_w=float(day_metrics.peak_power_w or 0) or None,
+        peak_at=day_metrics.peak_time,
         confidence_pct=confidence_pct,
+        inverter_max_power_kw=float(config.inverter_max_power_kw or 0) or None,
     )
     _cache_set(site.slug, "solar", section)
     return section

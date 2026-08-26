@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     solar_forecast_outlier_ratio_min: float = Field(default=0.30, ge=0.0, alias="SOLAR_FORECAST_OUTLIER_RATIO_MIN")
     solar_forecast_outlier_ratio_max: float = Field(default=1.70, ge=0.0, alias="SOLAR_FORECAST_OUTLIER_RATIO_MAX")
     solar_forecast_correction_ema_alpha: float = Field(default=0.15, gt=0.0, le=1.0, alias="SOLAR_FORECAST_CORRECTION_EMA_ALPHA")
+    solar_forecast_min_training_completeness_pct: float = Field(
+        default=80.0, ge=0.0, le=100.0, alias="SOLAR_FORECAST_MIN_TRAINING_COMPLETENESS_PCT"
+    )
+    solar_forecast_night_elevation_deg: float = Field(default=5.0, ge=0.0, alias="SOLAR_FORECAST_NIGHT_ELEVATION_DEG")
+    smhi_strang_base_url: str = Field(
+        default="https://opendata-download-metanalys.smhi.se/api/category/strang1g/version/1/geotype/point",
+        alias="SMHI_STRANG_BASE_URL",
+    )
+    smhi_snow_base_url: str = Field(
+        default="https://opendata-download-metanalys.smhi.se/api/category/snow1g/version/1/geotype/point",
+        alias="SMHI_SNOW_BASE_URL",
+    )
+    smhi_timeout_seconds: float = Field(default=30.0, ge=5.0, alias="SMHI_TIMEOUT_SECONDS")
 
     # Sungrow / energy balance / Virtual EVSE (Phase 1)
     sungrow_telemetry_max_age_seconds: float = Field(default=60.0, ge=5.0, alias="SUNGROW_TELEMETRY_MAX_AGE_SECONDS")
@@ -82,6 +95,13 @@ class Settings(BaseSettings):
     arctic_spa_poll_interval_seconds: int = Field(default=60, ge=15, le=600, alias="ARCTIC_SPA_POLL_INTERVAL_SECONDS")
     arctic_spa_id: str = Field(default="", alias="ARCTIC_SPA_ID")
     spa_smart_control_enabled: bool = Field(default=False, alias="SPA_SMART_CONTROL_ENABLED")
+    spa_active_cleaning_poll_interval_seconds: int = Field(
+        default=15,
+        ge=5,
+        le=120,
+        alias="SPA_ACTIVE_CLEANING_POLL_INTERVAL_SECONDS",
+    )
+    spa_planner_watchdog_seconds: int = Field(default=180, ge=60, le=900, alias="SPA_PLANNER_WATCHDOG_SECONDS")
     spa_energy_collection_enabled: bool = Field(default=True, alias="SPA_ENERGY_COLLECTION_ENABLED")
     spa_cost_calculation_enabled: bool = Field(default=True, alias="SPA_COST_CALCULATION_ENABLED")
 

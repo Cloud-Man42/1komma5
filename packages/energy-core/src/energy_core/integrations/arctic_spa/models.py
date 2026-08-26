@@ -12,7 +12,13 @@ def fahrenheit_to_celsius(value: float | int | None) -> float | None:
     return round((float(value) - 32.0) * 5.0 / 9.0, 2)
 
 
+def celsius_to_fahrenheit_int(value_c: float) -> int:
+    """Quantize to whole Fahrenheit for Arctic Spa setpoint API."""
+    return int(round(value_c * 9.0 / 5.0 + 32.0))
+
+
 HEATER_FILTER_STATUSES = frozenset({"Filtering", "Boost", "Resuming", "Overtemperature", "Sanitize", "Purge"})
+HEATER_ELEMENT_STATUSES = frozenset({"Boost", "Resuming", "Overtemperature", "Sanitize"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +67,20 @@ class ArcticSpaStatus:
         )
 
     @property
+    def filter_cycle_active(self) -> bool:
+        return self.filter_status in HEATER_FILTER_STATUSES
+
+    @property
     def heater_active(self) -> bool:
-        if self.filter_status in HEATER_FILTER_STATUSES:
+        """True when the heating element is expected to draw significant power."""
+        return self.heater_element_active
+
+    @property
+    def heater_element_active(self) -> bool:
+        if self.filter_status in HEATER_ELEMENT_STATUSES:
             return True
         if self.temperature_c is not None and self.setpoint_c is not None:
-            return self.temperature_c < self.setpoint_c - 0.2
+            return self.temperature_c < self.setpoint_c - 0.5
         return False
 
     @property

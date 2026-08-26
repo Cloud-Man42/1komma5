@@ -18,6 +18,12 @@ import { SpaEnergyAnalysis } from "@/components/SpaEnergyAnalysis";
 import { SpaEnergyBreakdown } from "@/components/SpaEnergyBreakdown";
 import { SpaEnergyHistory } from "@/components/SpaEnergyHistory";
 import { SpaHealthPanel } from "@/components/SpaHealthPanel";
+import { SpaControlSettingsPanel } from "@/components/spa/SpaControlSettingsPanel";
+import { SpaEconomicsPanel } from "@/components/spa/SpaEconomicsPanel";
+import { SpaEnergyTimeline } from "@/components/spa/SpaEnergyTimeline";
+import { SpaPlanCard } from "@/components/spa/SpaPlanCard";
+import { SpaShadowModePanel } from "@/components/spa/SpaShadowModePanel";
+import { EnergyOrchestrationPanel } from "@/components/spa/EnergyOrchestrationPanel";
 
 const PERIOD_TABS = [
   { id: "today", label: "Idag" },
@@ -26,6 +32,20 @@ const PERIOD_TABS = [
   { id: "year", label: "År" },
   { id: "total", label: "Totalt" },
 ] as const;
+
+function formatPowerBreakdown(breakdown: Record<string, number>): string | null {
+  const parts = Object.entries(breakdown)
+    .filter(([, watts]) => watts > 0)
+    .map(([key, watts]) => `${key}: ${formatWatts(watts)}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function powerQualityLabel(quality: string): string {
+  if (quality === "MEASURED") return "Mätt";
+  if (quality === "CALCULATED") return "Beräknad";
+  if (quality === "ESTIMATED") return "Beräknad (justerad)";
+  return "Saknas";
+}
 
 function formatTemp(value: number | null): string {
   if (value == null) return "—";
@@ -99,7 +119,7 @@ export function ArcticSpaPanel({ siteSlug }: { siteSlug: string }) {
         </div>
         <div className="spa-kpi">
           <p className="spa-kpi-value">{formatWatts(status.current_power_w ?? 0)}</p>
-          <p className="spa-kpi-label">Aktuell effekt</p>
+          <p className="spa-kpi-label">Beräknad effekt ({powerQualityLabel(status.data_quality)})</p>
         </div>
         <div className="spa-kpi">
           <p className="spa-kpi-value">{today?.has_data ? formatKwh(today.energy_kwh) : "Väntar på mätdata"}</p>
@@ -130,10 +150,25 @@ export function ArcticSpaPanel({ siteSlug }: { siteSlug: string }) {
         {" · "}
         {status.pump_label}
         {" · "}
+        Filter: <strong>{status.filter_status ?? "—"}</strong>
+        {" · "}
         Spa: <strong>{status.online ? "Online" : "Offline"}</strong>
         {" · "}
         Kvalitet: {status.data_quality}
       </p>
+      {formatPowerBreakdown(status.power_breakdown ?? {}) && (
+        <p className="muted spa-power-breakdown">
+          Effektfördelning: {formatPowerBreakdown(status.power_breakdown ?? {})}
+        </p>
+      )}
+      {status.power_note_sv && <p className="muted">{status.power_note_sv}</p>}
+
+      <SpaPlanCard siteSlug={siteSlug} />
+      <EnergyOrchestrationPanel siteSlug={siteSlug} />
+      <SpaEnergyTimeline siteSlug={siteSlug} />
+      <SpaEconomicsPanel siteSlug={siteSlug} />
+      <SpaShadowModePanel siteSlug={siteSlug} />
+      <SpaControlSettingsPanel siteSlug={siteSlug} />
 
       <div className="spa-tabs">
         {PERIOD_TABS.map((tab) => (

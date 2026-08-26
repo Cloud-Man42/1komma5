@@ -61,6 +61,8 @@ export default function SiteOverviewPage() {
           live={dashboard.live}
           reading={reading}
           evPowerW={dashboard.live?.ev_power_w ?? undefined}
+          solar={dashboard.solar}
+          today={dashboard.today}
         />
       </DashboardSection>
 

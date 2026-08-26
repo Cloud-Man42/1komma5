@@ -12,17 +12,18 @@ function kwh(value: number): string {
   return `${value.toLocaleString("sv-SE", { maximumFractionDigits: 1 })} kWh`;
 }
 
-function pctCorrection(raw: number, corrected: number): string {
-  if (raw <= 0) return "—";
-  const pct = ((corrected - raw) / raw) * 100;
+function pctVsForecast(actual: number, forecast: number): string {
+  if (forecast <= 0) return "—";
+  const pct = ((actual - forecast) / forecast) * 100;
   const sign = pct >= 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)} %`;
+  return `${sign}${pct.toFixed(1)} % mot prognos`;
 }
 
 export function SolarForecastCard({ siteSlug }: SolarForecastCardProps) {
   const [forecast, setForecast] = useState<SolarForecast | null>(null);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -94,97 +95,60 @@ export function SolarForecastCard({ siteSlug }: SolarForecastCardProps) {
     ? new Date(forecast.peak_time).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })
     : "—";
 
-  const rawTomorrow = forecast.raw_forecast_tomorrow_kwh ?? forecast.expected_tomorrow_kwh;
-  const correctedTomorrow =
-    forecast.corrected_forecast_tomorrow_kwh ?? forecast.expected_tomorrow_kwh;
-  const learning =
-    forecast.model_state === "NO_DATA" ||
-    forecast.model_state === "LEARNING" ||
-    (forecast.historical_samples ?? 0) === 0;
-  const productionDays = forecast.production_days_observed ?? 0;
-  const evaluatedDays = forecast.historical_samples ?? 0;
-
-  const qualityClass = forecast.quality.toLowerCase().replace(/_/g, "-");
+  const confScore = forecast.confidence_score ?? Math.round(forecast.confidence * 100);
+  const confLabel = forecast.confidence_label ?? (confScore >= 75 ? "Hög" : confScore >= 45 ? "Medium" : "Låg");
 
   return (
-    <section className="forecast-section">
-      <h3 className="section-title">Solprognos</h3>
+    <section className="forecast-section solar-forecast-compact">
+      <h3 className="section-title">Solprognos idag</h3>
 
-      {correctedTomorrow != null ? (
-        <dl className="metrics">
-          <div>
-            <dt>Imorgon</dt>
-            <dd>{kwh(correctedTomorrow)}</dd>
-          </div>
-          {rawTomorrow != null ? (
-            <>
-              <div>
-                <dt>Grundprognos</dt>
-                <dd>{kwh(rawTomorrow)}</dd>
-              </div>
-              <div>
-                <dt>EMIC-korrigering</dt>
-                <dd>{pctCorrection(rawTomorrow, correctedTomorrow)}</dd>
-              </div>
-            </>
-          ) : null}
-          {forecast.confidence_score != null ? (
+      <p className="solar-forecast-hero">{kwh(forecast.expected_today_kwh)}</p>
+      <p className="muted">
+        Förväntat intervall {kwh(forecast.lower_today_kwh)} – {kwh(forecast.upper_today_kwh)}
+      </p>
+      <p className="muted">
+        Confidence {confLabel} · {confScore} %
+      </p>
+      <p>
+        Producerat hittills {kwh(forecast.actual_today_kwh)}
+      </p>
+      <p>
+        Prognos vid denna tid {kwh(forecast.forecast_so_far_kwh)}
+      </p>
+      <p className="muted">{pctVsForecast(forecast.actual_today_kwh, forecast.forecast_so_far_kwh)}</p>
+
+      <button type="button" className="link-button" onClick={() => setExpanded((v) => !v)}>
+        {expanded ? "Dölj detaljer ▲" : "Visa detaljer ▼"}
+      </button>
+
+      {expanded ? (
+        <>
+          <h4 className="section-subtitle">Detaljer</h4>
+          <dl className="metrics">
             <div>
-              <dt>Confidence</dt>
+              <dt>Återstår idag</dt>
+              <dd>{kwh(forecast.remaining_vs_expected_kwh)}</dd>
+            </div>
+            <div>
+              <dt>Peak</dt>
               <dd>
-                {Math.round(forecast.confidence_score)} % {forecast.confidence_label ?? ""}
+                {formatWatts(forecast.peak_power_w)} kl {peakTime}
               </dd>
             </div>
-          ) : (
-            <div>
-              <dt>Confidence</dt>
-              <dd>{Math.round(forecast.confidence * 100)} %</dd>
-            </div>
-          )}
-        </dl>
+            {forecast.expected_tomorrow_kwh != null ? (
+              <div>
+                <dt>Imorgon</dt>
+                <dd>{kwh(forecast.expected_tomorrow_kwh)}</dd>
+              </div>
+            ) : null}
+          </dl>
+          <p>
+            <Link href={`/sites/${siteSlug}/solar/intelligence`} className="back-link">
+              Solar Intelligence →
+            </Link>
+          </p>
+        </>
       ) : null}
-
-      {learning ? (
-        <p className="muted">
-          Modellen lär sig — träffsäkerhet byggs upp när EMIC utvärderat fler hela
-          produktionsdagar mot prognos (
-          {evaluatedDays} utvärderade
-          {productionDays > evaluatedDays ? ` av ${productionDays} med mätdata` : ""} hittills).
-        </p>
-      ) : null}
-
-      <h4 className="section-subtitle">Idag</h4>
-      <dl className="metrics">
-        <div>
-          <dt>Hittills idag</dt>
-          <dd>
-            {kwh(forecast.actual_today_kwh)} faktiskt · {kwh(forecast.forecast_so_far_kwh)} prognos
-          </dd>
-        </div>
-        <div>
-          <dt>Förväntad produktion</dt>
-          <dd>{kwh(forecast.expected_today_kwh)}</dd>
-        </div>
-        <div>
-          <dt>Återstår idag</dt>
-          <dd>{kwh(forecast.remaining_vs_expected_kwh)}</dd>
-        </div>
-        <div>
-          <dt>Troligt intervall</dt>
-          <dd>
-            {kwh(forecast.lower_today_kwh)} – {kwh(forecast.upper_today_kwh)}
-          </dd>
-        </div>
-        <div>
-          <dt>Peak</dt>
-          <dd>
-            {formatWatts(forecast.peak_power_w)} kl {peakTime}
-          </dd>
-        </div>
-      </dl>
-      <p className={`forecast-status forecast-confidence-${qualityClass}`}>
-        {forecast.quality} · {forecast.weather_summary}
-      </p>
     </section>
   );
 }

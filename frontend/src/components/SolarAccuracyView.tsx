@@ -10,7 +10,9 @@ interface SolarAccuracyViewProps {
 const TOOLTIPS: Record<string, string> = {
   mape: "Genomsnittlig procentuell avvikelse mellan prognostiserad och faktisk solproduktion. Lägre är bättre.",
   mae: "Genomsnittlig skillnad mellan prognostiserad och faktisk solproduktion, uttryckt i kWh per dag. Lägre är bättre.",
-  bias: "Visar om modellen systematiskt prognostiserar för högt (positivt) eller för lågt (negativt).",
+  bias: "Visar om modellen systematiskt prognostiserar för högt (positivt) eller för lågt (negativt). Positiv bias = överskattar.",
+  wape: "Weighted Absolute Percentage Error — viktad procentuell avvikelse. Lägre är bättre.",
+  rmse: "Root Mean Square Error i kWh — straffar stora avvikelser hårdare än MAE.",
   correction: "EMIC justerar grundprognosen baserat på historisk produktion för just denna anläggning.",
   confidence: "Hur säker modellen är baserat på historik, felnivå och datatäckning.",
   samples: "Antal hela dagar där EMIC jämfört prognos med faktisk produktion och räknat dem som träningsdata.",
@@ -97,6 +99,13 @@ export function SolarAccuracyView({ siteSlug }: SolarAccuracyViewProps) {
             prognostiserad solproduktion med faktisk produktion och kalibrerar modellen över tid.
           </p>
           <p className="muted">
+            {accuracy.insufficient_reason === "no_training_samples"
+              ? "Inga utvärderade träningsdagar ännu."
+              : accuracy.insufficient_reason === "model_learning"
+                ? "Modellen samlar fortfarande in data."
+                : "Otillräckligt underlag för meningsfulla metrics."}
+          </p>
+          <p className="muted">
             {evaluatedDays} av rekommenderade {target} utvärderingsdagar insamlade.
           </p>
         </div>
@@ -153,6 +162,20 @@ export function SolarAccuracyView({ siteSlug }: SolarAccuracyViewProps) {
           <div>
             <Tooltip label="Bias" text={TOOLTIPS.bias} />
             <dd>{accuracy.bias_pct_30d.toFixed(1)} %</dd>
+          </div>
+        ) : null}
+
+        {!learning && accuracy.wape_30d_pct != null ? (
+          <div>
+            <Tooltip label="WAPE 30 dagar" text={TOOLTIPS.wape} />
+            <dd>{accuracy.wape_30d_pct.toFixed(1)} %</dd>
+          </div>
+        ) : null}
+
+        {!learning && accuracy.rmse_kwh_30d != null ? (
+          <div>
+            <Tooltip label="RMSE 30 dagar" text={TOOLTIPS.rmse} />
+            <dd>{accuracy.rmse_kwh_30d.toFixed(2)} kWh</dd>
           </div>
         ) : null}
 

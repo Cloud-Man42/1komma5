@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from energy_core.solar_forecast.confidence import SolarForecastConfidenceService, cloud_variability
@@ -57,7 +57,10 @@ class SolarForecastEngine:
         local_tomorrow = local_today + timedelta(days=1)
 
         end = now + timedelta(hours=self._horizon_hours)
-        relevant = [p for p in weather.points if now <= p.timestamp < end]
+        local_day_start = datetime.combine(local_today, time.min, tzinfo=tz).astimezone(UTC)
+        relevant = [p for p in weather.points if local_day_start <= p.timestamp < end]
+        if not relevant:
+            relevant = [p for p in weather.points if now <= p.timestamp < end]
         if not relevant:
             relevant = list(weather.points)
 
@@ -71,11 +74,20 @@ class SolarForecastEngine:
         forecast_points: list[SolarForecastPoint] = []
         point_confidences: list[float] = []
 
+        use_baseline_only = (
+            v2_profile.model_state in (ModelState.NO_DATA, ModelState.LEARNING)
+            and v2_profile.historical_samples <= 0
+        )
+
         for wp in relevant:
             baseline_w = baseline_power_w(wp, site)
-            corrected_w, factor = self._correction.apply(baseline_w, profile, wp, wp.timestamp)
-            corrected_w *= v2_factor
-            factor *= v2_factor
+            if use_baseline_only:
+                corrected_w = baseline_w
+                factor = 1.0
+            else:
+                corrected_w, factor = self._correction.apply(baseline_w, profile, wp, wp.timestamp)
+                corrected_w *= v2_factor
+                factor *= v2_factor
             if site.inverter_max_power_kw:
                 corrected_w = min(corrected_w, site.inverter_max_power_kw * 1000.0)
 
@@ -112,7 +124,7 @@ class SolarForecastEngine:
 
         today_pts = [p for p in forecast_points if p.timestamp.astimezone(tz).date() == local_today]
         tomorrow_pts = [p for p in forecast_points if p.timestamp.astimezone(tz).date() == local_tomorrow]
-        future_today = [p for p in today_pts if p.timestamp >= now]
+        future_today = [p for p in today_pts if p.timestamp > now]
 
         raw_today = sum(baseline_energy_kwh(p.baseline_power_w) for p in today_pts)
         raw_tomorrow = sum(baseline_energy_kwh(p.baseline_power_w) for p in tomorrow_pts) if tomorrow_pts else None
@@ -126,7 +138,7 @@ class SolarForecastEngine:
 
         peak_w = 0.0
         peak_time: datetime | None = None
-        for p in future_today:
+        for p in today_pts:
             if p.corrected_power_w > peak_w:
                 peak_w = p.corrected_power_w
                 peak_time = p.timestamp

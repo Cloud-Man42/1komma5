@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.consumer_accounting.sampler import ConsumerSampler
-from energy_core.consumer_accounting.site_sample import build_site_energy_sample
+from energy_core.consumer_accounting.site_sample import build_site_energy_sample_for_interval
 from energy_core.consumer_accounting.types import DataQuality, SpaEnergySample
 from energy_core.db.consumer_repo import ConsumerIntervalRepository, ConsumerSampleRepository
 from energy_core.db.models import SiteModel
+from energy_core.db.repositories import EnergyReadingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ class SpaSampleBackfillService:
         since: datetime | None = None,
         live_overview: dict | None = None,
         replace_corrupt: bool = False,
+        rebuild_existing: bool = False,
     ) -> int:
         sample_repo = ConsumerSampleRepository(session)
         interval_repo = ConsumerIntervalRepository(session)
@@ -110,9 +112,27 @@ class SpaSampleBackfillService:
                 )
 
         start = since or datetime(1970, 1, 1, tzinfo=UTC)
-        samples = await sample_repo.list_for_period(consumer_id, start=start, end=datetime.now(UTC))
+        end = datetime.now(UTC)
+        if rebuild_existing:
+            deleted = await interval_repo.delete_since(consumer_id, start)
+            if deleted:
+                logger.info(
+                    "Deleted %d spa intervals for consumer_id=%s before attribution rebuild",
+                    deleted,
+                    consumer_id,
+                )
+
+        samples = await sample_repo.list_for_period(consumer_id, start=start, end=end)
         if len(samples) < 2:
             return 0
+
+        reading_repo = EnergyReadingRepository(session, is_sqlite=is_sqlite)
+        site_readings = await reading_repo.list_readings(
+            site.id,
+            from_time=start - timedelta(minutes=10),
+            to_time=end,
+            limit=100_000,
+        )
 
         created = 0
         for index in range(1, len(samples)):
@@ -147,13 +167,14 @@ class SpaSampleBackfillService:
                 recorded_at=spa_sample.recorded_at,
             )
             duration_hours = max(0.0, (end_time - start_time).total_seconds() / 3600.0)
-            site_sample = await build_site_energy_sample(
+            site_sample = await build_site_energy_sample_for_interval(
                 session,
                 site=site,
-                live_overview=live_overview,
                 is_sqlite=is_sqlite,
                 duration_hours=duration_hours,
-                reference_time=end_time,
+                at_time=start_time,
+                live_overview=live_overview,
+                site_readings=site_readings,
             )
             await self._sampler.record_interval(
                 session,

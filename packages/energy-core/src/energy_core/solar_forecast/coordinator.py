@@ -128,6 +128,15 @@ class SolarForecastCoordinator:
 
         self._last_daily_eval: dict[int, date] = {}
 
+        self._intelligence = None
+
+    def _intelligence_coordinator(self):
+        if self._intelligence is None:
+            from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
+
+            self._intelligence = SolarIntelligenceCoordinator(self._settings)
+        return self._intelligence
+
 
 
     async def run_due_sites(self, session: AsyncSession, sites: list) -> int:
@@ -185,6 +194,24 @@ class SolarForecastCoordinator:
         if record is None or not record.enabled:
 
             return False
+
+        if record.solar_intelligence_enabled:
+
+            last = self._last_refresh.get(site.id)
+
+            interval = timedelta(minutes=self._settings.solar_forecast_refresh_minutes)
+
+            if not force and last and now - last < interval:
+
+                return False
+
+            ok = await self._intelligence_coordinator().refresh_site(session, site, now=now)
+
+            if ok:
+
+                self._last_refresh[site.id] = now
+
+            return ok
 
         if record.latitude is None or record.longitude is None or not record.installed_peak_power_kw:
 
@@ -288,7 +315,15 @@ class SolarForecastCoordinator:
 
         forecast_repo = SolarForecastRepository(session)
 
-        await forecast_repo.save_run(forecast)
+        run_id = await forecast_repo.save_run(forecast)
+
+        from energy_core.db.solar_intelligence_repo import SolarDailySnapshotRepository
+        from energy_core.solar_intelligence.snapshot import local_today, snapshot_from_forecast
+
+        snapshot_repo = SolarDailySnapshotRepository(session)
+        today = local_today(site.timezone, now=now)
+        snap = snapshot_from_forecast(site.id, today, forecast, timezone=site.timezone, run_id=run_id)
+        await snapshot_repo.upsert(site_id=site.id, forecast_date=today, data=snap)
 
         await config_repo.touch_forecast(site.id)
 
@@ -430,6 +465,14 @@ class SolarForecastCoordinator:
 
 
 
+        from energy_core.db.solar_intelligence_repo import SolarDailySnapshotRepository
+        from energy_core.solar_intelligence.baseline_recompute import recompute_physical_baseline_kwh_for_day
+
+        snapshot_repo = SolarDailySnapshotRepository(session)
+        domain = _to_domain_config(record)
+
+
+
         for day in pending_days:
 
             actual_kwh, completeness = actual_kwh_for_day(raw, day, site.timezone)
@@ -442,13 +485,47 @@ class SolarForecastCoordinator:
 
             day_forecast = latest_forecast
 
-            if day_forecast is not None:
+            physical_kwh: float | None = None
+
+            radiation_kwh_m2: float | None = None
+
+            provenance: str | None = None
+
+            snapshot = await snapshot_repo.get(site.id, day)
+
+            if snapshot and snapshot.get("forecast_kwh_raw"):
+
+                physical_kwh = snapshot["forecast_kwh_raw"]
+
+                provenance = "daily_snapshot"
+
+            elif day_forecast is not None:
 
                 raw_kwh, corrected_kwh = forecast_kwh_for_day(day_forecast, day, site.timezone)
 
                 if raw_kwh <= 0 and corrected_kwh <= 0:
 
                     day_forecast = None
+
+                else:
+
+                    physical_kwh = raw_kwh
+
+            if physical_kwh is None or physical_kwh <= 0:
+
+                try:
+
+                    physical_kwh, radiation_kwh_m2 = await recompute_physical_baseline_kwh_for_day(
+
+                        domain, day, provider=self._provider,
+
+                    )
+
+                    provenance = "recomputed_physical"
+
+                except Exception:
+
+                    logger.debug("Physical baseline recompute failed site=%s day=%s", site.id, day)
 
 
 
@@ -471,6 +548,12 @@ class SolarForecastCoordinator:
                 site_configuration_version=config_version,
 
                 settings=self._settings,
+
+                physical_kwh=physical_kwh,
+
+                radiation_kwh_m2=radiation_kwh_m2,
+
+                provenance=provenance,
 
             )
 
@@ -556,8 +639,12 @@ class SolarForecastCoordinator:
 
 
 
-        from_ts = now
+        from datetime import time
+        from zoneinfo import ZoneInfo
 
+        tz = ZoneInfo(site_config.timezone)
+        local_day_start = datetime.combine(now.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(UTC)
+        from_ts = local_day_start
         to_ts = now + timedelta(hours=self._settings.solar_forecast_horizon_hours)
 
         try:
@@ -778,7 +865,13 @@ class SolarForecastCoordinator:
 
             ),
 
+            night_elevation_threshold=self._settings.solar_forecast_night_elevation_deg,
+
         )
+
+        if ev is None:
+
+            return
 
         await eval_repo.upsert(ev)
 

@@ -49,6 +49,7 @@ class SolarConfigRecord:
     tilt_estimated: bool
     azimuth_estimated: bool
     timezone: str
+    solar_intelligence_enabled: bool = False
 
 
 def _to_domain_config(record: SolarConfigRecord) -> SolarSiteConfiguration:
@@ -65,6 +66,7 @@ def _to_domain_config(record: SolarConfigRecord) -> SolarSiteConfiguration:
         tilt_estimated=record.tilt_estimated,
         azimuth_estimated=record.azimuth_estimated,
         timezone=record.timezone,
+        solar_intelligence_enabled=getattr(record, "solar_intelligence_enabled", False),
     )
 
 
@@ -89,6 +91,7 @@ class SolarSiteConfigRepository:
             tilt_estimated=row.tilt_estimated,
             azimuth_estimated=row.azimuth_estimated,
             timezone=timezone,
+            solar_intelligence_enabled=getattr(row, "solar_intelligence_enabled", False),
         )
 
     async def upsert(
@@ -105,6 +108,7 @@ class SolarSiteConfigRepository:
         enabled: bool | None = None,
         tilt_estimated: bool | None = None,
         azimuth_estimated: bool | None = None,
+        solar_intelligence_enabled: bool | None = None,
     ) -> SolarSiteConfigurationModel:
         row = await self._session.get(SolarSiteConfigurationModel, site_id)
         now = datetime.now(UTC)
@@ -131,6 +135,8 @@ class SolarSiteConfigRepository:
             row.tilt_estimated = tilt_estimated
         if azimuth_estimated is not None:
             row.azimuth_estimated = azimuth_estimated
+        if solar_intelligence_enabled is not None:
+            row.solar_intelligence_enabled = solar_intelligence_enabled
         row.config_updated_at = now
         await self._session.flush()
         return row
@@ -510,6 +516,10 @@ def _observation_to_domain(row: SolarForecastObservationModel) -> SolarForecastO
         data_completeness_pct=row.data_completeness_pct,
         training_eligible=row.training_eligible,
         exclusion_reason=row.exclusion_reason,
+        physical_kwh=getattr(row, "physical_kwh", None),
+        learned_correction_pct=getattr(row, "learned_correction_pct", None),
+        radiation_kwh_m2=getattr(row, "radiation_kwh_m2", None),
+        provenance=getattr(row, "provenance", None),
         model_version=row.model_version,
         site_configuration_version=row.site_configuration_version,
         created_at=row.created_at,
@@ -557,6 +567,10 @@ class SolarForecastObservationRepository:
                     data_completeness_pct=observation.data_completeness_pct,
                     training_eligible=observation.training_eligible,
                     exclusion_reason=observation.exclusion_reason,
+                    physical_kwh=observation.physical_kwh,
+                    learned_correction_pct=observation.learned_correction_pct,
+                    radiation_kwh_m2=observation.radiation_kwh_m2,
+                    provenance=observation.provenance,
                     model_version=observation.model_version,
                     site_configuration_version=observation.site_configuration_version,
                     created_at=observation.created_at or now,
@@ -587,6 +601,12 @@ class SolarForecastObservationRepository:
             row.data_completeness_pct = observation.data_completeness_pct
             row.training_eligible = observation.training_eligible
             row.exclusion_reason = observation.exclusion_reason
+            if observation.physical_kwh is not None:
+                row.physical_kwh = observation.physical_kwh
+            if observation.radiation_kwh_m2 is not None:
+                row.radiation_kwh_m2 = observation.radiation_kwh_m2
+            if observation.provenance is not None:
+                row.provenance = observation.provenance
             row.model_version = observation.model_version
             row.site_configuration_version = observation.site_configuration_version
             row.updated_at = now
@@ -647,6 +667,15 @@ def _model_profile_to_domain(row: SolarForecastModelProfileModel) -> SolarForeca
         bias_7d=row.bias_7d,
         bias_30d=row.bias_30d,
         bias_90d=row.bias_90d,
+        wape_7d=getattr(row, "wape_7d", None),
+        wape_30d=getattr(row, "wape_30d", None),
+        wape_90d=getattr(row, "wape_90d", None),
+        rmse_7d=getattr(row, "rmse_7d", None),
+        rmse_30d=getattr(row, "rmse_30d", None),
+        rmse_90d=getattr(row, "rmse_90d", None),
+        r2_7d=getattr(row, "r2_7d", None),
+        r2_30d=getattr(row, "r2_30d", None),
+        r2_90d=getattr(row, "r2_90d", None),
         raw_mae_30d=row.raw_mae_30d,
         corrected_mae_30d=row.corrected_mae_30d,
         improvement_pct_30d=row.improvement_pct_30d,
@@ -692,6 +721,15 @@ class SolarForecastModelProfileRepository:
         row.bias_7d = profile.bias_7d
         row.bias_30d = profile.bias_30d
         row.bias_90d = profile.bias_90d
+        row.wape_7d = profile.wape_7d
+        row.wape_30d = profile.wape_30d
+        row.wape_90d = profile.wape_90d
+        row.rmse_7d = profile.rmse_7d
+        row.rmse_30d = profile.rmse_30d
+        row.rmse_90d = profile.rmse_90d
+        row.r2_7d = profile.r2_7d
+        row.r2_30d = profile.r2_30d
+        row.r2_90d = profile.r2_90d
         row.raw_mae_30d = profile.raw_mae_30d
         row.corrected_mae_30d = profile.corrected_mae_30d
         row.improvement_pct_30d = profile.improvement_pct_30d

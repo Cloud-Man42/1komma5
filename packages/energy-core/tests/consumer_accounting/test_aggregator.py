@@ -29,18 +29,20 @@ def test_spa_cost_split():
     totals = {
         "energy_kwh": 2.0,
         "actual_cost_sek": 0.8,
+        "reference_cost_sek": 4.0,
+        "savings_sek": 3.2,
         "solar_direct_kwh": 0.5,
         "solar_battery_kwh": 0.3,
         "grid_battery_kwh": 0.2,
         "grid_direct_kwh": 1.0,
     }
     costs = spa_cost_split(totals, fallback_price_sek_kwh=2.0)
-    assert costs["solar_kwh"] == 0.5
-    assert costs["battery_kwh"] == 0.5
+    assert costs["solar_kwh"] == 0.8
+    assert costs["battery_kwh"] == 0.2
     assert costs["grid_kwh"] == 1.0
     assert costs["grid_cost_sek"] == 0.8
-    assert costs["solar_value_sek"] == 0.32
-    assert costs["battery_value_sek"] == 0.2
+    assert costs["solar_value_sek"] == 1.6
+    assert costs["battery_value_sek"] == 1.6
 
 
 def test_sum_interval_fields_empty():

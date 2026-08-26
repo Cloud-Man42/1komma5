@@ -74,6 +74,7 @@ export interface DashboardSolarSection extends DashboardSectionMeta {
   peak_power_w: number | null;
   peak_at: string | null;
   confidence_pct: number | null;
+  inverter_max_power_kw: number | null;
 }
 
 export interface DashboardPriceSection extends DashboardSectionMeta {
@@ -1246,6 +1247,7 @@ export interface SolarSiteConfig {
   tilt_estimated: boolean;
   azimuth_estimated: boolean;
   complete: boolean;
+  solar_intelligence_enabled?: boolean;
 }
 
 export interface SolarAccuracy {
@@ -1269,6 +1271,12 @@ export interface SolarAccuracy {
   raw_mae_30d: number | null;
   corrected_mae_30d: number | null;
   improvement_pct_30d: number | null;
+  wape_7d_pct: number | null;
+  wape_30d_pct: number | null;
+  rmse_kwh_7d: number | null;
+  rmse_kwh_30d: number | null;
+  r2_30d: number | null;
+  insufficient_reason: string | null;
   min_samples_for_calibrated: number;
 }
 
@@ -1339,6 +1347,24 @@ export async function fetchSolarDiagnostics(slug: string, limit = 60): Promise<S
   return res.json();
 }
 
+export async function fetchSolarProviderStatus(
+  slug: string,
+): Promise<{ providers: Array<{ provider: string; status: string }> }> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/provider-status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = await res.json();
+  return { providers: data.providers ?? [] };
+}
+
+export async function fetchSolarModelMetrics(
+  slug: string,
+): Promise<{ model_version: string | null; wape: number | null } | null> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/model/metrics`, { cache: "no-store" });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return { model_version: data.model_version ?? null, wape: data.wape ?? null };
+}
+
 export function isAggregated(
   reading: Reading | AggregatedReading,
 ): reading is AggregatedReading {
@@ -1356,6 +1382,8 @@ export interface SpaStatus {
   filter_status: string | null;
   errors: string[];
   current_power_w: number | null;
+  power_breakdown: Record<string, number>;
+  power_note_sv: string;
   last_updated: string | null;
   data_source: string;
   data_quality: string;
@@ -1448,6 +1476,9 @@ export interface SpaHealth {
   estimated_pct: number | null;
   missing_pct: number | null;
   last_error: string | null;
+  actuator_state: string | null;
+  integration_degraded: boolean;
+  integration_degraded_message_sv: string;
 }
 
 export interface SpaConfig {
@@ -1528,6 +1559,251 @@ export async function testSpaConnection(slug: string): Promise<SpaConnectionTest
 export async function fetchSpaReadiness(): Promise<{ enabled: boolean; configured_sites: number; online_sites: number; error_sites: number }> {
   const res = await fetch(`${getApiBaseUrl()}/api/system/integrations/spa-readiness`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export interface SpaControlConfig {
+  consumer_id: number;
+  smart_control_enabled: boolean;
+  strategy: string;
+  dry_run: boolean;
+  shadow_mode: boolean;
+  shadow_mode_until: string | null;
+  min_cleaning_hours_per_day: number;
+  allowed_window_start: string;
+  allowed_window_end: string;
+  prefer_solar: boolean;
+  allow_battery: boolean;
+  min_battery_soc_pct: number;
+  min_run_minutes: number;
+  min_stop_minutes: number;
+  max_starts_per_day: number;
+  filter_cycles_per_day: number;
+  filter_duration_minutes: number;
+  minimum_cycle_separation_minutes: number;
+  filter_optimization_enabled: boolean;
+  safety_floor_frequency_per_day: number;
+  safety_floor_duration_hours: number;
+  smart_preheat_enabled: boolean;
+  normal_temperature_c: number;
+  max_preheat_temperature_c: number;
+  min_comfort_temperature_c: number;
+  load_priority: number;
+  fixed_schedule_start: string | null;
+  fixed_schedule_end: string | null;
+}
+
+export interface SpaCleaningWindow {
+  start: string;
+  end: string;
+  duration_hours: number;
+  energy_source_label_sv: string;
+  solar_share_pct: number | null;
+}
+
+export interface SpaPlan {
+  enabled: boolean;
+  consumer_id: number | null;
+  load_id: string;
+  strategy: string | null;
+  next_cleaning_start: string | null;
+  next_cleaning_end: string | null;
+  duration_hours: number | null;
+  planned_energy_source: string | null;
+  estimated_energy_kwh: number | null;
+  estimated_cost_sek: number | null;
+  baseline_cost_sek: number | null;
+  savings_sek: number | null;
+  explanation_sv: string;
+  reason: string | null;
+  reason_sv: string | null;
+  fallback_from_solar_only: boolean;
+  dry_run: boolean;
+  data_quality: string;
+  blocks: Array<{
+    timestamp: string;
+    score: number;
+    solar_forecast_w: number;
+    house_load_forecast_w: number;
+    available_surplus_w: number;
+    marginal_cost_sek_kwh: number;
+    expected_energy_source: string;
+    price_estimated: boolean;
+  }>;
+  daily_windows: SpaCleaningWindow[];
+  daily_target_hours: number | null;
+  daily_completed_hours: number | null;
+  daily_progress_pct: number | null;
+  planned_starts: number | null;
+  max_starts_per_day: number | null;
+  starts_used_today: number | null;
+  config_summary_sv: string | null;
+  config_validation_warning_sv: string | null;
+  filter_control_source_sv?: string | null;
+  timing_optimization_source_sv?: string | null;
+  filter_policy_summary_sv?: string | null;
+  optimization_hint_sv?: string | null;
+  cycles_planned?: number | null;
+  cycles_completed_today?: number | null;
+  hours_planned?: number | null;
+  next_cycle_starts_in_minutes?: number | null;
+  remaining_cycles_today?: number | null;
+}
+
+export interface SpaTimelineEntry {
+  timestamp: string;
+  hour_label: string;
+  action: string;
+  action_sv: string;
+  load_id: string | null;
+  energy_source: string | null;
+}
+
+export interface SpaTimeline {
+  entries: SpaTimelineEntry[];
+}
+
+export interface SpaEnergyEvent {
+  id: number;
+  timestamp: string;
+  event_type: string;
+  start_time: string | null;
+  stop_time: string | null;
+  runtime_seconds: number | null;
+  estimated_kwh: number | null;
+  actual_kwh: number | null;
+  estimated_cost: number | null;
+  actual_cost: number | null;
+  solar_share: number | null;
+  battery_share: number | null;
+  grid_share: number | null;
+  reason: string;
+  reason_sv: string;
+  strategy: string;
+  decision_score: number | null;
+  manual_override: boolean;
+  dry_run: boolean;
+  data_quality: string;
+}
+
+export interface SpaEconomics {
+  period: string;
+  energy_kwh: number;
+  cost_sek: number;
+  baseline_cost_sek: number | null;
+  savings_sek: number | null;
+  solar_share_pct: number | null;
+  battery_share_pct: number | null;
+  grid_share_pct: number | null;
+  data_quality: string;
+}
+
+export interface SpaShadow {
+  shadow_mode_active: boolean;
+  total_actual_cost_sek: number;
+  total_optimized_cost_sek: number;
+  total_potential_saving_sek: number;
+  days: Array<{
+    date_label: string;
+    actual_cost_sek: number;
+    optimized_cost_sek: number;
+    potential_saving_sek: number;
+  }>;
+  integration_degraded?: boolean;
+  integration_degraded_message_sv?: string;
+}
+
+export async function fetchSpaControlConfig(slug: string): Promise<SpaControlConfig> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateSpaControlConfig(slug: string, payload: Partial<SpaControlConfig>): Promise<SpaControlConfig> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSpaPlan(slug: string): Promise<SpaPlan> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/plan`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSpaTimeline(slug: string): Promise<SpaTimeline> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/timeline`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSpaEvents(slug: string, limit = 50): Promise<{ events: SpaEnergyEvent[]; total: number }> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/events?limit=${limit}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSpaEconomics(slug: string, period: string): Promise<SpaEconomics> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/economics?period=${period}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSpaShadow(slug: string): Promise<SpaShadow> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/shadow`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function runSpaCleaningNow(slug: string): Promise<{ success: boolean; message: string; dry_run: boolean }> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/cleaning/run-now`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface EnergyOrchestrationLoad {
+  load_id: string;
+  name: string;
+  load_type: string;
+  priority: number;
+  strategy: string;
+  window_start: string | null;
+  window_end: string | null;
+  expected_energy_kwh: number | null;
+  expected_cost_sek: number | null;
+  expected_energy_source: string | null;
+  reason_sv: string | null;
+  explanation_sv: string | null;
+  dry_run: boolean;
+}
+
+export interface EnergyOrchestration {
+  site_slug: string;
+  loads: EnergyOrchestrationLoad[];
+}
+
+export async function fetchEnergyOrchestration(slug: string): Promise<EnergyOrchestration> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateEnergyOrchestrationPriorities(
+  slug: string,
+  loads: Array<{ load_id: string; priority: number }>,
+): Promise<EnergyOrchestration> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration/priorities`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ loads }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 

@@ -143,16 +143,38 @@ def group_intervals_by_local_period(
 
 
 def spa_cost_split(totals: dict, *, fallback_price_sek_kwh: float) -> dict[str, float]:
+    """Map interval totals to spa UI fields.
+
+    Energy columns are mutually exclusive:
+    - solar_kwh: direct solar + solar via battery
+    - battery_kwh: grid energy discharged from battery
+    - grid_kwh: direct grid import
+
+    Cost columns follow site ekonomi semantics:
+    - grid_cost_sek: actual cash paid (grid direct + grid-via-battery)
+    - solar_value_sek / battery_value_sek: avoided purchase (besparing), not extra cost
+    """
     energy = totals.get("energy_kwh", 0.0) or 0.0
-    avg_price = (totals.get("actual_cost_sek", 0.0) / energy) if energy > 0 else fallback_price_sek_kwh
     solar_direct = totals.get("solar_direct_kwh", 0.0) or 0.0
     solar_battery = totals.get("solar_battery_kwh", 0.0) or 0.0
     grid_battery = totals.get("grid_battery_kwh", 0.0) or 0.0
+    grid_direct = totals.get("grid_direct_kwh", 0.0) or 0.0
+    solar_kwh = solar_direct + solar_battery
+    reference = totals.get("reference_cost_sek")
+    savings = totals.get("savings_sek")
+    ref_price = (
+        reference / energy
+        if reference is not None and energy > 0
+        else fallback_price_sek_kwh
+    )
+    solar_savings = round(solar_kwh * ref_price, 2)
+    total_savings = round(savings, 2) if savings is not None else solar_savings
+    battery_savings = round(max(0.0, total_savings - solar_savings), 2)
     return {
-        "solar_kwh": round(solar_direct, 3),
-        "battery_kwh": round(solar_battery + grid_battery, 3),
-        "grid_kwh": round(totals.get("grid_direct_kwh", 0.0) or 0.0, 3),
+        "solar_kwh": round(solar_kwh, 3),
+        "battery_kwh": round(grid_battery, 3),
+        "grid_kwh": round(grid_direct, 3),
         "grid_cost_sek": round(totals.get("actual_cost_sek", 0.0) or 0.0, 2),
-        "solar_value_sek": round((solar_direct + solar_battery) * avg_price, 2),
-        "battery_value_sek": round((solar_battery + grid_battery) * avg_price, 2),
+        "solar_value_sek": solar_savings,
+        "battery_value_sek": battery_savings,
     }
