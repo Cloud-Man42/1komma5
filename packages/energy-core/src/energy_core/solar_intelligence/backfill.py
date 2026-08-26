@@ -143,6 +143,7 @@ class SolarBackfillService:
                 longitude=site.longitude,
                 from_ts=from_ts,
                 to_ts=to_ts,
+                timezone=site.timezone,
             )
         return []
 
@@ -164,6 +165,7 @@ class SolarBackfillService:
                 longitude=site.longitude,
                 from_ts=from_ts,
                 to_ts=to_ts,
+                timezone=site.timezone,
             )
         return []
 

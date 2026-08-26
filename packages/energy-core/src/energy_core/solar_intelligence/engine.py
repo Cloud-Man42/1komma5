@@ -199,7 +199,7 @@ class SolarIntelligenceEngine:
             logger.warning("STRÅNG failed, using fallback site=%s", site.site_id)
         if self._fallback:
             return await self._fallback.fetch_radiation(
-                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts
+                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts, timezone=site.timezone
             )
         return []
 
@@ -214,7 +214,7 @@ class SolarIntelligenceEngine:
             logger.warning("SNOW failed, using fallback site=%s", site.site_id)
         if self._fallback:
             return await self._fallback.fetch_weather(
-                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts
+                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts, timezone=site.timezone
             )
         return []
 

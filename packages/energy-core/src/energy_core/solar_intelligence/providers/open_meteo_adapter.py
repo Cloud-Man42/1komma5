@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from energy_core.solar_forecast.open_meteo import OpenMeteoWeatherProvider
-from energy_core.solar_intelligence.types import RadiationSample, SampleQuality, WeatherSnapshot
+from energy_core.solar_forecast.types import SolarSiteConfiguration
+from energy_core.solar_intelligence.types import RadiationSample, WeatherSnapshot
 
 
 class OpenMeteoAdapter:
@@ -23,8 +24,15 @@ class OpenMeteoAdapter:
         longitude: float,
         from_ts: datetime,
         to_ts: datetime,
+        timezone: str = "UTC",
     ) -> list[WeatherSnapshot]:
-        forecast = await self._provider.fetch(latitude, longitude, from_ts=from_ts, to_ts=to_ts)
+        forecast = await self._get_weather(
+            latitude=latitude,
+            longitude=longitude,
+            from_ts=from_ts,
+            to_ts=to_ts,
+            timezone=timezone,
+        )
         snapshots: list[WeatherSnapshot] = []
         for p in forecast.points:
             ts = p.timestamp
@@ -48,8 +56,15 @@ class OpenMeteoAdapter:
         longitude: float,
         from_ts: datetime,
         to_ts: datetime,
+        timezone: str = "UTC",
     ) -> list[RadiationSample]:
-        forecast = await self._provider.fetch(latitude, longitude, from_ts=from_ts, to_ts=to_ts)
+        forecast = await self._get_weather(
+            latitude=latitude,
+            longitude=longitude,
+            from_ts=from_ts,
+            to_ts=to_ts,
+            timezone=timezone,
+        )
         samples: list[RadiationSample] = []
         for p in forecast.points:
             ts = p.timestamp
@@ -79,3 +94,25 @@ class OpenMeteoAdapter:
                     )
                 )
         return samples
+
+    async def _get_weather(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        from_ts: datetime,
+        to_ts: datetime,
+        timezone: str,
+    ):
+        site = SolarSiteConfiguration(
+            site_id=0,
+            latitude=latitude,
+            longitude=longitude,
+            installed_peak_power_kw=1.0,
+            timezone=timezone,
+            enabled=True,
+        )
+        now = datetime.now(UTC)
+        if from_ts < now - timedelta(hours=6):
+            return await self._provider.get_historical(site, from_ts, to_ts)
+        return await self._provider.get_forecast(site, from_ts, to_ts)

@@ -20,9 +20,8 @@ async def recompute_physical_baseline_kwh_for_day(
 ) -> tuple[float, float | None]:
     """Return (physical_kwh, radiation_kwh_m2) using archived weather for a local day."""
     day_start, day_end = local_day_bounds(day, site.timezone)
-    forecast = await provider.fetch(
-        site.latitude,
-        site.longitude,
+    forecast = await provider.get_historical(
+        site,
         from_ts=day_start,
         to_ts=day_end + timedelta(hours=1),
     )

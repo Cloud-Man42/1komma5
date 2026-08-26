@@ -37,7 +37,7 @@ class StrangParameterCatalog:
 
     @classmethod
     def default_parameters(cls) -> tuple[int, ...]:
-        return (cls.GLOBAL_IRRADIANCE, cls.DIFFUSE_IRRADIANCE, cls.DIRECT_NORMAL)
+        return (cls.GLOBAL_IRRADIANCE, cls.DIFFUSE_IRRADIANCE)
 
 
 def _parse_strang_timeseries(payload: dict[str, Any], *, parameter_id: int, provider: str) -> list[RadiationSample]:
