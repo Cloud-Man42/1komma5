@@ -6,7 +6,8 @@ describe("solarAttribution", () => {
     expect(smhiAttributionLine()).toContain("SMHI");
   });
 
-  it("has link to SMHI open data", () => {
-    expect(SMHI_ATTRIBUTION.linkUrl).toMatch(/^https:\/\/www\.smhi\.se/);
+  it("has link to SMHI open data portal", () => {
+    expect(SMHI_ATTRIBUTION.linkUrl).toBe("https://opendata.smhi.se/");
+    expect(SMHI_ATTRIBUTION.linkUrl).not.toContain("ladda-ner-meteorologiska");
   });
 });
