@@ -57,7 +57,7 @@ function SiteLayoutInner({ children }: { children: ReactNode }) {
 export default function SiteLayout({ children }: { children: ReactNode }) {
   const params = useParams<{ slug: string }>();
   return (
-    <SiteDataProvider slug={params.slug} refreshSeconds={60}>
+    <SiteDataProvider slug={params.slug} refreshSeconds={30}>
       <SiteLayoutInner>{children}</SiteLayoutInner>
     </SiteDataProvider>
   );

@@ -152,7 +152,7 @@ export function DashboardSidebar({
 
   useEffect(() => {
     let active = true;
-    fetchMarketPrices(slug, 30)
+    fetchMarketPrices(slug, 24)
       .then((data) => {
         if (active) setMarketPrices(data);
       })
@@ -160,7 +160,7 @@ export function DashboardSidebar({
         if (active) setMarketPrices(null);
       });
     const interval = setInterval(() => {
-      fetchMarketPrices(slug, 30)
+      fetchMarketPrices(slug, 24)
         .then((data) => {
           if (active) setMarketPrices(data);
         })

@@ -67,6 +67,23 @@ describe("sidebarElectricityPrice", () => {
     expect(lineColorForOre(180, 22, 187)).toBe("#f87171");
   });
 
+  it("fills missing hours to span 00–23", () => {
+    const model = buildSidebarElectricityPriceModel(
+      {
+        ...samplePrices(),
+        points: [
+          { timestamp: "2026-08-28T14:00:00+02:00", spot_eur_kwh: 0.99, all_in_eur_kwh: 0.99 },
+          { timestamp: "2026-08-28T18:00:00+02:00", spot_eur_kwh: 1.14, all_in_eur_kwh: 1.14 },
+          { timestamp: "2026-08-28T23:00:00+02:00", spot_eur_kwh: 0.65, all_in_eur_kwh: 0.65 },
+        ],
+      },
+      new Date("2026-08-28T15:00:00+02:00"),
+    );
+    expect(model?.points).toHaveLength(24);
+    expect(model?.points[0]?.hour).toBe(0);
+    expect(model?.points[23]?.hour).toBe(23);
+  });
+
   it("buildPriceTrend handles stable day", () => {
     const points = [
       { timestamp: "2026-08-28T09:00:00+02:00", hour: 9, ore: 84, isCurrent: true },

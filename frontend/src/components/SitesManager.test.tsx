@@ -79,7 +79,7 @@ describe("SitesManager", () => {
 
   it("renders sites and solar config panels outside nested forms", async () => {
     render(<SitesManager />);
-    expect(await screen.findByDisplayValue("Åkarp")).toBeTruthy();
+    expect(await screen.findByDisplayValue("Demo Home")).toBeTruthy();
     expect(screen.getByTestId("solar-panel-akarp")).toBeTruthy();
     expect(screen.getByTestId("spa-admin-akarp")).toBeTruthy();
     expect(screen.getByTestId("mercedes-admin-akarp")).toBeTruthy();
@@ -87,12 +87,12 @@ describe("SitesManager", () => {
 
   it("renders one integration panel per site", async () => {
     mockFetchSites.mockResolvedValue([
-      makeSite({ slug: "akarp", name: "Åkarp" }),
+      makeSite({ slug: "akarp", name: "Demo Home" }),
       makeSite({ slug: "summer-house-denmark", name: "Sommarhus" }),
     ]);
     mockFetchEvChargers.mockResolvedValue([]);
     render(<SitesManager />);
-    await screen.findByDisplayValue("Åkarp");
+    await screen.findByDisplayValue("Demo Home");
     expect(screen.getByTestId("spa-admin-akarp")).toBeTruthy();
     expect(screen.getByTestId("spa-admin-summer-house-denmark")).toBeTruthy();
     expect(screen.getAllByTestId(/^spa-admin-/).length).toBe(2);
@@ -101,7 +101,7 @@ describe("SitesManager", () => {
   it("creates a site via button click without form submit", async () => {
     const user = userEvent.setup();
     render(<SitesManager />);
-    await screen.findByDisplayValue("Åkarp");
+    await screen.findByDisplayValue("Demo Home");
 
     const createForm = screen.getByPlaceholderText("min-anlaggning").closest(".site-create-form") as HTMLElement;
     await user.type(screen.getByPlaceholderText("min-anlaggning"), "new-site");

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import signal
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
@@ -33,6 +34,8 @@ from energy_core.seed import seed_sites
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.aggregation.service import EnergyAggregationService
 from energy_core.snapshots.writer import SnapshotWriter
+from energy_core.vehicles.sessions.coordinator import VehicleChargeSessionCoordinator
+from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
 from site_poll_context import SitePollContext
 
 logger = logging.getLogger(__name__)
@@ -121,13 +124,21 @@ class Collector:
         current_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
         price_repo = MarketPriceRepository(session, is_sqlite=self._settings.is_sqlite)
         for site in await site_repo.list_all():
-            if not site.external_system_id or await price_repo.has_price_at(site.id, current_hour):
+            if not site.external_system_id:
+                continue
+            zone = ZoneInfo(site.timezone)
+            now_local = datetime.now(zone)
+            day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end_local = day_start_local + timedelta(days=1)
+            from_time = day_start_local.astimezone(UTC)
+            to_time = day_end_local.astimezone(UTC)
+            if await price_repo.has_price_at(site.id, current_hour):
                 continue
             try:
                 raw = await client.fetch_market_prices(
                     site.external_system_id,
-                    from_iso=current_hour.isoformat().replace("+00:00", "Z"),
-                    to_iso=(current_hour + timedelta(hours=24)).isoformat().replace("+00:00", "Z"),
+                    from_iso=from_time.isoformat().replace("+00:00", "Z"),
+                    to_iso=to_time.isoformat().replace("+00:00", "Z"),
                     resolution="1h",
                 )
                 parsed = parse_market_prices(raw)

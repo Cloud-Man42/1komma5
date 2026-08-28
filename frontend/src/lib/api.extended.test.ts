@@ -217,6 +217,23 @@ describe("system API", () => {
     ).rejects.toThrow();
   });
 
+  it("fetchMarketPrices requests full-day window for intraday queries", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ slug: "akarp", timezone: "Europe/Stockholm", points: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchMarketPrices("akarp", 24);
+    const url = String(fetchMock.mock.calls[0]?.[0] ?? "");
+    expect(url).toContain("/api/sites/akarp/market-prices?");
+    const query = new URL(url, "http://localhost").searchParams;
+    const from = new Date(query.get("from") ?? "");
+    const to = new Date(query.get("to") ?? "");
+    const spanHours = (to.getTime() - from.getTime()) / (60 * 60 * 1000);
+    expect(spanHours).toBeGreaterThan(24);
+    expect(spanHours).toBeLessThan(30);
+  });
+
   it("fetchMarketPrices throws on 503", async () => {
     vi.stubGlobal(
       "fetch",

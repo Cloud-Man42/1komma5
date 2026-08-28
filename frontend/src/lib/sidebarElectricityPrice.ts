@@ -134,35 +134,64 @@ export function buildSidebarElectricityPriceModel(
   }));
 
   mapped.sort((a, b) => a.hour - b.hour);
+  const filled = fillHourlyCurve(mapped);
 
-  const ores = mapped.map((p) => p.ore);
+  const ores = filled.map((p) => p.ore);
   const lowestOre = Math.min(...ores);
   const highestOre = Math.max(...ores);
-  let currentIndex = mapped.findIndex((p) => p.isCurrent);
+  let currentIndex = filled.findIndex((p) => p.isCurrent);
   if (currentIndex < 0) {
-    currentIndex = mapped.reduce(
+    currentIndex = filled.reduce(
       (best, point, idx) =>
         Math.abs(new Date(point.timestamp).getTime() - nowMs) <
-        Math.abs(new Date(mapped[best].timestamp).getTime() - nowMs)
+        Math.abs(new Date(filled[best].timestamp).getTime() - nowMs)
           ? idx
           : best,
       0,
     );
   }
-  const currentOre = mapped[currentIndex]?.ore ?? lowestOre;
+  const currentOre = filled[currentIndex]?.ore ?? lowestOre;
   const yMax = Math.max(200, Math.ceil(highestOre / 50) * 50);
 
   return {
     timezone,
-    points: mapped,
+    points: filled,
     currentOre,
     lowestOre,
     highestOre,
     currentIndex,
     yMax,
-    trend: buildPriceTrend(mapped, currentIndex, timezone),
-    segmentCount: Math.max(0, mapped.length - 1),
+    trend: buildPriceTrend(filled, currentIndex, timezone),
+    segmentCount: Math.max(0, filled.length - 1),
   };
+}
+
+/** Ensure 24 hourly slots (0–23) so the chart spans the full day. */
+export function fillHourlyCurve(points: TodayPricePoint[]): TodayPricePoint[] {
+  if (points.length < 2) return points;
+
+  const byHour = new Map<number, TodayPricePoint>();
+  for (const point of points) {
+    const hour = Math.min(23, Math.max(0, Math.round(point.hour)));
+    byHour.set(hour, { ...point, hour });
+  }
+
+  const filled: TodayPricePoint[] = [];
+  let last = points[0];
+  for (let hour = 0; hour < 24; hour += 1) {
+    const hit = byHour.get(hour);
+    if (hit) {
+      last = hit;
+      filled.push(hit);
+      continue;
+    }
+    filled.push({
+      ...last,
+      hour,
+      isCurrent: false,
+    });
+  }
+  return filled;
 }
 
 export type ChartPriceRow = TodayPricePoint & Record<string, number | null | string | boolean>;

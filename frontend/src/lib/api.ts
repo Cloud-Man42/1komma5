@@ -743,9 +743,18 @@ export async function fetchMarketPrices(
   slug: string,
   hours = 24,
 ): Promise<MarketPricesResponse> {
-  const to = new Date();
-  const from = new Date(to.getTime() - 60 * 60 * 1000);
-  to.setTime(to.getTime() + (hours - 1) * 60 * 60 * 1000);
+  const now = new Date();
+  let from: Date;
+  let to: Date;
+  if (hours > 48) {
+    // Long-range history (e.g. economy dashboard month view).
+    from = new Date(now.getTime() - hours * 60 * 60 * 1000);
+    to = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  } else {
+    // Today's intraday curve needs local midnight through end of day.
+    from = new Date(now.getTime() - 26 * 60 * 60 * 1000);
+    to = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  }
   const params = new URLSearchParams({
     from: from.toISOString(),
     to: to.toISOString(),
