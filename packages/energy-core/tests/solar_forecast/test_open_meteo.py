@@ -22,6 +22,8 @@ def test_parse_minutely_15_response() -> None:
             "precipitation": [0.0, 0.0],
             "weather_code": [0, 1],
             "sunshine_duration": [600.0, 700.0],
+            "wind_speed_10m": [10.8, 18.0],
+            "relative_humidity_2m": [52.0, 55.0],
         }
     }
     site = SolarSiteConfiguration(
@@ -30,6 +32,24 @@ def test_parse_minutely_15_response() -> None:
     forecast = provider._parse_response(site, data, provider="open-meteo")
     assert len(forecast.points) == 2
     assert forecast.points[0].gti_wm2 == 95.0
+    assert forecast.points[0].wind_speed_ms == 3.0
+    assert forecast.points[0].relative_humidity_pct == 52.0
+
+
+def test_wind_and_humidity_default_to_none_when_absent() -> None:
+    provider = OpenMeteoWeatherProvider()
+    data = {
+        "minutely_15": {
+            "time": ["2026-06-15T10:00"],
+            "shortwave_radiation": [100.0],
+        }
+    }
+    site = SolarSiteConfiguration(
+        site_id=1, latitude=55.6, longitude=13.0, installed_peak_power_kw=8.0, enabled=True
+    )
+    forecast = provider._parse_response(site, data, provider="open-meteo")
+    assert forecast.points[0].wind_speed_ms is None
+    assert forecast.points[0].relative_humidity_pct is None
 
 
 def test_missing_time_raises() -> None:

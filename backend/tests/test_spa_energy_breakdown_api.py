@@ -82,6 +82,28 @@ async def test_spa_energy_breakdown_and_cost_split(client):
 
 
 @pytest.mark.asyncio
+async def test_spa_history_24h_period(client):
+    ac, session_factory, _ = client
+    await ac.get("/api/sites/akarp/spa/status")
+    await _seed_spa_intervals(session_factory)
+
+    for period in ("24h", "day"):
+        history = await ac.get(f"/api/sites/akarp/spa/history?period={period}")
+        assert history.status_code == 200
+        body = history.json()
+        assert body["period"] == "24h"
+        assert len(body["points"]) >= 1
+        assert body["points"][0]["power_w"] is not None
+
+
+@pytest.mark.asyncio
+async def test_spa_history_invalid_period(client):
+    ac, _, _ = client
+    res = await ac.get("/api/sites/akarp/spa/history?period=invalid")
+    assert res.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_spa_energy_breakdown_invalid_site(client):
     ac, _, _ = client
     res = await ac.get("/api/sites/missing/spa/energy/breakdown?period=month")

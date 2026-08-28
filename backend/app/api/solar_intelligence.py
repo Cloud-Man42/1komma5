@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.deps import get_app_settings, get_db_session
 from app.schemas import (
+    DmiForecastPointResponse,
+    DmiForecastResponse,
     SolarHourlyForecastResponse,
     SolarHourlyPointResponse,
     SolarIntelligenceForecastResponse,
@@ -15,8 +17,14 @@ from app.schemas import (
     SolarProviderStatusResponse,
     SolarRadiationResponse,
 )
-from energy_core.db.repositories import SiteRepository
-from energy_core.db.solar_forecast_repo import SolarForecastModelProfileRepository, SolarSiteConfigRepository
+from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
+from energy_core.db.solar_forecast_repo import (
+    SolarForecastModelProfileRepository,
+    SolarForecastObservationRepository,
+    SolarForecastRepository,
+    SolarSiteConfigRepository,
+    _to_domain_config,
+)
 from energy_core.db.solar_intelligence_repo import (
     SolarHourlyForecastRepository,
     SolarModelRepository,
@@ -24,6 +32,15 @@ from energy_core.db.solar_intelligence_repo import (
     SolarProviderHealthRepository,
 )
 from energy_core.solar_forecast.calibration import metrics_insufficient
+from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
+from energy_core.solar_forecast.historical import actual_solar_kwh_today_from_readings
+from energy_core.solar_forecast.performance import (
+    build_performance_summary,
+    estimate_raw_so_far_from_totals,
+    performance_days_from_observations,
+    raw_forecast_so_far,
+)
+from energy_core.solar_intelligence.provider_factory import resolve_country_code
 from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +54,14 @@ async def _get_site(session: AsyncSession, slug: str):
     if site is None:
         raise HTTPException(status_code=404, detail="Site not found")
     return site
+
+
+async def _require_solar_enabled(session: AsyncSession, site):
+    config_repo = SolarSiteConfigRepository(session)
+    record = await config_repo.get(site.id, timezone=site.timezone)
+    if record is None or not record.enabled:
+        raise HTTPException(status_code=404, detail="Solar forecast not enabled")
+    return record
 
 
 async def _require_intelligence(session: AsyncSession, site):
@@ -77,13 +102,18 @@ async def get_hourly_forecast(
 async def get_performance(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    settings=Depends(get_app_settings),
 ):
     site = await _get_site(session, slug)
-    await _require_intelligence(session, site)
-    records = await SolarPerformanceDailyRepository(session).list_for_site(site.id, days=90)
-    return SolarPerformanceResponse(
-        site_slug=slug,
-        days=[
+    await _require_solar_enabled(session, site)
+
+    coordinator = SolarForecastCoordinator(settings)
+    await coordinator.evaluate_site_observations(session, site)
+
+    perf_repo = SolarPerformanceDailyRepository(session)
+    records = await perf_repo.list_for_site(site.id, days=90)
+    if records:
+        days = [
             {
                 "date": r.performance_date.isoformat(),
                 "actual_kwh": r.actual_kwh,
@@ -92,7 +122,60 @@ async def get_performance(
                 "anomaly_flag": r.anomaly_flag,
             }
             for r in records
-        ],
+            if r.performance_ratio is not None
+        ]
+    else:
+        observations = await SolarForecastObservationRepository(session).list_for_site(site.id, limit=90)
+        days = performance_days_from_observations(observations)
+
+    now = datetime.now(UTC)
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    from datetime import time
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(site.timezone)
+    day_start = datetime.combine(now.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(UTC)
+    readings = await reading_repo.list_readings(site.id, from_time=day_start, to_time=now, limit=50000)
+    actual_today = actual_solar_kwh_today_from_readings(
+        [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings],
+        timezone=site.timezone,
+        now=now,
+    )
+
+    raw_so_far = None
+    forecast = await SolarForecastRepository(session).get_latest(site.id)
+    if forecast is not None:
+        from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
+
+        day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone, now=now)
+        raw_so_far, _ = raw_forecast_so_far(forecast, timezone=site.timezone, now=now)
+        estimated = estimate_raw_so_far_from_totals(
+            raw_today_kwh=getattr(forecast, "raw_forecast_today_kwh", None),
+            corrected_so_far_kwh=day_metrics.forecast_so_far_kwh,
+            corrected_today_kwh=day_metrics.expected_today_kwh,
+        )
+        if estimated is not None and (raw_so_far is None or raw_so_far < estimated * 0.5):
+            raw_so_far = estimated
+
+    summary = build_performance_summary(
+        days,
+        actual_today_kwh=actual_today,
+        raw_forecast_so_far_kwh=raw_so_far,
+        settings=settings,
+    )
+    await session.commit()
+
+    return SolarPerformanceResponse(
+        site_slug=slug,
+        days=days,
+        headline_ratio=summary["headline_ratio"],
+        today_deviation_pct=summary["today_deviation_pct"],
+        week_avg=summary["week_avg"],
+        month_avg=summary["month_avg"],
+        quarter_avg=summary["quarter_avg"],
+        ytd_avg=summary["ytd_avg"],
+        raw_forecast_so_far_kwh=raw_so_far,
+        actual_today_kwh=round(actual_today, 3),
     )
 
 
@@ -113,9 +196,58 @@ async def get_radiation(
         .order_by(SolarRadiationSampleModel.ts_utc.desc())
         .limit(24)
     )
-    rows = await session.scalars(stmt)
+    rows = list(await session.scalars(stmt))
     samples = [{"ts": r.ts_utc.isoformat(), "parameter": r.parameter, "value_wm2": r.value_wm2} for r in rows]
-    return SolarRadiationResponse(site_slug=slug, provider="smhi-strang", samples=samples)
+    provider = rows[0].provider if rows else None
+    if not provider:
+        domain = _to_domain_config(record)
+        country = resolve_country_code(record.country_code, latitude=domain.latitude, longitude=domain.longitude)
+        provider = "dmi-harmonie" if country == "DK" else "smhi-strang"
+    return SolarRadiationResponse(site_slug=slug, provider=provider, samples=samples)
+
+
+@router.get("/sites/{slug}/solar/dmi/forecast", response_model=DmiForecastResponse)
+async def get_dmi_forecast(
+    slug: str,
+    session: AsyncSession = Depends(get_db_session),
+    settings=Depends(get_app_settings),
+):
+    site = await _get_site(session, slug)
+    record = await _require_solar_enabled(session, site)
+    domain = _to_domain_config(record)
+    country = resolve_country_code(record.country_code, latitude=domain.latitude, longitude=domain.longitude)
+    if country != "DK":
+        raise HTTPException(
+            status_code=422,
+            detail="DMI forecast is only available for Danish sites",
+        )
+
+    now = datetime.now(UTC)
+    to_ts = now + timedelta(hours=settings.solar_forecast_horizon_hours)
+    coord = SolarIntelligenceCoordinator(settings)
+    rows = await coord.fetch_dmi_forecast(
+        latitude=domain.latitude,
+        longitude=domain.longitude,
+        from_ts=now,
+        to_ts=to_ts,
+    )
+    return DmiForecastResponse(
+        site_slug=slug,
+        country_code=country,
+        points=[
+            DmiForecastPointResponse(
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                ghi_wm2=row.get("ghi_wm2"),
+                dhi_wm2=row.get("dhi_wm2"),
+                temperature_c=row.get("temperature_c"),
+                cloud_cover_pct=row.get("cloud_cover_pct"),
+                precipitation_mm=row.get("precipitation_mm"),
+                humidity_pct=row.get("humidity_pct"),
+                wind_speed_ms=row.get("wind_speed_ms"),
+            )
+            for row in rows
+        ],
+    )
 
 
 @router.get("/sites/{slug}/solar/model", response_model=SolarModelResponse)

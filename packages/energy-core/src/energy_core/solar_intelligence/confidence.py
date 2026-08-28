@@ -8,6 +8,10 @@ from energy_core.solar_intelligence.types import RadiationSourceConfidence
 def radiation_confidence_for_location(*, latitude: float, longitude: float, provider: str) -> RadiationSourceConfidence:
     if provider == "open-meteo":
         return RadiationSourceConfidence.LOW
+    if provider == "dmi-harmonie":
+        if 54.4 <= latitude <= 57.8 and 7.5 <= longitude <= 15.5:
+            return RadiationSourceConfidence.HIGH
+        return RadiationSourceConfidence.MEDIUM
     if provider != "smhi-strang":
         return RadiationSourceConfidence.UNKNOWN
 

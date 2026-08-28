@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from energy_core.db.spa_control_repo import SpaControlConfigRecord
 from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
 from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
+from energy_core.spa_energy.filter_policy import is_spa_filter_self_managed
 from energy_core.spa_energy.runtime import DEGRADED_MESSAGE_SV, SpaActuatorRuntime, SpaActuatorState
 
 
@@ -37,7 +38,7 @@ class SpaPlannerWatchdog:
     ) -> WatchdogDecision:
         if now.tzinfo is None:
             now = now.replace(tzinfo=UTC)
-        if not control.smart_control_enabled or dry_run:
+        if not control.smart_control_enabled or dry_run or is_spa_filter_self_managed(control):
             return WatchdogDecision("none", "watchdog_inactive", "vakt_inaktiv")
         if runtime.last_planner_run_at is None:
             return WatchdogDecision("none", "watchdog_no_baseline", "vakt_ingen_baslinje")

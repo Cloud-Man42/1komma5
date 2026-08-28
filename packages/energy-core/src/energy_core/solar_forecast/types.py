@@ -64,6 +64,7 @@ class SolarSiteConfiguration:
     azimuth_estimated: bool = False
     timezone: str = "UTC"
     solar_intelligence_enabled: bool = False
+    country_code: str | None = None
 
     def is_complete(self) -> bool:
         return (
@@ -86,6 +87,8 @@ class WeatherForecastPoint:
     precipitation_mm: float | None = None
     weather_code: int | None = None
     sunshine_duration_s: float | None = None
+    wind_speed_ms: float | None = None
+    relative_humidity_pct: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -1199,3 +1199,37 @@ class AppleDeviceModel(Base):
     )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SiteLiveSnapshotModel(Base):
+    __tablename__ = "site_live_snapshots"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    freshness: Mapped[str] = mapped_column(String(16), nullable=False, default="DEGRADED")
+    source_status_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class EnergyHourlyModel(Base):
+    __tablename__ = "energy_hourly"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    solar_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    consumption_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    import_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    export_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class EnergyDailyModel(Base):
+    __tablename__ = "energy_daily"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    solar_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    consumption_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    import_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    export_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    import_cost_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
+    export_revenue_sek: Mapped[float | None] = mapped_column(Float, nullable=True)

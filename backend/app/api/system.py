@@ -207,3 +207,15 @@ async def get_vehicle_readiness(session: AsyncSession = Depends(get_db_session))
         connected_sites=connected,
         degraded_sites=degraded,
     )
+
+
+@router.get("/system/performance")
+async def get_performance_metrics() -> dict:
+    from energy_core.performance.provider_metrics import get_provider_metrics_store
+    from energy_core.performance.store import get_performance_store
+
+    store = get_performance_store()
+    return {
+        **store.summary(),
+        "providers": get_provider_metrics_store().summary(),
+    }

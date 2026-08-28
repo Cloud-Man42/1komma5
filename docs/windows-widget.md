@@ -18,7 +18,7 @@ Uses `/api/v1/widget` with Bearer `emic_…` tokens. Register devices at `/confi
 
 ## Taskbar-chip
 
-- Kompakt text: `Åkarp  Sol 5,4 kW  Bat 74 %`
+- Kompakt text: `Demo Home  Sol 5,4 kW  Bat 74 %`
 - **Dra** horisontellt längs taskbar
 - **Klick** → detaljerad flyout
 - **Högerklick** → meny

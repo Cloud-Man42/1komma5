@@ -85,6 +85,9 @@ from energy_core.solar_forecast.open_meteo import (
     WeatherProviderError,
 
 )
+from energy_core.solar_forecast.dmi_weather import DmiWeatherForecastProvider
+from energy_core.solar_forecast.routing_weather import RoutingWeatherForecastProvider
+from energy_core.solar_intelligence.providers.dmi_harmonie import DmiHarmonieClient
 
 from energy_core.solar_forecast.physical import baseline_energy_kwh, baseline_power_w
 
@@ -110,7 +113,7 @@ class SolarForecastCoordinator:
 
         self._engine = SolarForecastEngine(horizon_hours=self._settings.solar_forecast_horizon_hours)
 
-        self._provider = OpenMeteoWeatherProvider(
+        open_meteo = OpenMeteoWeatherProvider(
 
             base_url=self._settings.open_meteo_base_url,
 
@@ -120,6 +123,15 @@ class SolarForecastCoordinator:
 
             timeout_seconds=self._settings.open_meteo_timeout_seconds,
 
+        )
+        dmi_client = DmiHarmonieClient(
+            base_url=self._settings.dmi_edr_base_url,
+            collection=self._settings.dmi_harmonie_collection,
+            timeout_seconds=self._settings.dmi_timeout_seconds,
+        )
+        self._provider = RoutingWeatherForecastProvider(
+            open_meteo=open_meteo,
+            dmi=DmiWeatherForecastProvider(dmi_client),
         )
 
         self._last_refresh: dict[int, datetime] = {}
@@ -168,6 +180,26 @@ class SolarForecastCoordinator:
     async def refresh_site_now(self, session: AsyncSession, site) -> bool:
 
         return await self._refresh_site_if_due(session, site, now=datetime.now(UTC), force=True)
+
+
+
+    async def resolve_weather(
+        self,
+        session: AsyncSession,
+        site,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[WeatherForecast, str, float] | None:
+        """Weather for a site from cache or provider. None when solar is unconfigured."""
+        now = now or datetime.now(UTC)
+        config_repo = SolarSiteConfigRepository(session)
+        record = await config_repo.get(site.id, timezone=site.timezone)
+        if record is None:
+            return None
+        domain = _to_domain_config(record)
+        if not domain.is_complete():
+            return None
+        return await self._fetch_weather(session, domain, now=now)
 
 
 
@@ -558,6 +590,22 @@ class SolarForecastCoordinator:
             )
 
             await obs_repo.upsert(observation)
+
+            from energy_core.solar_forecast.performance import forecast_expected_kwh_for_comparison
+
+            expected_kwh = forecast_expected_kwh_for_comparison(observation)
+            weather_normalized_kwh = observation.forecast_kwh_raw or physical_kwh
+            if expected_kwh and expected_kwh >= 0.5 and actual_kwh > 0:
+                from energy_core.solar_intelligence.anomaly import compute_performance_daily
+                from energy_core.db.solar_intelligence_repo import SolarPerformanceDailyRepository
+
+                perf = compute_performance_daily(
+                    performance_date=day,
+                    actual_kwh=actual_kwh,
+                    expected_kwh=expected_kwh,
+                    weather_normalized_kwh=weather_normalized_kwh,
+                )
+                await SolarPerformanceDailyRepository(session).upsert(site.id, perf)
 
             if not observation.training_eligible and observation.exclusion_reason:
 

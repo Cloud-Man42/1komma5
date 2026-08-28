@@ -30,6 +30,10 @@ from app.schemas import (
 
     SolarSiteConfigUpdate,
 
+    SolarWeatherHourResponse,
+
+    SolarWeatherResponse,
+
 )
 
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
@@ -56,9 +60,23 @@ from energy_core.solar_forecast.historical import count_production_days
 
 from energy_core.solar_forecast.types import MODEL_VERSION, ModelState, confidence_label_from_score
 
+from energy_core.solar_forecast.weather_conditions import (
+
+    build_current_weather,
+
+    describe_weather_code,
+
+    hourly_weather_series,
+
+)
+
+from energy_core.solar_intelligence.geometry import SolarGeometryService
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from zoneinfo import ZoneInfo
 
 
 
@@ -202,12 +220,13 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 
 async def _forecast_response(session, site, forecast, settings) -> SolarForecastResponse:
 
-    from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
+    from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics, compute_tomorrow_kwh
     from energy_core.solar_forecast.historical import actual_solar_kwh_today_from_readings
 
     now = datetime.now(UTC)
     day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone, now=now)
     forecast_so_far_kwh = day_metrics.forecast_so_far_kwh
+    expected_tomorrow_kwh = compute_tomorrow_kwh(forecast, timezone=site.timezone, now=now)
 
     from zoneinfo import ZoneInfo
     from datetime import time
@@ -266,7 +285,7 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
 
         remaining_today_kwh=day_metrics.remaining_today_kwh,
 
-        expected_tomorrow_kwh=forecast.expected_tomorrow_kwh,
+        expected_tomorrow_kwh=expected_tomorrow_kwh,
 
         peak_power_w=day_metrics.peak_power_w,
 
@@ -288,13 +307,15 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
 
         raw_forecast_today_kwh=getattr(forecast, "raw_forecast_today_kwh", forecast.expected_today_kwh),
 
-        raw_forecast_tomorrow_kwh=getattr(forecast, "raw_forecast_tomorrow_kwh", forecast.expected_tomorrow_kwh),
+        raw_forecast_so_far_kwh=day_metrics.raw_forecast_so_far_kwh,
+
+        raw_forecast_tomorrow_kwh=getattr(forecast, "raw_forecast_tomorrow_kwh", expected_tomorrow_kwh),
 
         corrected_forecast_today_kwh=getattr(forecast, "corrected_forecast_today_kwh", forecast.expected_today_kwh),
 
         corrected_forecast_tomorrow_kwh=getattr(
 
-            forecast, "corrected_forecast_tomorrow_kwh", forecast.expected_tomorrow_kwh
+            forecast, "corrected_forecast_tomorrow_kwh", expected_tomorrow_kwh
 
         ),
 
@@ -562,8 +583,6 @@ async def get_solar_forecast(
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
-    await _ensure_solar_observations_evaluated(session, site, settings)
-
     forecast = await _resolve_forecast(session, site, settings)
 
     return await _forecast_response(session, site, forecast, settings)
@@ -633,12 +652,6 @@ async def get_solar_accuracy(
     if site is None:
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-
-
-
-    await _ensure_solar_observations_evaluated(session, site, settings)
-
-
 
     profile_repo = SolarForecastModelProfileRepository(session)
 
@@ -857,5 +870,114 @@ async def get_solar_energy_budget(
         consumption_source=budget.consumption_source,
 
     )
+
+
+@router.get("/sites/{slug}/solar/weather", response_model=SolarWeatherResponse)
+async def get_solar_weather(
+    slug: str,
+    session: AsyncSession = Depends(get_db_session),
+    settings=Depends(get_app_settings),
+) -> SolarWeatherResponse:
+    site = await SiteRepository(session).get_by_slug(slug)
+    if site is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+
+    config_repo = SolarSiteConfigRepository(session)
+    config = await config_repo.get(site.id, timezone=site.timezone)
+    if config is None or not config.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Väderprognos kräver att solprognosen är aktiverad för anläggningen.",
+        )
+    if config.latitude is None or config.longitude is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ange latitud och longitud för anläggningen för att visa väderprognos.",
+        )
+
+    now = datetime.now(UTC)
+    coordinator = SolarForecastCoordinator(settings)
+    resolved = await coordinator.resolve_weather(session, site, now=now)
+    if resolved is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Väderdata kunde inte hämtas just nu.",
+        )
+    await session.commit()
+
+    weather, source, cache_age = resolved
+    current = build_current_weather(weather, now=now)
+    hourly = hourly_weather_series(weather, now=now, hours=24)
+
+    forecast_by_hour: dict[datetime, float] = {}
+    try:
+        forecast = await _resolve_forecast(session, site, settings)
+    except HTTPException:
+        forecast = None
+    if forecast is not None:
+        for point in forecast.points:
+            hour = point.timestamp.replace(minute=0, second=0, microsecond=0)
+            forecast_by_hour.setdefault(hour, point.corrected_power_w)
+
+    geometry = SolarGeometryService(
+        latitude=config.latitude,
+        longitude=config.longitude,
+        timezone=site.timezone,
+    )
+    sunrise, sunset = geometry.sunrise_sunset(now.astimezone(ZoneInfo(site.timezone)).date())
+
+    return SolarWeatherResponse(
+        site_slug=slug,
+        provider=weather.provider,
+        source=source,
+        fetched_at=weather.fetched_at,
+        cache_age_minutes=round(cache_age, 1),
+        sunrise=sunrise,
+        sunset=sunset,
+        current=_weather_hour_response(current) if current else None,
+        solar_impact_sv=current.solar_impact_sv if current else "",
+        hours=[
+            _weather_point_response(point, forecast_by_hour.get(point.timestamp.replace(minute=0, second=0, microsecond=0)))
+            for point in hourly
+        ],
+    )
+
+
+def _weather_hour_response(current) -> SolarWeatherHourResponse:
+    return SolarWeatherHourResponse(
+        timestamp=current.timestamp,
+        temperature_c=current.temperature_c,
+        cloud_cover_pct=current.cloud_cover_pct,
+        wind_speed_ms=current.wind_speed_ms,
+        relative_humidity_pct=current.relative_humidity_pct,
+        precipitation_mm=current.precipitation_mm,
+        ghi_wm2=current.ghi_wm2,
+        weather_code=current.weather_code,
+        condition_sv=current.condition_sv,
+        condition_icon=current.condition_icon,
+    )
+
+
+def _weather_point_response(point, forecast_power_w: float | None) -> SolarWeatherHourResponse:
+    label, icon = describe_weather_code(point.weather_code, point.cloud_cover_pct)
+    return SolarWeatherHourResponse(
+        timestamp=point.timestamp,
+        temperature_c=_round_or_none(point.temperature_c, 1),
+        cloud_cover_pct=_round_or_none(point.cloud_cover_pct, 0),
+        wind_speed_ms=_round_or_none(point.wind_speed_ms, 1),
+        relative_humidity_pct=_round_or_none(point.relative_humidity_pct, 0),
+        precipitation_mm=_round_or_none(point.precipitation_mm, 1),
+        ghi_wm2=_round_or_none(point.ghi_wm2, 0),
+        weather_code=point.weather_code,
+        condition_sv=label,
+        condition_icon=icon,
+        forecast_power_w=_round_or_none(forecast_power_w, 0),
+    )
+
+
+def _round_or_none(value: float | None, digits: int) -> float | None:
+    if value is None:
+        return None
+    return round(value, digits) if digits > 0 else float(round(value))
 
 

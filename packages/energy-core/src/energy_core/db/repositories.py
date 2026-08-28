@@ -5,7 +5,7 @@ from itertools import pairwise
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,7 @@ PeakPeriod = Literal["day", "month", "year"]
 class PeakReading:
     period_start: str
     solar_production_w: float
+    consumption_w: float
     battery_charge_w: float
     battery_discharge_w: float
 
@@ -106,6 +107,32 @@ def _bucket_readings_in_python(
     buckets: dict[datetime, list[ReadingRecord]] = defaultdict(list)
     for reading in readings:
         buckets[_floor_bucket(reading.recorded_at, bucket_minutes)].append(reading)
+
+    result: list[AggregatedReading] = []
+    for bucket_start in sorted(buckets):
+        group = buckets[bucket_start]
+        count = len(group)
+        result.append(
+            AggregatedReading(
+                bucket_start=bucket_start,
+                solar_production_w=sum(r.solar_production_w for r in group) / count,
+                consumption_w=sum(r.consumption_w for r in group) / count,
+                grid_import_w=sum(r.grid_import_w for r in group) / count,
+                grid_export_w=sum(r.grid_export_w for r in group) / count,
+                battery_soc_pct=sum(r.battery_soc_pct for r in group) / count,
+                battery_power_w=sum(r.battery_power_w for r in group) / count,
+            )
+        )
+    return result
+
+
+def _bucket_aggregated_in_python(
+    readings: list[AggregatedReading],
+    bucket_minutes: int,
+) -> list[AggregatedReading]:
+    buckets: dict[datetime, list[AggregatedReading]] = defaultdict(list)
+    for reading in readings:
+        buckets[_floor_bucket(reading.bucket_start, bucket_minutes)].append(reading)
 
     result: list[AggregatedReading] = []
     for bucket_start in sorted(buckets):
@@ -389,9 +416,10 @@ class HistoricalEnergyRepository:
 
 
 class EnergyReadingRepository:
-    def __init__(self, session: AsyncSession, is_sqlite: bool) -> None:
+    def __init__(self, session: AsyncSession, is_sqlite: bool, *, enable_timescaledb: bool = False) -> None:
         self._session = session
         self._is_sqlite = is_sqlite
+        self._enable_timescaledb = enable_timescaledb
 
     async def upsert_reading(self, site_id: int, reading: NormalizedEnergyReading) -> None:
         values = {
@@ -494,10 +522,17 @@ class EnergyReadingRepository:
         from_time: datetime | None = None,
         to_time: datetime | None = None,
     ) -> list[AggregatedReading]:
-        """Time-bucket aggregation. Uses SQL on PostgreSQL, Python bucketing on SQLite."""
+        """Time-bucket aggregation. Uses Timescale CAGGs when enabled, else SQL bucketing."""
         if self._is_sqlite:
             readings = await self.list_readings(site_id, from_time, to_time, limit=10000)
             return _bucket_readings_in_python(readings, bucket_minutes)
+
+        if self._enable_timescaledb:
+            cagg_rows = await self._list_aggregated_cagg(site_id, bucket_minutes, from_time, to_time)
+            if cagg_rows:
+                if bucket_minutes in {5, 60}:
+                    return cagg_rows
+                return _bucket_aggregated_in_python(cagg_rows, bucket_minutes)
 
         if bucket_minutes >= 60 and bucket_minutes % 60 == 0:
             bucket_expr = func.date_trunc("hour", EnergyReadingModel.recorded_at)
@@ -536,6 +571,51 @@ class EnergyReadingRepository:
             for row in rows
         ]
 
+    async def _list_aggregated_cagg(
+        self,
+        site_id: int,
+        bucket_minutes: int,
+        from_time: datetime | None,
+        to_time: datetime | None,
+    ) -> list[AggregatedReading]:
+        view = "energy_readings_1hour" if bucket_minutes >= 60 else "energy_readings_5min"
+        clauses = ["site_id = :site_id"]
+        params: dict[str, object] = {"site_id": site_id}
+        if from_time is not None:
+            clauses.append("bucket >= :from_time")
+            params["from_time"] = from_time
+        if to_time is not None:
+            clauses.append("bucket <= :to_time")
+            params["to_time"] = to_time
+        sql = f"""
+            SELECT bucket AS bucket_start,
+                   solar_production_w,
+                   consumption_w,
+                   grid_import_w,
+                   grid_export_w,
+                   battery_soc_pct,
+                   battery_power_w
+            FROM {view}
+            WHERE {' AND '.join(clauses)}
+            ORDER BY bucket
+        """
+        try:
+            rows = (await self._session.execute(text(sql), params)).all()
+        except Exception:
+            return []
+        return [
+            AggregatedReading(
+                bucket_start=row.bucket_start,
+                solar_production_w=float(row.solar_production_w or 0),
+                consumption_w=float(row.consumption_w or 0),
+                grid_import_w=float(row.grid_import_w or 0),
+                grid_export_w=float(row.grid_export_w or 0),
+                battery_soc_pct=float(row.battery_soc_pct or 0),
+                battery_power_w=float(row.battery_power_w or 0),
+            )
+            for row in rows
+        ]
+
     async def list_peaks(
         self,
         site_id: int,
@@ -549,6 +629,7 @@ class EnergyReadingRepository:
             stmt = select(
                 EnergyReadingModel.recorded_at,
                 EnergyReadingModel.solar_production_w,
+                EnergyReadingModel.consumption_w,
                 EnergyReadingModel.battery_power_w,
             ).where(EnergyReadingModel.site_id == site_id)
             if from_time is not None:
@@ -558,7 +639,7 @@ class EnergyReadingRepository:
             stmt = stmt.order_by(EnergyReadingModel.recorded_at)
             rows = (await self._session.execute(stmt)).all()
             zone = ZoneInfo(timezone)
-            peaks: dict[str, tuple[float, float, float]] = {}
+            peaks: dict[str, tuple[float, float, float, float]] = {}
             for row in rows:
                 recorded_at = row.recorded_at
                 if recorded_at.tzinfo is None:
@@ -570,19 +651,21 @@ class EnergyReadingRepository:
                     key = local_time.strftime("%Y-%m")
                 else:
                     key = local_time.strftime("%Y")
-                solar, charge, discharge = peaks.get(key, (0.0, 0.0, 0.0))
+                solar, consumption, charge, discharge = peaks.get(key, (0.0, 0.0, 0.0, 0.0))
                 battery_power = float(row.battery_power_w or 0.0)
                 peaks[key] = (
                     max(solar, float(row.solar_production_w or 0.0)),
-                    max(charge, battery_power),
-                    max(discharge, -battery_power),
+                    max(consumption, float(row.consumption_w or 0.0)),
+                    max(charge, battery_power if battery_power > 0 else 0.0),
+                    max(discharge, -battery_power if battery_power < 0 else 0.0),
                 )
             return [
                 PeakReading(
                     period_start=key,
                     solar_production_w=values[0],
-                    battery_charge_w=values[1],
-                    battery_discharge_w=values[2],
+                    consumption_w=values[1],
+                    battery_charge_w=values[2],
+                    battery_discharge_w=values[3],
                 )
                 for key, values in sorted(peaks.items())
             ]
@@ -593,6 +676,7 @@ class EnergyReadingRepository:
             select(
                 bucket_expr.label("period_start"),
                 func.max(EnergyReadingModel.solar_production_w).label("solar_production_w"),
+                func.max(EnergyReadingModel.consumption_w).label("consumption_w"),
                 func.max(EnergyReadingModel.battery_power_w).label("battery_charge_w"),
                 func.min(EnergyReadingModel.battery_power_w).label("battery_discharge_w"),
             )
@@ -610,6 +694,7 @@ class EnergyReadingRepository:
             PeakReading(
                 period_start=row.period_start.strftime(period_format),
                 solar_production_w=max(0.0, float(row.solar_production_w or 0.0)),
+                consumption_w=max(0.0, float(row.consumption_w or 0.0)),
                 battery_charge_w=max(0.0, float(row.battery_charge_w or 0.0)),
                 battery_discharge_w=max(0.0, -float(row.battery_discharge_w or 0.0)),
             )

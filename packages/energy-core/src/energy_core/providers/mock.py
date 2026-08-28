@@ -11,7 +11,7 @@ from energy_core.domain import RawEnergyReading, SiteSnapshot
 MOCK_SITES: tuple[SiteSnapshot, ...] = (
     SiteSnapshot(
         slug="akarp",
-        name="Åkarp",
+        name="Demo Home",
         timezone="Europe/Stockholm",
         external_system_id=None,
     ),

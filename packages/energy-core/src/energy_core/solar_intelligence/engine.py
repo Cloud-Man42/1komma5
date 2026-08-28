@@ -54,7 +54,7 @@ class SolarIntelligenceEngine:
     ) -> IntelligenceForecast:
         now = now or datetime.now(UTC)
         status = ForecastStatus.HEALTHY
-        weather_source = "smhi-strang"
+        weather_source = getattr(self._radiation, "provider_name", "unknown")
 
         try:
             to_ts = now + timedelta(hours=self._horizon_hours)
@@ -95,7 +95,7 @@ class SolarIntelligenceEngine:
         rad_conf = radiation_confidence_for_location(
             latitude=site.latitude,
             longitude=site.longitude,
-            provider=weather_source if weather_source != "open-meteo" else "open-meteo",
+            provider=getattr(self._radiation, "provider_name", "unknown"),
         )
 
         hourly_points: list[HourlyForecastPoint] = []

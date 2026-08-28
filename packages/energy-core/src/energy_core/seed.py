@@ -11,25 +11,25 @@ from energy_core.db.repositories import (
 )
 from energy_core.providers.mock import MOCK_SITES
 
-AKARP_2025_IMPORT_KWH = [
-    2600.0,
-    2700.0,
-    2300.0,
+DEMO_2025_IMPORT_KWH = [
+    2000.0,
+    2100.0,
+    1900.0,
     1800.0,
     1700.0,
-    1400.0,
-    800.0,
+    1500.0,
+    1200.0,
     1600.0,
     1800.0,
     1900.0,
-    2200.0,
-    2160.1,
+    2100.0,
+    2000.0,
 ]
-AKARP_2025_IMPORT_COST_SEK = 21580.38
+DEMO_2025_IMPORT_COST_SEK = 18000.0
 
 
 async def seed_sites(session: AsyncSession) -> None:
-    """Seed default sites and the supplied Åkarp historical import baseline."""
+    """Seed default sites and a demo historical import baseline."""
     count = await session.scalar(select(func.count()).select_from(SiteModel))
     repo = SiteRepository(session)
     if not count:
@@ -49,14 +49,14 @@ async def seed_sites(session: AsyncSession) -> None:
             is_sqlite=session.bind is not None and session.bind.dialect.name == "sqlite",
         )
         if not await historical_repo.list_for_site(akarp.id):
-            total_kwh = sum(AKARP_2025_IMPORT_KWH)
+            total_kwh = sum(DEMO_2025_IMPORT_KWH)
             allocated_cost = 0.0
             months: list[HistoricalMonthlyEnergy] = []
-            for month, imported_kwh in enumerate(AKARP_2025_IMPORT_KWH, start=1):
+            for month, imported_kwh in enumerate(DEMO_2025_IMPORT_KWH, start=1):
                 imported_cost = (
-                    round(AKARP_2025_IMPORT_COST_SEK - allocated_cost, 2)
+                    round(DEMO_2025_IMPORT_COST_SEK - allocated_cost, 2)
                     if month == 12
-                    else round(AKARP_2025_IMPORT_COST_SEK * imported_kwh / total_kwh, 2)
+                    else round(DEMO_2025_IMPORT_COST_SEK * imported_kwh / total_kwh, 2)
                 )
                 allocated_cost += imported_cost
                 months.append(
@@ -65,7 +65,7 @@ async def seed_sites(session: AsyncSession) -> None:
                         month=month,
                         imported_kwh=imported_kwh,
                         imported_cost_sek=imported_cost,
-                        source="Tibber Historik 2025 (bild)",
+                        source="Demo import baseline 2025",
                         estimated=True,
                     )
                 )

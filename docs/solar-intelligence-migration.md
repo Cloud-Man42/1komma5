@@ -54,7 +54,7 @@ else:
 | 2026-08-23 | 18.0 | 6.9 | 16.5 | 17.9 |
 | 2026-08-24 | 20.5 | 7.4 | 17.9 | 20.0 |
 
-*Values from backfill + Ridge after enabling on Åkarp; run backfill and train to reproduce live numbers.*
+*Example values from backfill + Ridge on a demo site; run backfill and train to reproduce.*
 
 ## Enabling on a site
 

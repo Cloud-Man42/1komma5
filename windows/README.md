@@ -25,7 +25,7 @@ Or use the helper script from repo root:
 
 On first launch, enter:
 
-1. **Server-URL** — e.g. `http://192.168.50.54` or your HTTPS domain
+1. **Server-URL** — e.g. `http://localhost:8000` or your HTTPS domain
 2. **Device-token** — from admin UI (shown once)
 3. **Standardplats** — `akarp` or `summer-house-denmark`
 

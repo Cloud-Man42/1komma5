@@ -64,10 +64,10 @@ async def test_update_site_success(client):
     ac, _, _ = client
     res = await ac.put(
         "/api/sites/akarp",
-        json={"name": "Åkarp Updated", "main_fuse_a": 25},
+        json={"name": "Demo Home Updated", "main_fuse_a": 25},
     )
     assert res.status_code == 200
-    assert res.json()["name"] == "Åkarp Updated"
+    assert res.json()["name"] == "Demo Home Updated"
     assert res.json()["main_fuse_a"] == 25
 
 
@@ -117,6 +117,7 @@ async def test_site_peaks_returns_daily_power_maxima(client):
         {
             "period_start": "2026-08-18",
             "solar_production_w": 7800.0,
+            "consumption_w": 1000.0,
             "battery_charge_w": 1200.0,
             "battery_discharge_w": 3100.0,
         }
@@ -218,11 +219,11 @@ async def test_site_forecast_projects_next_year_from_history(client):
     assert len(body["months"]) == 12
     assert body["actual"]["solar_self_consumed_kwh"] == 0
     assert body["forecast"]["solar_self_consumed_kwh"] > 0
-    assert body["forecast"]["imported_kwh"] == pytest.approx(22960.1, abs=0.01)
+    assert body["forecast"]["imported_kwh"] == pytest.approx(21600.0, abs=0.01)
     assert body["import_baseline_year"] == 2025
-    assert body["import_baseline_source"] == "Tibber Historik 2025 (bild)"
+    assert body["import_baseline_source"] == "Demo import baseline 2025"
     assert body["import_baseline_estimated"] is True
-    assert body["import_baseline_kwh"] == 22960.1
+    assert body["import_baseline_kwh"] == 21600.0
     assert body["uncertainty_pct"] == 45
 
 
@@ -240,9 +241,9 @@ async def test_site_forecast_validates_year_and_site(client):
 @pytest.mark.asyncio
 async def test_historical_monthly_energy_calibrates_import_forecast(client):
     ac, _, _ = client
-    monthly_kwh = [2600, 2700, 2300, 1800, 1700, 1400, 800, 1600, 1800, 1900, 2200, 2160.1]
+    monthly_kwh = [2000, 2100, 1900, 1800, 1700, 1500, 1200, 1600, 1800, 1900, 2100, 2000]
     payload = {
-        "source": "Tibber Historik 2025",
+        "source": "Demo import baseline 2025",
         "estimated": True,
         "months": [
             {"month": month, "imported_kwh": value}
@@ -255,14 +256,14 @@ async def test_historical_monthly_energy_calibrates_import_forecast(client):
     forecast = await ac.get("/api/sites/akarp/forecast?year=2027")
 
     assert saved.status_code == 200
-    assert saved.json()["total_imported_kwh"] == 22960.1
+    assert saved.json()["total_imported_kwh"] == 21600.0
     assert fetched.status_code == 200
     assert fetched.json()["estimated"] is True
     assert forecast.status_code == 200
     assert forecast.json()["import_baseline_year"] == 2025
     assert forecast.json()["import_baseline_estimated"] is True
-    assert forecast.json()["import_baseline_kwh"] == 22960.1
-    assert forecast.json()["forecast"]["imported_kwh"] == pytest.approx(22960.1, abs=0.01)
+    assert forecast.json()["import_baseline_kwh"] == 21600.0
+    assert forecast.json()["forecast"]["imported_kwh"] == pytest.approx(21600.0, abs=0.01)
 
 
 @pytest.mark.asyncio

@@ -32,7 +32,7 @@ function forecastResponse(year: number) {
     confidence: "low" as const,
     uncertainty_pct: 35,
     import_baseline_year: 2025,
-    import_baseline_source: "Tibber Historik 2025",
+    import_baseline_source: "Demo import baseline 2025",
     import_baseline_estimated: true,
     import_baseline_kwh: 1000,
     fallback_purchase_price_sek_kwh: 2,
@@ -64,7 +64,7 @@ describe("YearForecastView", () => {
     expect(screen.getByText("±35%")).toBeTruthy();
     expect(screen.getByText("30 dagar mätdata")).toBeTruthy();
     expect(screen.getByText("Köpt el: 2025 (uppskattad månadsfördelning)")).toBeTruthy();
-    expect(screen.getByText(/Tibber Historik 2025/)).toBeTruthy();
+    expect(screen.getByText(/Demo import baseline 2025/)).toBeTruthy();
     expect(screen.getByText("12%")).toBeTruthy();
     expect(screen.getByText("Sol: 100 kWh")).toBeTruthy();
     expect(screen.getByText("Batteri: 20 kWh")).toBeTruthy();

@@ -6,12 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.api import apple_devices, chargers_catalog, dashboard, energy_orchestration, ev_chargers, ev_sessions, heartbeat_bridge, prices, readings, semp, sites, solar_forecast, solar_intelligence, spa, system, vehicles, widget
+from app.api import apple_devices, chargers_catalog, dashboard, energy_orchestration, ev_chargers, ev_sessions, heartbeat_bridge, prices, readings, semp, sites, snapshot, solar_forecast, solar_intelligence, spa, system, vehicles, widget
 from app.deps import set_session_factory
 from app.widget_service import configure_snapshot_cache
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
 from energy_core.config import Settings, get_settings
 from energy_core.db.session import create_engine, create_session_factory
+from energy_core.performance.middleware import PerformanceMiddleware
+from energy_core.performance.sql_tracking import install_sql_tracking
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.session_factory = session_factory
     set_session_factory(session_factory, settings)
     configure_snapshot_cache(settings)
+    install_sql_tracking(engine)
     yield
     await engine.dispose()
 
@@ -38,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="EMIC API", description="Energy Monitoring In a Cloud", version="0.1.0", lifespan=lifespan)
     app.state.settings = resolved_settings
 
+    app.add_middleware(PerformanceMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -51,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok", "environment": resolved_settings.app_env.value}
 
     app.include_router(sites.router, prefix="/api")
+    app.include_router(snapshot.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(readings.router, prefix="/api")
     app.include_router(prices.router, prefix="/api")

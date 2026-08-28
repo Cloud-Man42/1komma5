@@ -109,7 +109,7 @@ export function AppleDevicesAdminPanel() {
         <label className="form-field">
           <span>Standardplats</span>
           <select value={defaultSiteSlug} onChange={(e) => setDefaultSiteSlug(e.target.value)}>
-            <option value="akarp">Åkarp</option>
+            <option value="akarp">Demo Home</option>
             <option value="summer-house-denmark">Danmark</option>
             <option value="">Ingen</option>
           </select>

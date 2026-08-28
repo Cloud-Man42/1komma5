@@ -50,6 +50,7 @@ class SolarConfigRecord:
     azimuth_estimated: bool
     timezone: str
     solar_intelligence_enabled: bool = False
+    country_code: str | None = None
 
 
 def _to_domain_config(record: SolarConfigRecord) -> SolarSiteConfiguration:
@@ -67,6 +68,7 @@ def _to_domain_config(record: SolarConfigRecord) -> SolarSiteConfiguration:
         azimuth_estimated=record.azimuth_estimated,
         timezone=record.timezone,
         solar_intelligence_enabled=getattr(record, "solar_intelligence_enabled", False),
+        country_code=getattr(record, "country_code", None),
     )
 
 
@@ -92,6 +94,7 @@ class SolarSiteConfigRepository:
             azimuth_estimated=row.azimuth_estimated,
             timezone=timezone,
             solar_intelligence_enabled=getattr(row, "solar_intelligence_enabled", False),
+            country_code=getattr(row, "country_code", None),
         )
 
     async def upsert(
@@ -203,7 +206,11 @@ class SolarWeatherCacheRepository:
         row = await self._session.scalar(stmt)
         if row is None:
             return None
-        return _weather_from_json(site_id, row.payload_json, row.fetched_at, row.provider, source="cache")
+        # SQLite returns naive datetimes; callers compare against aware "now".
+        fetched_at = row.fetched_at
+        if fetched_at.tzinfo is None:
+            fetched_at = fetched_at.replace(tzinfo=UTC)
+        return _weather_from_json(site_id, row.payload_json, fetched_at, row.provider, source="cache")
 
     async def save(self, weather: WeatherForecast, *, valid_until: datetime) -> None:
         payload = _weather_to_json(weather)
@@ -403,6 +410,8 @@ def _weather_to_json(weather: WeatherForecast) -> str:
             "precipitation_mm": p.precipitation_mm,
             "weather_code": p.weather_code,
             "sunshine_duration_s": p.sunshine_duration_s,
+            "wind_speed_ms": p.wind_speed_ms,
+            "relative_humidity_pct": p.relative_humidity_pct,
         }
         for p in weather.points
     ]
@@ -435,6 +444,8 @@ def _weather_from_json(
                 precipitation_mm=p.get("precipitation_mm"),
                 weather_code=p.get("weather_code"),
                 sunshine_duration_s=p.get("sunshine_duration_s"),
+                wind_speed_ms=p.get("wind_speed_ms"),
+                relative_humidity_pct=p.get("relative_humidity_pct"),
             )
         )
     return WeatherForecast(

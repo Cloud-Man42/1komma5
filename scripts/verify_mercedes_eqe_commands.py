@@ -162,7 +162,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Verify Mercedes protobuf commands against EQE.")
     parser.add_argument("--site", default="akarp")
     parser.add_argument("--vehicle-id", type=int, default=None)
-    parser.add_argument("--vin-suffix", default="3146", help="Last digits of EQE VIN when vehicle-id omitted.")
+    parser.add_argument("--vin-suffix", default="1234", help="Last digits of EQE VIN when vehicle-id omitted.")
     parser.add_argument("--target-soc", type=int, default=80)
     parser.add_argument(
         "--execute",

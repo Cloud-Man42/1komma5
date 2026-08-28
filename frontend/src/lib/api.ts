@@ -482,6 +482,7 @@ export type PeakPeriod = "day" | "month" | "year";
 export interface PeakReading {
   period_start: string;
   solar_production_w: number;
+  consumption_w: number;
   battery_charge_w: number;
   battery_discharge_w: number;
 }
@@ -645,6 +646,22 @@ export function getApiBaseUrl(): string {
   if (configured) return configured.replace(/\/$/, "");
   if (typeof window !== "undefined") return "";
   return "http://localhost:8000";
+}
+
+const PERF_DEBUG = process.env.NEXT_PUBLIC_PERFORMANCE_DEBUG === "1";
+const recentFetches = new Map<string, number>();
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === "string" ? input : input.toString();
+  if (PERF_DEBUG && typeof window !== "undefined") {
+    const now = Date.now();
+    const last = recentFetches.get(url);
+    if (last && now - last < 2000) {
+      console.warn("[perf] duplicate fetch within 2s:", url);
+    }
+    recentFetches.set(url, now);
+  }
+  return fetch(input, init);
 }
 
 export async function readApiError(res: Response): Promise<string> {
@@ -1222,6 +1239,7 @@ export interface SolarForecast {
   forecast_so_far_kwh: number;
   remaining_vs_expected_kwh: number;
   raw_forecast_today_kwh?: number;
+  raw_forecast_so_far_kwh?: number;
   raw_forecast_tomorrow_kwh?: number | null;
   corrected_forecast_today_kwh?: number;
   corrected_forecast_tomorrow_kwh?: number | null;
@@ -1365,6 +1383,96 @@ export async function fetchSolarModelMetrics(
   return { model_version: data.model_version ?? null, wape: data.wape ?? null };
 }
 
+export interface SolarWeatherHour {
+  timestamp: string;
+  temperature_c: number | null;
+  cloud_cover_pct: number | null;
+  wind_speed_ms: number | null;
+  relative_humidity_pct: number | null;
+  precipitation_mm: number | null;
+  ghi_wm2: number | null;
+  weather_code: number | null;
+  condition_sv: string;
+  condition_icon: string;
+  forecast_power_w?: number | null;
+}
+
+export interface SolarWeather {
+  site_slug: string;
+  provider: string;
+  source: string;
+  fetched_at: string;
+  cache_age_minutes: number;
+  sunrise: string | null;
+  sunset: string | null;
+  current: SolarWeatherHour | null;
+  solar_impact_sv: string;
+  hours: SolarWeatherHour[];
+}
+
+export async function fetchSolarWeather(slug: string): Promise<SolarWeather> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/weather`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface DmiForecastPoint {
+  timestamp: string;
+  ghi_wm2: number | null;
+  dhi_wm2: number | null;
+  temperature_c: number | null;
+  cloud_cover_pct: number | null;
+  precipitation_mm: number | null;
+  humidity_pct: number | null;
+  wind_speed_ms: number | null;
+}
+
+export interface DmiForecast {
+  site_slug: string;
+  provider: string;
+  country_code: string;
+  points: DmiForecastPoint[];
+}
+
+export async function fetchDmiForecast(slug: string): Promise<DmiForecast> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/dmi/forecast`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface SolarPerformanceDay {
+  date: string;
+  actual_kwh: number | null;
+  expected_kwh: number | null;
+  performance_ratio: number | null;
+  anomaly_flag: boolean;
+}
+
+export interface SolarPerformance {
+  site_slug: string;
+  days: SolarPerformanceDay[];
+  headline_ratio: number | null;
+  today_deviation_pct: number | null;
+  week_avg: number | null;
+  month_avg: number | null;
+  quarter_avg: number | null;
+  ytd_avg: number | null;
+  raw_forecast_so_far_kwh: number | null;
+  actual_today_kwh: number | null;
+}
+
+export async function fetchSolarPerformance(slug: string): Promise<SolarPerformance> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/performance`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
 export function isAggregated(
   reading: Reading | AggregatedReading,
 ): reading is AggregatedReading {
@@ -1380,6 +1488,7 @@ export interface SpaStatus {
   heater_active: boolean;
   pump_label: string;
   filter_status: string | null;
+  filter_cycle_active?: boolean;
   errors: string[];
   current_power_w: number | null;
   power_breakdown: Record<string, number>;
@@ -2036,7 +2145,41 @@ export async function stopVehicleCharging(slug: string, vehicleId: number): Prom
 }
 
 export async function fetchSiteDashboard(slug: string): Promise<SiteDashboard> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/dashboard`, { cache: "no-store" });
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/dashboard`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface SiteSnapshot {
+  site: { slug: string; name: string; timezone: string };
+  generated_at: string;
+  age_seconds: number | null;
+  freshness: string;
+  source_status: Record<string, string>;
+  live: Record<string, number | null> | null;
+  today: Record<string, number | null>;
+  solar: Record<string, number | null>;
+  economy: Record<string, number | null>;
+  ev: Record<string, unknown>;
+}
+
+export async function fetchSiteSnapshot(slug: string): Promise<SiteSnapshot> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/snapshot`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface PerformanceCenterMetrics {
+  request_count: number;
+  cache: { hits: number; misses: number; hit_rate_pct: number };
+  slowest_routes: Array<{ route: string; count: number; p50_ms: number; p95_ms: number }>;
+  slowest_requests: Array<Record<string, unknown>>;
+  slow_queries: Array<{ sql: string; duration_ms: number; route: string }>;
+  providers: Array<{ provider: string; calls: number; avg_ms: number; errors: number }>;
+}
+
+export async function fetchPerformanceMetrics(): Promise<PerformanceCenterMetrics> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/system/performance`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }

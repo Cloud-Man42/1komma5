@@ -12,9 +12,10 @@ def compute_performance_daily(
     performance_date: date,
     actual_kwh: float | None,
     expected_kwh: float | None,
+    weather_normalized_kwh: float | None = None,
 ) -> PerformanceDaily:
     ratio = None
-    normalized = expected_kwh
+    normalized = weather_normalized_kwh if weather_normalized_kwh is not None else expected_kwh
     if actual_kwh is not None and expected_kwh is not None and expected_kwh > 0.5:
         ratio = actual_kwh / expected_kwh
     anomaly_score = None

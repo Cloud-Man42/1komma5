@@ -23,5 +23,7 @@ Thumbs.db
 cookies.txt
 scripts/deploy.local.ps1
 emic-secret.key
+tmp-*.json
+docs/performance/baseline-results.json
 windows/**/bin/
 windows/**/obj/

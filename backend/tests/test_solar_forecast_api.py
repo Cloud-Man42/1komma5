@@ -16,6 +16,9 @@ def _sample_weather(site_id: int = 1) -> WeatherForecast:
             gti_wm2=550.0,
             cloud_cover_pct=20.0,
             temperature_c=18.0,
+            weather_code=1,
+            wind_speed_ms=3.1,
+            relative_humidity_pct=52.0,
         )
         for i in range(16)
     )
@@ -54,12 +57,12 @@ async def test_solar_config_put_persists(client):
     body = await enable_solar_config(ac, "akarp")
     assert body["enabled"] is True
     assert body["complete"] is True
-    assert body["latitude"] == 55.605
+    assert body["latitude"] == 55.60
 
     again = await ac.get("/api/sites/akarp/solar/config")
     assert again.status_code == 200
     assert again.json()["enabled"] is True
-    assert again.json()["latitude"] == 55.605
+    assert again.json()["latitude"] == 55.60
 
 
 @pytest.mark.asyncio
@@ -316,3 +319,57 @@ async def test_solar_accuracy_backfills_production_days(client):
     body = res.json()
     assert body["production_days_observed"] >= 1
     assert "historical_samples" in body
+
+
+@pytest.mark.asyncio
+async def test_solar_weather_404_when_not_configured(client):
+    ac, _, _ = client
+    res = await ac.get("/api/sites/akarp/solar/weather")
+    assert res.status_code == 404
+    assert "solprognosen" in res.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_solar_weather_404_for_unknown_site(client):
+    ac, _, _ = client
+    res = await ac.get("/api/sites/does-not-exist/solar/weather")
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_solar_weather_returns_current_conditions(client):
+    ac, _, _ = client
+    await enable_solar_config(ac, "akarp")
+
+    res = await ac.get("/api/sites/akarp/solar/weather")
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["source"] in ("live", "cache")
+    assert body["site_slug"] == "akarp"
+    assert body["current"]["temperature_c"] == 18.0
+    assert body["current"]["wind_speed_ms"] == 3.1
+    assert body["current"]["relative_humidity_pct"] == 52.0
+    assert body["current"]["cloud_cover_pct"] == 20.0
+    assert body["current"]["condition_sv"] == "Mestadels klart"
+    assert body["current"]["condition_icon"] == "mostly-clear"
+    assert body["solar_impact_sv"]
+    assert body["sunrise"] is not None
+    assert body["sunset"] is not None
+    assert len(body["hours"]) > 0
+    assert body["hours"][0]["condition_sv"] == "Mestadels klart"
+
+
+@pytest.mark.asyncio
+async def test_solar_weather_503_when_provider_and_cache_unavailable(client):
+    ac, _, _ = client
+    await enable_solar_config(ac, "akarp")
+
+    with patch(
+        "energy_core.solar_forecast.coordinator.SolarForecastCoordinator.resolve_weather",
+        new=AsyncMock(return_value=None),
+    ):
+        res = await ac.get("/api/sites/akarp/solar/weather")
+
+    assert res.status_code == 503
+    assert "Väderdata" in res.json()["detail"]

@@ -65,6 +65,48 @@ class FakeControlService:
 
 
 @pytest.mark.asyncio
+async def test_actuator_skips_auto_commands_for_fixed_schedule():
+    now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    window = PlanWindow(
+        start=now,
+        end=now + timedelta(hours=2),
+        duration=timedelta(hours=2),
+        expected_energy_kwh=3.0,
+        expected_cost_sek=1.0,
+        expected_energy_source=__import__("energy_core.flexible_load.types", fromlist=["EnergySource"]).EnergySource.SOLAR,
+        average_score=10.0,
+    )
+    plan = LoadPlan(
+        load_id="spa_cleaning",
+        strategy=LoadStrategy.FIXED_SCHEDULE,
+        windows=(window,),
+        reason="fixed_schedule",
+        reason_sv="fast_schema",
+        explanation_sv="test",
+    )
+    runtime = SpaActuatorRuntime()
+    actuator = SpaCleaningActuator(
+        control=_control(
+            dry_run=False,
+            strategy="FIXED_SCHEDULE",
+            fixed_schedule_start="07:00",
+            fixed_schedule_end="22:00",
+        ),
+        runtime=runtime,
+        timezone="Europe/Stockholm",
+    )
+    fake = FakeControlService()
+    decision = await actuator.run_cycle(
+        control_service=fake,  # type: ignore[arg-type]
+        status=ArcticSpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
+        plan=plan,
+        now=now,
+    )
+    assert decision.reason == "spa_self_managed"
+    assert fake.calls == []
+
+
+@pytest.mark.asyncio
 async def test_actuator_dry_run_does_not_call_api():
     now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
     window = PlanWindow(
@@ -111,4 +153,29 @@ async def test_manual_override_in_dry_run():
         manual_override=True,
     )
     assert decision.reason == "manual_override"
+    assert decision.dry_run is True
+    assert fake.calls == []
     assert runtime.state == SpaActuatorState.WAITING
+
+
+@pytest.mark.asyncio
+async def test_manual_override_bypasses_shadow_mode():
+    now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+    runtime = SpaActuatorRuntime()
+    actuator = SpaCleaningActuator(
+        control=_control(dry_run=False, shadow_mode=True),
+        runtime=runtime,
+        timezone="Europe/Stockholm",
+    )
+    fake = FakeControlService()
+    decision = await actuator.run_cycle(
+        control_service=fake,  # type: ignore[arg-type]
+        status=ArcticSpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
+        plan=None,
+        now=now,
+        manual_override=True,
+    )
+    assert decision.reason == "manual_override"
+    assert decision.command_sent is True
+    assert fake.calls == ["floor", "start"]
+    assert runtime.state == SpaActuatorState.CLEANING

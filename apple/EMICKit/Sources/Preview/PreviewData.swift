@@ -4,7 +4,7 @@ import Foundation
 public enum PreviewData {
     public static let akarpStatus = WidgetStatusResponse(
         apiVersion: "1.0",
-        site: WidgetSiteRef(id: "akarp", name: "Åkarp"),
+        site: WidgetSiteRef(id: "akarp", name: "Demo Home"),
         solar: WidgetSolarSection(powerKw: 5.42, todayKwh: 21.6),
         house: WidgetHouseSection(powerKw: 1.61, todayKwh: 11.8),
         battery: WidgetBatterySection(socPercent: 74, powerKw: 2.34, state: "charging", stateText: "Laddar"),

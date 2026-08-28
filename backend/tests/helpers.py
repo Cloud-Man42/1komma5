@@ -113,8 +113,8 @@ async def enable_solar_config(
     ac: AsyncClient,
     slug: str,
     *,
-    latitude: float = 55.605,
-    longitude: float = 13.0038,
+    latitude: float = 55.60,
+    longitude: float = 13.00,
     kwp: float = 8.0,
     enabled: bool = True,
 ) -> dict:

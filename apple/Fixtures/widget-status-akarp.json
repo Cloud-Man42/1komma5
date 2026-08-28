@@ -2,7 +2,7 @@
   "apiVersion": "1.0",
   "site": {
     "id": "akarp",
-    "name": "Åkarp"
+    "name": "Demo Home"
   },
   "solar": {
     "powerKw": 5.42,

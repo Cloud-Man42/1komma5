@@ -1,7 +1,6 @@
 """Tests for Arctic Spa fixed filter policy."""
 
-from energy_core.spa_energy.filter_policy import SpaFilterPolicy
-
+from energy_core.spa_energy.filter_policy import SpaFilterPolicy, is_spa_filter_self_managed
 
 def test_default_policy_is_four_by_two_hours():
     policy = SpaFilterPolicy()
@@ -30,3 +29,33 @@ def test_sync_legacy_fields():
     assert synced["max_starts_per_day"] == 4
     assert synced["min_run_minutes"] == 120
     assert synced["safety_floor_frequency_per_day"] == 4.0
+
+
+def test_self_managed_when_optimization_disabled():
+    class Control:
+        filter_optimization_enabled = False
+        strategy = "SMART"
+        fixed_schedule_start = None
+        fixed_schedule_end = None
+
+    assert is_spa_filter_self_managed(Control()) is True
+
+
+def test_self_managed_when_fixed_schedule_complete():
+    class Control:
+        filter_optimization_enabled = True
+        strategy = "FIXED_SCHEDULE"
+        fixed_schedule_start = "07:00"
+        fixed_schedule_end = "22:00"
+
+    assert is_spa_filter_self_managed(Control()) is True
+
+
+def test_not_self_managed_when_fixed_schedule_incomplete():
+    class Control:
+        filter_optimization_enabled = True
+        strategy = "FIXED_SCHEDULE"
+        fixed_schedule_start = None
+        fixed_schedule_end = "22:00"
+
+    assert is_spa_filter_self_managed(Control()) is False

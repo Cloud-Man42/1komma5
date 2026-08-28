@@ -14,7 +14,7 @@ public partial class SetupWindow : Window
         _settings = settings;
         _tokens = tokens;
         InitializeComponent();
-        ServerUrlBox.Text = _settings.GetServerUrl() ?? "http://192.168.50.54";
+        ServerUrlBox.Text = _settings.GetServerUrl() ?? "http://localhost:8000";
         TokenBox.Password = _tokens.LoadToken() ?? string.Empty;
         SiteBox.Text = _settings.GetSelectedSiteId() ?? "akarp";
         SelectDisplayMode(_settings.GetDisplayMode());

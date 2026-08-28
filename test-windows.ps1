@@ -19,6 +19,8 @@ if ($windowsExit -ne 0) { exit $windowsExit }
 
 Write-Host "Running frontend tests..."
 Push-Location frontend
+# Vite writes deprecation notices to stderr, which "Stop" would treat as fatal.
+$ErrorActionPreference = "Continue"
 npm test
 $frontendExit = $LASTEXITCODE
 Pop-Location

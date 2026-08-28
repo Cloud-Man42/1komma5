@@ -47,6 +47,29 @@ def _control(**kwargs) -> SpaControlConfigRecord:
 
 
 @pytest.mark.asyncio
+async def test_watchdog_skips_when_spa_self_managed():
+    now = datetime(2026, 8, 26, 10, 0, tzinfo=UTC)
+    runtime = SpaActuatorRuntime(
+        state=SpaActuatorState.IDLE,
+        last_planner_run_at=now - timedelta(minutes=10),
+    )
+    control_service = AsyncMock()
+    decision = await SpaPlannerWatchdog(stale_after_seconds=180).run(
+        control=_control(
+            strategy="FIXED_SCHEDULE",
+            fixed_schedule_start="07:00",
+            fixed_schedule_end="22:00",
+        ),
+        runtime=runtime,
+        control_service=control_service,
+        now=now,
+        dry_run=False,
+    )
+    assert decision.action == "none"
+    control_service.ensure_safety_floor.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_watchdog_restores_safety_floor_when_planner_stale():
     now = datetime(2026, 8, 26, 10, 0, tzinfo=UTC)
     runtime = SpaActuatorRuntime(

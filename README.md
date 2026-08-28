@@ -47,7 +47,7 @@ make collector-dev
 make frontend-dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The dashboard shows **Åkarp** and **Summer House Denmark** with live mock energy values that change as the collector runs.
+Open [http://localhost:3000](http://localhost:3000). The dashboard shows **Demo Home** and **Summer House Denmark** with live mock energy values that change as the collector runs.
 
 ### Mock development configuration
 

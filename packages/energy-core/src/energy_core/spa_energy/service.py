@@ -24,8 +24,8 @@ from energy_core.flexible_load.types import EnergySource, FlexibleLoad, LoadPlan
 from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration, SpaPowerProfiles
 from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
 from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
-from energy_core.spa_energy.actuator import SpaCleaningActuator
-from energy_core.spa_energy.filter_policy import SpaFilterPolicy
+from energy_core.spa_energy.actuator import SpaActuatorDecision, SpaCleaningActuator
+from energy_core.spa_energy.filter_policy import SpaFilterPolicy, is_spa_filter_self_managed
 from energy_core.spa_energy.filter_schedule_service import ArcticSpaFilterScheduleService
 from energy_core.spa_energy.runtime import SpaActuatorRuntime
 from energy_core.spa_energy.watchdog import SpaPlannerWatchdog
@@ -51,16 +51,16 @@ class SmartSpaEnergyService:
 
         return await SiteEnergyOrchestratorService(self._settings).run_cycle(session)
 
-    async def run_cleaning_now(self, session: AsyncSession, slug: str) -> bool:
+    async def run_cleaning_now(self, session: AsyncSession, slug: str) -> SpaActuatorDecision | None:
         repo = ConsumerRepository(session)
         row = await repo.get_spa_by_site_slug(slug)
         if row is None:
-            return False
+            return None
         consumer, device_config, site = row
         control_repo = SpaControlConfigRepository(session)
         control = await control_repo.get_or_create(consumer.id)
         if not control.smart_control_enabled:
-            return False
+            return None
         now = datetime.now(UTC)
         plan = await self._build_plan(session, consumer, device_config, site, control, now)
         return await self._actuate(
@@ -128,7 +128,11 @@ class SmartSpaEnergyService:
                 shadow=control.shadow_mode,
             )
 
-        if control.smart_control_enabled and self._settings.spa_smart_control_enabled:
+        if (
+            control.smart_control_enabled
+            and self._settings.spa_smart_control_enabled
+            and not is_spa_filter_self_managed(control)
+        ):
             await self._actuate(
                 session,
                 consumer=consumer,
@@ -226,8 +230,12 @@ class SmartSpaEnergyService:
                 manual_override=manual_override,
             )
 
-        if control.smart_control_enabled and self._settings.spa_smart_control_enabled:
-            return await self._actuate(
+        if (
+            control.smart_control_enabled
+            and self._settings.spa_smart_control_enabled
+            and not (is_spa_filter_self_managed(control) and not manual_override)
+        ):
+            decision = await self._actuate(
                 session,
                 consumer=consumer,
                 device_config=device_config,
@@ -237,6 +245,7 @@ class SmartSpaEnergyService:
                 now=now,
                 manual_override=manual_override,
             )
+            return decision.command_sent
         return True
 
     async def build_horizon(
@@ -357,6 +366,8 @@ class SmartSpaEnergyService:
         now: datetime,
         dry_run: bool,
     ) -> None:
+        if is_spa_filter_self_managed(control):
+            return
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
             db_base_url=device_config.api_base_url,
@@ -398,7 +409,15 @@ class SmartSpaEnergyService:
         plan: LoadPlan,
         now: datetime,
         manual_override: bool,
-    ) -> bool:
+    ) -> SpaActuatorDecision:
+        if is_spa_filter_self_managed(control) and not manual_override:
+            return SpaActuatorDecision(
+                "plan_only",
+                "spa_self_managed",
+                "eco_pak_styr_filter",
+                dry_run=True,
+            )
+
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
             db_base_url=device_config.api_base_url,
@@ -479,7 +498,7 @@ class SmartSpaEnergyService:
                 strategy=control.strategy,
                 dry_run=preheat_decision.dry_run,
             )
-        return decision.command_sent or manual_override
+        return decision
 
     async def _build_horizon(
         self,

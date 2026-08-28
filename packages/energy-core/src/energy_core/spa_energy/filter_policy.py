@@ -134,3 +134,16 @@ class SpaFilterPolicy:
             "safety_floor_frequency_per_day": float(self.cycles_per_day),
             "safety_floor_duration_hours": max(1.0, self.duration_per_cycle_minutes / 60.0),
         }
+
+
+def is_spa_filter_self_managed(control) -> bool:
+    """True when Eco Pak owns filter timing — EMIC must not actuate cleaning."""
+    if not getattr(control, "filter_optimization_enabled", True):
+        return True
+    if (
+        getattr(control, "strategy", None) == "FIXED_SCHEDULE"
+        and getattr(control, "fixed_schedule_start", None)
+        and getattr(control, "fixed_schedule_end", None)
+    ):
+        return True
+    return False

@@ -29,10 +29,8 @@ from energy_core.config import Settings
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel
-from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
+from energy_core.db.repositories import EnergyReadingRepository, MarketPriceRepository, SiteRepository
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
-from energy_core.heartbeat.market_prices import parse_market_prices
-from energy_core.heartbeat_client_factory import create_heartbeat_client
 from energy_core.energy.state import EnergyState
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -157,52 +155,45 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
     return section
 
 
-async def _compute_price(session: AsyncSession, site) -> DashboardPriceSection:
+async def _price_from_db(session: AsyncSession, site, settings: Settings) -> tuple[float | None, tuple[tuple[datetime, float], ...], DashboardPriceSection]:
+    price_repo = MarketPriceRepository(session, is_sqlite=settings.is_sqlite)
+    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    prices = await price_repo.list_between(
+        site.id,
+        from_time=now - timedelta(hours=1),
+        to_time=now + timedelta(hours=23),
+    )
+    if not prices:
+        section = DashboardPriceSection(unavailable_reason="Elpris otillgängligt")
+        return None, (), section
+
+    forecast = tuple(
+        (row.recorded_at, row.all_in_price_sek_kwh or row.spot_price_sek_kwh) for row in prices
+    )
+    current_row = next((row for row in prices if row.recorded_at <= now), prices[0])
+    current = current_row.all_in_price_sek_kwh or current_row.spot_price_sek_kwh
+    all_in_values = [row.all_in_price_sek_kwh or row.spot_price_sek_kwh for row in prices]
+    avg = sum(all_in_values) / len(all_in_values)
+    tier = "normal"
+    if current <= avg * 0.85:
+        tier = "green"
+    elif current >= avg * 1.15:
+        tier = "red"
+    section = DashboardPriceSection(
+        current_eur_kwh=current,
+        lowest_eur_kwh=min(all_in_values),
+        highest_eur_kwh=max(all_in_values),
+        tier=tier,
+    )
+    return current, forecast, section
+
+
+async def _compute_price(session: AsyncSession, site, settings: Settings) -> DashboardPriceSection:
     cached = _cache_get(site.slug, "price", _TTL["price"])
     if cached is not None:
         return cached
 
-    if not site.external_system_id:
-        section = DashboardPriceSection(unavailable_reason="Heartbeat-system saknas")
-        _cache_set(site.slug, "price", section)
-        return section
-
-    client = await create_heartbeat_client(session)
-    if client is None:
-        section = DashboardPriceSection(unavailable_reason="Heartbeat är inte konfigurerat")
-        _cache_set(site.slug, "price", section)
-        return section
-
-    now = datetime.now(UTC)
-    from_iso = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-    to_iso = (now + timedelta(hours=23)).isoformat().replace("+00:00", "Z")
-    try:
-        raw = await client.fetch_market_prices(
-            site.external_system_id,
-            from_iso=from_iso,
-            to_iso=to_iso,
-            resolution="1h",
-        )
-        parsed = parse_market_prices(raw)
-    except Exception:
-        section = DashboardPriceSection(unavailable_reason="Elpris otillgängligt")
-        _cache_set(site.slug, "price", section)
-        return section
-
-    current = parsed.current_price_eur_kwh
-    tier = "normal"
-    if current is not None and parsed.average_all_in_eur_kwh is not None:
-        if current <= parsed.average_all_in_eur_kwh * 0.85:
-            tier = "green"
-        elif current >= parsed.average_all_in_eur_kwh * 1.15:
-            tier = "red"
-
-    section = DashboardPriceSection(
-        current_eur_kwh=current,
-        lowest_eur_kwh=parsed.lowest_all_in_eur_kwh,
-        highest_eur_kwh=parsed.highest_all_in_eur_kwh,
-        tier=tier,
-    )
+    _, _, section = await _price_from_db(session, site, settings)
     _cache_set(site.slug, "price", section)
     return section
 
@@ -273,30 +264,9 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
     )
 
 
-async def _fetch_price_forecast(session: AsyncSession, site) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
-    if not site.external_system_id:
-        return None, ()
-    client = await create_heartbeat_client(session)
-    if client is None:
-        return None, ()
-    now = datetime.now(UTC)
-    from_iso = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-    to_iso = (now + timedelta(hours=23)).isoformat().replace("+00:00", "Z")
-    try:
-        raw = await client.fetch_market_prices(
-            site.external_system_id,
-            from_iso=from_iso,
-            to_iso=to_iso,
-            resolution="1h",
-        )
-        parsed = parse_market_prices(raw)
-    except Exception:
-        return None, ()
-    forecast = tuple(
-        (point.timestamp, point.all_in_eur_kwh or point.spot_eur_kwh)
-        for point in parsed.points
-    )
-    return parsed.current_price_eur_kwh, forecast
+async def _fetch_price_forecast(session: AsyncSession, site, settings: Settings) -> tuple[float | None, tuple[tuple[datetime, float], ...]]:
+    current, forecast, _ = await _price_from_db(session, site, settings)
+    return current, forecast
 
 
 def _energy_for_optimization(
@@ -365,7 +335,7 @@ async def _compute_optimization(
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=bridge_charger.id)
     balance = snapshot_to_response(latest, charger_id=bridge_charger.id) if latest else None
-    current_price, price_forecast = await _fetch_price_forecast(session, site)
+    current_price, price_forecast = await _fetch_price_forecast(session, site, settings)
     energy = _energy_for_optimization(
         balance,
         live,
@@ -471,7 +441,7 @@ async def get_site_dashboard(
 
     today_section = await _compute_today(session, site, settings)
     solar_section = await _compute_solar(session, site)
-    price_section = await _compute_price(session, site)
+    price_section = await _compute_price(session, site, settings)
     optimization_section = await _compute_optimization(session, site, settings, live)
 
     from energy_core.db.consumer_repo import ConsumerRepository

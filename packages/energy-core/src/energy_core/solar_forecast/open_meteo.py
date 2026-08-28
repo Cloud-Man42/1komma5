@@ -29,6 +29,8 @@ MINUTELY_15_VARS = (
     "precipitation",
     "weather_code",
     "sunshine_duration",
+    "wind_speed_10m",
+    "relative_humidity_2m",
 )
 
 
@@ -152,6 +154,8 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
         precip = _series("precipitation")
         wcode = _series("weather_code")
         sunshine = _series("sunshine_duration")
+        wind = _series("wind_speed_10m")
+        humidity = _series("relative_humidity_2m")
 
         points: list[WeatherForecastPoint] = []
         for i, time_str in enumerate(times):
@@ -170,6 +174,8 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
                     precipitation_mm=_safe_float(precip[i]),
                     weather_code=_safe_int(wcode[i]),
                     sunshine_duration_s=_safe_float(sunshine[i]),
+                    wind_speed_ms=_kmh_to_ms(_safe_float(wind[i])),
+                    relative_humidity_pct=_safe_float(humidity[i]),
                 )
             )
 
@@ -192,6 +198,13 @@ def _safe_float(value: float | None) -> float | None:
         return f
     except (TypeError, ValueError):
         return None
+
+
+def _kmh_to_ms(value: float | None) -> float | None:
+    """Open-Meteo reports wind in km/h by default; EMIC displays m/s."""
+    if value is None:
+        return None
+    return round(value / 3.6, 2)
 
 
 def _safe_int(value: float | None) -> int | None:

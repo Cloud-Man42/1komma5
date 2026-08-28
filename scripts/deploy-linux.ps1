@@ -42,6 +42,10 @@ $tarArgs = @(
     "docker-compose.yml", "Caddyfile", "pyproject.toml", "uv.lock", ".env.production.example"
 )
 
+# tar/pscp/plink and the remote docker build write progress to stderr. Under "Stop" that is
+# promoted to a terminating error and kills the deploy mid-build, so rely on exit codes instead.
+$ErrorActionPreference = "Continue"
+
 & tar @tarArgs
 if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
 

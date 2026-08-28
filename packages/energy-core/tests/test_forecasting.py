@@ -66,18 +66,18 @@ def test_next_year_forecasts_all_months_from_historical_calibration():
 
 def test_monthly_import_baseline_preserves_known_annual_consumption():
     monthly_import = {
-        1: 2600,
-        2: 2700,
-        3: 2300,
+        1: 2000,
+        2: 2100,
+        3: 1900,
         4: 1800,
         5: 1700,
-        6: 1400,
-        7: 800,
+        6: 1500,
+        7: 1200,
         8: 1600,
         9: 1800,
         10: 1900,
-        11: 2200,
-        12: 2160.1,
+        11: 2100,
+        12: 2000,
     }
 
     result = build_year_forecast(
@@ -89,9 +89,9 @@ def test_monthly_import_baseline_preserves_known_annual_consumption():
         monthly_import_baseline=monthly_import,
     )
 
-    assert result.forecast.imported_kwh == pytest.approx(22960.1, abs=0.01)
-    assert result.months[0].forecast.imported_kwh == pytest.approx(2600, abs=0.01)
-    assert result.months[6].forecast.imported_kwh == pytest.approx(800, abs=0.01)
+    assert result.forecast.imported_kwh == pytest.approx(21600.0, abs=0.01)
+    assert result.months[0].forecast.imported_kwh == pytest.approx(2000, abs=0.01)
+    assert result.months[6].forecast.imported_kwh == pytest.approx(1200, abs=0.01)
 
 
 def test_past_year_has_no_forecast_and_empty_history_is_safe():

@@ -69,10 +69,10 @@ Verify against EQE before enabling in production:
 
 ```powershell
 # Dry-run (capabilities + protobuf shape only)
-python scripts/verify_mercedes_eqe_commands.py --site akarp --vin-suffix 3146
+python scripts/verify_mercedes_eqe_commands.py --site demo-home --vin-suffix 1234
 
 # Live command test (vehicle must be reachable; use current target SoC first)
-python scripts/verify_mercedes_eqe_commands.py --site akarp --vin-suffix 3146 --execute set-target-soc --target-soc 80
+python scripts/verify_mercedes_eqe_commands.py --site demo-home --vin-suffix 1234 --execute set-target-soc --target-soc 80
 ```
 
 API (requires `commands_enabled`):

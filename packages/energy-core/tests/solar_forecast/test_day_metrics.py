@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
+from energy_core.solar_forecast.day_metrics import (
+    compute_solar_day_metrics,
+    compute_tomorrow_kwh,
+    tomorrow_forecast_points,
+)
 from energy_core.solar_forecast.types import SolarForecast, SolarForecastPoint
 
 
@@ -53,3 +57,56 @@ def test_compute_solar_day_metrics_splits_past_and_future() -> None:
     assert metrics.expected_today_kwh == 2.5
     assert metrics.peak_power_w == 4000.0
     assert metrics.peak_time == points[2].timestamp
+
+
+def test_compute_tomorrow_kwh_uses_calendar_tomorrow_points() -> None:
+    now = datetime(2026, 8, 28, 10, 0, tzinfo=UTC)
+    tomorrow_points = (
+        _point(datetime(2026, 8, 29, 8, 0, tzinfo=UTC), 2500.0, 1.0),
+        _point(datetime(2026, 8, 29, 9, 0, tzinfo=UTC), 3000.0, 1.5),
+    )
+    forecast = SolarForecast(
+        site_id=1,
+        generated_at=now - timedelta(hours=38),
+        model_version="test",
+        quality="MEDIUM",
+        weather_source="live",
+        expected_today_kwh=10.0,
+        remaining_today_kwh=5.0,
+        expected_tomorrow_kwh=26.9,
+        peak_power_w=3000.0,
+        peak_time=tomorrow_points[0].timestamp,
+        confidence=0.5,
+        lower_today_kwh=0.0,
+        upper_today_kwh=20.0,
+        weather_summary="Test",
+        points=tomorrow_points,
+    )
+
+    assert compute_tomorrow_kwh(forecast, timezone="Europe/Stockholm", now=now) == 2.5
+    assert tomorrow_forecast_points(forecast.points, timezone="Europe/Stockholm", now=now) == list(
+        tomorrow_points
+    )
+
+
+def test_compute_tomorrow_kwh_none_when_horizon_missing() -> None:
+    now = datetime(2026, 8, 28, 10, 0, tzinfo=UTC)
+    forecast = SolarForecast(
+        site_id=1,
+        generated_at=now - timedelta(hours=38),
+        model_version="test",
+        quality="MEDIUM",
+        weather_source="live",
+        expected_today_kwh=10.0,
+        remaining_today_kwh=5.0,
+        expected_tomorrow_kwh=26.9,
+        peak_power_w=3000.0,
+        peak_time=None,
+        confidence=0.5,
+        lower_today_kwh=0.0,
+        upper_today_kwh=20.0,
+        weather_summary="Test",
+        points=(_point(datetime(2026, 8, 28, 11, 0, tzinfo=UTC), 2000.0, 0.5),),
+    )
+
+    assert compute_tomorrow_kwh(forecast, timezone="Europe/Stockholm", now=now) is None

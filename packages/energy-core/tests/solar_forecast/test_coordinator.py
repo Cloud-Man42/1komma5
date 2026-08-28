@@ -72,8 +72,8 @@ async def test_refresh_site_now_generates_forecast_when_enabled(sqlite_session):
     config_repo = SolarSiteConfigRepository(session)
     await config_repo.upsert(
         site.id,
-        latitude=55.605,
-        longitude=13.0038,
+        latitude=55.60,
+        longitude=13.00,
         installed_peak_power_kw=8.0,
         azimuth_deg=180,
         tilt_deg=30,

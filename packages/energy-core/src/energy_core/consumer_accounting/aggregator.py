@@ -135,6 +135,8 @@ def group_intervals_by_local_period(
         local = interval.start_time.astimezone(tz)
         if granularity == "month":
             key_local = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif granularity == "hour":
+            key_local = local.replace(minute=0, second=0, microsecond=0)
         else:
             key_local = local.replace(hour=0, minute=0, second=0, microsecond=0)
         key_utc = key_local.astimezone(UTC)

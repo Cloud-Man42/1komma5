@@ -449,6 +449,7 @@ class HistoryResponse(BaseModel):
 class PeakReadingResponse(BaseModel):
     period_start: str
     solar_production_w: float
+    consumption_w: float
     battery_charge_w: float
     battery_discharge_w: float
 
@@ -777,6 +778,7 @@ class SolarForecastResponse(BaseModel):
     forecast_so_far_kwh: float = 0.0
     remaining_vs_expected_kwh: float = 0.0
     raw_forecast_today_kwh: float = 0.0
+    raw_forecast_so_far_kwh: float = 0.0
     raw_forecast_tomorrow_kwh: float | None = None
     corrected_forecast_today_kwh: float = 0.0
     corrected_forecast_tomorrow_kwh: float | None = None
@@ -868,12 +870,38 @@ class SolarHourlyForecastResponse(BaseModel):
 class SolarPerformanceResponse(BaseModel):
     site_slug: str
     days: list[dict] = Field(default_factory=list)
+    headline_ratio: float | None = None
+    today_deviation_pct: float | None = None
+    week_avg: float | None = None
+    month_avg: float | None = None
+    quarter_avg: float | None = None
+    ytd_avg: float | None = None
+    raw_forecast_so_far_kwh: float | None = None
+    actual_today_kwh: float | None = None
 
 
 class SolarRadiationResponse(BaseModel):
     site_slug: str
     provider: str
     samples: list[dict] = Field(default_factory=list)
+
+
+class DmiForecastPointResponse(BaseModel):
+    timestamp: datetime
+    ghi_wm2: float | None = None
+    dhi_wm2: float | None = None
+    temperature_c: float | None = None
+    cloud_cover_pct: float | None = None
+    precipitation_mm: float | None = None
+    humidity_pct: float | None = None
+    wind_speed_ms: float | None = None
+
+
+class DmiForecastResponse(BaseModel):
+    site_slug: str
+    provider: str = "dmi-harmonie"
+    country_code: str
+    points: list[DmiForecastPointResponse] = Field(default_factory=list)
 
 
 class SolarModelResponse(BaseModel):
@@ -910,6 +938,33 @@ class SolarIntelligenceForecastResponse(BaseModel):
     point_count: int = 0
 
 
+class SolarWeatherHourResponse(BaseModel):
+    timestamp: datetime
+    temperature_c: float | None = None
+    cloud_cover_pct: float | None = None
+    wind_speed_ms: float | None = None
+    relative_humidity_pct: float | None = None
+    precipitation_mm: float | None = None
+    ghi_wm2: float | None = None
+    weather_code: int | None = None
+    condition_sv: str = "Okänt"
+    condition_icon: str = "unknown"
+    forecast_power_w: float | None = None
+
+
+class SolarWeatherResponse(BaseModel):
+    site_slug: str
+    provider: str
+    source: str
+    fetched_at: datetime
+    cache_age_minutes: float = 0.0
+    sunrise: datetime | None = None
+    sunset: datetime | None = None
+    current: SolarWeatherHourResponse | None = None
+    solar_impact_sv: str = ""
+    hours: list[SolarWeatherHourResponse] = Field(default_factory=list)
+
+
 class SpaStatusResponse(BaseModel):
     consumer_id: int
     site_slug: str
@@ -919,6 +974,7 @@ class SpaStatusResponse(BaseModel):
     heater_active: bool = False
     pump_label: str = "Pump: Av"
     filter_status: str | None = None
+    filter_cycle_active: bool = False
     errors: list[str] = Field(default_factory=list)
     current_power_w: float | None = None
     power_breakdown: dict[str, float] = Field(default_factory=dict)

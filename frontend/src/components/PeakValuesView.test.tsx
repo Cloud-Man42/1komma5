@@ -25,6 +25,7 @@ describe("PeakValuesView", () => {
               {
                 period_start: "2026",
                 solar_production_w: 7800,
+                consumption_w: 5100,
                 battery_charge_w: 3200,
                 battery_discharge_w: 2500,
               },
@@ -39,6 +40,7 @@ describe("PeakValuesView", () => {
             {
               period_start: period === "day" ? "2026-08-18" : "2026-08",
               solar_production_w: 7800,
+              consumption_w: 5100,
               battery_charge_w: 3200,
               battery_discharge_w: 2500,
             },
@@ -48,10 +50,11 @@ describe("PeakValuesView", () => {
     );
   });
 
-  it("shows daily solar, charge and discharge peaks", async () => {
+  it("shows daily solar, consumption, charge and discharge peaks", async () => {
     render(<PeakValuesView siteSlug="akarp" />);
 
     expect((await screen.findAllByText("7.8 kW")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("5.1 kW").length).toBeGreaterThan(0);
     expect(screen.getAllByText("3.2 kW").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2.5 kW").length).toBeGreaterThan(0);
     expect(screen.getByRole("columnheader", { name: "Datum" })).toBeTruthy();

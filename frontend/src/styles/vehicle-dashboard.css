@@ -1,0 +1,1042 @@
+/* EMIC Fordon Dashboard — mockup layout */
+
+.vdash-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.25rem 0 1.25rem;
+  color: #e2e8f0;
+}
+
+.vdash-muted {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+/* ── Header ── */
+.vdash-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.vdash-title {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.vdash-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 0.45rem;
+}
+
+.vdash-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.vdash-status-chip svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+}
+
+/* ── Hero row ── */
+.vdash-hero-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: 0.75rem;
+}
+
+.vdash-chips-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.vdash-chip-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(0, 230, 118, 0.05), transparent 55%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(10, 14, 26, 0.98) 100%);
+  padding: 0.75rem 0.85rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.vdash-chip-label {
+  display: block;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-chip-value {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.vdash-chip-value-green {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 1rem;
+  color: #00E676;
+}
+
+.vdash-chip-spark {
+  width: 100%;
+  height: 24px;
+  margin-top: 0.35rem;
+}
+
+.vdash-chip-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+}
+
+.vdash-chip-meta-green {
+  color: #00E676;
+}
+
+.vdash-temp-slider {
+  position: relative;
+  height: 6px;
+  margin-top: 0.55rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+}
+
+.vdash-temp-track {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #00E676);
+  opacity: 0.45;
+}
+
+.vdash-temp-thumb {
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+
+.vdash-status-icon {
+  font-size: 0.95rem;
+}
+
+/* ── Cards ── */
+.vdash-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(56, 189, 248, 0.04), transparent 55%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(10, 14, 26, 0.98) 100%);
+  padding: 0.85rem 0.9rem 0.95rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 24px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.vdash-card-header h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.vdash-card-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.vdash-card-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.vdash-card-btn {
+  margin-top: auto;
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.vdash-card-btn:hover {
+  color: #e2e8f0;
+}
+
+.vdash-card-btn-muted {
+  color: #64748b;
+}
+
+.vdash-menu-btn {
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+/* ── Battery card ── */
+.vdash-battery-card {
+  padding-bottom: 0.75rem;
+}
+
+.vdash-battery-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.vdash-battery-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.vdash-battery-pct {
+  margin: 0;
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.vdash-battery-kwh {
+  margin: 0.25rem 0 0.55rem;
+  font-size: 0.88rem;
+  color: #94a3b8;
+}
+
+.vdash-battery-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  overflow: hidden;
+}
+
+.vdash-battery-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #00E676, #4ade80);
+  box-shadow: 0 0 12px rgba(0, 230, 118, 0.45);
+}
+
+.vdash-battery-car {
+  position: relative;
+  min-height: 100px;
+}
+
+.vdash-battery-brand {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  z-index: 1;
+}
+
+.vdash-mercedes-star {
+  width: 22px;
+  height: 22px;
+}
+
+.vdash-battery-car-img {
+  width: 100%;
+  max-height: 110px;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
+}
+
+.vdash-battery-footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.vdash-battery-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.vdash-stat-icon {
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.vdash-stat-icon-green { filter: hue-rotate(0deg); }
+.vdash-stat-icon-cyan { filter: hue-rotate(180deg); }
+.vdash-stat-icon-purple { filter: hue-rotate(280deg); }
+
+.vdash-stat-label {
+  display: block;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-battery-stat strong {
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 0.1rem;
+}
+
+/* ── Main grid ── */
+.vdash-main-grid {
+  display: grid;
+  grid-template-columns: 0.95fr 1.35fr 0.95fr 0.95fr 1fr;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.vdash-right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.vdash-actions-card {
+  flex: 1.1;
+}
+
+/* ── Donut ── */
+.vdash-donut-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.vdash-donut {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.vdash-donut-center {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: #0a0e1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.35rem;
+}
+
+.vdash-donut-label {
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-donut-center strong {
+  font-size: 0.68rem;
+  line-height: 1.25;
+  margin-top: 0.15rem;
+}
+
+.vdash-donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.vdash-donut-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.vdash-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vdash-dot-green { background: #00E676; }
+.vdash-dot-blue { background: #38bdf8; }
+.vdash-dot-purple { background: #a78bfa; }
+
+/* ── Charging session ── */
+.vdash-session-card {
+  min-height: 280px;
+}
+
+.vdash-session-chart-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vdash-session-chart {
+  width: 100%;
+  height: auto;
+  min-height: 100px;
+}
+
+.vdash-session-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.62rem;
+  color: #64748b;
+}
+
+.vdash-session-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.vdash-line-green,
+.vdash-line-grey {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.vdash-line-green { background: #00E676; }
+.vdash-line-grey {
+  background: transparent;
+  border-top: 2px dashed #64748b;
+  height: 0;
+}
+
+.vdash-session-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.vdash-stop-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  background: transparent;
+  color: #f87171;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.vdash-stop-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vdash-start-btn {
+  align-self: flex-start;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 230, 118, 0.45);
+  background: transparent;
+  color: #00E676;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.vdash-start-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vdash-session-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.vdash-session-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.vdash-action-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vdash-action-btn-form input {
+  width: 56px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.82rem;
+}
+
+.vdash-action-msg {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.vdash-action-msg-ok {
+  color: #00E676;
+}
+
+.vdash-action-msg-err {
+  color: #f87171;
+}
+
+.vdash-halo-block {
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+/* ── Consumption ── */
+.vdash-consumption-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.vdash-consumption-head strong {
+  font-size: 1.15rem;
+}
+
+.vdash-badge-green {
+  font-size: 0.68rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(0, 230, 118, 0.12);
+  color: #00E676;
+}
+
+.vdash-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 90px;
+  margin: 0.35rem 0;
+}
+
+.vdash-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, #c084fc, #ec4899);
+  min-height: 8px;
+}
+
+/* ── Trips ── */
+.vdash-trip-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.vdash-trip-stats dt {
+  font-size: 0.62rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.vdash-trip-stats dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.vdash-trip-route {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.vdash-trip-route p {
+  margin: 0 0 0.25rem;
+}
+
+.vdash-trip-dest {
+  color: #cbd5e1;
+}
+
+.vdash-trip-map {
+  width: 100%;
+  margin-top: 0.35rem;
+  border-radius: 8px;
+}
+
+/* ── Actions ── */
+.vdash-action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vdash-action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(8, 12, 22, 0.65);
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vdash-action-btn strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.vdash-action-btn small {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.vdash-chevron {
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+/* ── Status list ── */
+.vdash-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.vdash-status-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.vdash-check {
+  color: #00E676;
+  font-weight: 700;
+}
+
+.vdash-status-list strong {
+  color: #94a3b8;
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+/* ── Summary strip ── */
+.vdash-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(10, 14, 26, 0.85);
+}
+
+.vdash-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.vdash-summary-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-summary-item strong {
+  font-size: 0.88rem;
+}
+
+.vdash-summary-item small {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.vdash-summary-ok {
+  color: #00E676 !important;
+}
+
+/* ── Sync footer ── */
+.vdash-sync-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: rgba(8, 12, 22, 0.6);
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.vdash-sync-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.vdash-mercedes-logo {
+  width: 20px;
+  height: 20px;
+  color: #cbd5e1;
+}
+
+.vdash-sync-center {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.vdash-sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00E676;
+  box-shadow: 0 0 8px rgba(0, 230, 118, 0.5);
+}
+
+.vdash-sync-signal {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vdash-signal-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.vdash-signal-bars i {
+  display: block;
+  width: 3px;
+  background: #00E676;
+  border-radius: 1px;
+}
+
+.vdash-signal-bars i:nth-child(1) { height: 4px; }
+.vdash-signal-bars i:nth-child(2) { height: 7px; }
+.vdash-signal-bars i:nth-child(3) { height: 10px; }
+.vdash-signal-bars i:nth-child(4) { height: 13px; }
+
+.vdash-signal-good {
+  color: #00E676;
+}
+
+.vdash-sync-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.vdash-sync-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.vdash-sync-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Vehicle sidebar overrides ── */
+.idash-location-photo-wrap.is-vehicle-scene .idash-location-overlay {
+  background: linear-gradient(180deg, transparent 10%, rgba(4, 8, 16, 0.94) 100%);
+}
+
+.idash-location-photo-wrap.is-vehicle-scene .idash-live-badge {
+  display: none;
+}
+
+.idash-location-photo-wrap.is-vehicle-scene .idash-location-coords {
+  font-size: 0.72rem;
+}
+
+.idash-vehicle-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+}
+
+.idash-vehicle-wind {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.idash-sidebar-link-active-vehicle {
+  border-left: 2px solid #fff;
+  padding-left: calc(0.75rem - 2px);
+  color: #fff;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1400px) {
+  .vdash-main-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .vdash-right-stack {
+    grid-column: span 1;
+  }
+}
+
+.vdash-section-breadcrumb {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: #38bdf8;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vdash-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vdash-section-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.vdash-section-sub {
+  margin: -0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.vdash-section-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.vdash-section-two-col {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 0.75rem;
+}
+
+.vdash-section-narrow {
+  max-width: 720px;
+}
+
+.vdash-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.vdash-history-item {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(10, 14, 26, 0.85);
+  padding: 0.75rem 0.85rem;
+}
+
+.vdash-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.vdash-history-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.vdash-history-stats dt {
+  font-size: 0.62rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-history-stats dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.vdash-costs-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.vdash-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.vdash-source-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.vdash-settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.vdash-settings-dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.vdash-settings-dl dt {
+  font-size: 0.62rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.vdash-settings-dl dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+}
+
+.vdash-config-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #38bdf8;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.vdash-config-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 1100px) {
+  .vdash-hero-row,
+  .vdash-main-grid,
+  .vdash-summary-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .vdash-section-two-col,
+  .vdash-costs-summary,
+  .vdash-settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vdash-chips-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .vdash-battery-footer {
+    grid-template-columns: 1fr 1fr;
+  }
+}

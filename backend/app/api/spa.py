@@ -93,8 +93,17 @@ async def _get_spa_context(session: AsyncSession, slug: str):
     return site, consumer, config
 
 
+def _normalize_spa_period(period: str) -> str:
+    if period == "day":
+        return "24h"
+    return period
+
+
 def _period_range(period: str, timezone: str) -> tuple[datetime, datetime, str]:
+    period = _normalize_spa_period(period)
     now = datetime.now(UTC)
+    if period == "24h":
+        return now - timedelta(hours=24), now, "hour"
     if period == "today":
         start, end = period_bounds(granularity="day", reference=now, timezone=timezone)
         return start, end, "day"
@@ -276,6 +285,10 @@ async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_sessi
         except json.JSONDecodeError:
             status_payload = {}
     from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
+    from energy_core.integrations.arctic_spa.operational_state import (
+        filter_cycle_active,
+        heater_drawing_power,
+    )
 
     parsed = ArcticSpaStatus.from_api(status_payload) if status_payload else None
     breakdown: dict[str, float] = {}
@@ -294,17 +307,32 @@ async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_sessi
             "Spa har ingen egen effektmätare i EMIC."
         )
 
+    filter_status = parsed.filter_status if parsed else (latest.filter_status if latest else None)
+    current_power_w = latest.power_w if latest else None
+    heater_reported = parsed.heater_element_active if parsed else bool(latest and latest.heater_active)
+    live_heater = heater_drawing_power(
+        heater_active_reported=heater_reported,
+        current_power_w=current_power_w,
+        breakdown=breakdown,
+    )
+    live_filter = filter_cycle_active(
+        filter_status=filter_status,
+        current_power_w=current_power_w,
+        breakdown=breakdown,
+    )
+
     return SpaStatusResponse(
         consumer_id=consumer.id,
         site_slug=slug,
         online=bool(parsed.connected) if parsed else False,
         water_temperature_c=parsed.temperature_c if parsed else (latest.water_temperature_c if latest else None),
         set_temperature_c=parsed.setpoint_c if parsed else (latest.set_temperature_c if latest else None),
-        heater_active=parsed.heater_element_active if parsed else bool(latest and latest.heater_active),
+        heater_active=live_heater,
         pump_label=parsed.primary_pump_label if parsed else "Pump: Av",
-        filter_status=parsed.filter_status if parsed else (latest.filter_status if latest else None),
+        filter_status=filter_status,
+        filter_cycle_active=live_filter,
         errors=list(parsed.errors) if parsed else [],
-        current_power_w=latest.power_w if latest else None,
+        current_power_w=current_power_w,
         power_breakdown=breakdown,
         last_updated=config.last_status_at or (latest.recorded_at if latest else None),
         data_quality=latest.quality if latest else "MISSING",
@@ -384,6 +412,40 @@ async def get_spa_energy_today(slug: str, session: AsyncSession = Depends(get_db
     return await get_spa_energy_period(slug, "today", session)
 
 
+def _history_points_from_grouped_intervals(
+    grouped: list[tuple[datetime, list]],
+    *,
+    granularity: str,
+    timezone: str,
+    fallback_price_sek_kwh: float,
+) -> list[SpaHistoryPoint]:
+    points: list[SpaHistoryPoint] = []
+    tz = ZoneInfo(timezone)
+    for period_start, bucket in grouped:
+        totals = sum_interval_fields(bucket)
+        costs = spa_cost_split(totals, fallback_price_sek_kwh=fallback_price_sek_kwh)
+        if granularity == "hour":
+            period_label = period_start.astimezone(tz).strftime("%H:%M")
+        else:
+            period_label = _format_period_label(period_start, granularity, timezone)
+        points.append(
+            SpaHistoryPoint(
+                timestamp=period_start,
+                period_label=period_label,
+                power_w=totals.get("max_power_w"),
+                energy_kwh=round(totals.get("energy_kwh", 0.0) or 0.0, 3),
+                cost_sek=costs["grid_cost_sek"],
+                solar_kwh=costs["solar_kwh"],
+                battery_kwh=costs["battery_kwh"],
+                grid_kwh=costs["grid_kwh"],
+                grid_cost_sek=costs["grid_cost_sek"],
+                solar_value_sek=costs["solar_value_sek"],
+                battery_value_sek=costs["battery_value_sek"],
+            )
+        )
+    return points
+
+
 @router.get("/sites/{slug}/spa/history", response_model=SpaHistoryResponse)
 async def get_spa_history(
     slug: str,
@@ -392,11 +454,12 @@ async def get_spa_history(
 ) -> SpaHistoryResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
     await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
+    period = _normalize_spa_period(period)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
     intervals = await interval_repo.list_for_period(consumer.id, start=start, end=end)
-    granularity = _breakdown_granularity(period) if period not in {"today"} else "hour"
+    granularity = _breakdown_granularity(period) if period not in {"today", "24h"} else "hour"
     if period in {"today", "week"}:
         points = [
             SpaHistoryPoint(
@@ -415,27 +478,22 @@ async def get_spa_history(
             )
             for row in intervals
         ]
+    elif period == "24h":
+        grouped = group_intervals_by_local_period(intervals, granularity="hour", timezone=timezone)
+        points = _history_points_from_grouped_intervals(
+            grouped,
+            granularity="hour",
+            timezone=timezone,
+            fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+        )
     else:
         grouped = group_intervals_by_local_period(intervals, granularity=granularity, timezone=timezone)
-        points = []
-        for period_start, bucket in grouped:
-            totals = sum_interval_fields(bucket)
-            costs = spa_cost_split(totals, fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh)
-            points.append(
-                SpaHistoryPoint(
-                    timestamp=period_start,
-                    period_label=_format_period_label(period_start, granularity, timezone),
-                    power_w=totals.get("max_power_w"),
-                    energy_kwh=round(totals.get("energy_kwh", 0.0) or 0.0, 3),
-                    cost_sek=costs["grid_cost_sek"],
-                    solar_kwh=costs["solar_kwh"],
-                    battery_kwh=costs["battery_kwh"],
-                    grid_kwh=costs["grid_kwh"],
-                    grid_cost_sek=costs["grid_cost_sek"],
-                    solar_value_sek=costs["solar_value_sek"],
-                    battery_value_sek=costs["battery_value_sek"],
-                )
-            )
+        points = _history_points_from_grouped_intervals(
+            grouped,
+            granularity=granularity,
+            timezone=timezone,
+            fallback_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+        )
     return SpaHistoryResponse(period=period, points=points)
 
 
@@ -981,10 +1039,27 @@ async def run_spa_cleaning_now(slug: str, session: AsyncSession = Depends(get_db
     if not control.smart_control_enabled:
         raise HTTPException(status_code=422, detail="Smartstyrning är inte aktiverad")
     service = SmartSpaEnergyService(get_settings())
-    success = await service.run_cleaning_now(session, slug)
+    decision = await service.run_cleaning_now(session, slug)
     await session.commit()
-    dry_run = control.dry_run or control.shadow_mode
-    if success:
-        msg = "Cleaning startad (Dry Run)" if dry_run else "Cleaning startad"
+    if decision is None:
+        raise HTTPException(status_code=404, detail="Spa hittades inte")
+    dry_run = decision.dry_run
+    if decision.command_sent:
+        msg = "Filtercykel startad (testläge)" if dry_run else "Filtercykel startad"
         return SpaRunCleaningResponse(success=True, message=msg, dry_run=dry_run)
-    return SpaRunCleaningResponse(success=False, message="Kunde inte starta cleaning", dry_run=dry_run)
+    if dry_run and decision.action == "start":
+        return SpaRunCleaningResponse(
+            success=True,
+            message="Filtercykel simulerad (testläge)",
+            dry_run=True,
+        )
+    failure_messages = {
+        "max_starter": "Dagens max antal filtercykler är redan nått.",
+        "torrkorning": "Testläge aktivt — inget kommando skickades till spabadet.",
+        "api_fel": "Kunde inte nå Arctic Spa — kontrollera API-anslutningen.",
+        "spa_fel": "Spabadet rapporterar fel — manuell start blockeras.",
+        "integration_degraderad": "Integrationen är degraderad — försök igen senare.",
+        "paus": "Filtercykeln väntar på minsta paus mellan cyklerna.",
+    }
+    msg = failure_messages.get(decision.reason_sv, "Kunde inte starta filtercykel")
+    return SpaRunCleaningResponse(success=False, message=msg, dry_run=dry_run)

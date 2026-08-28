@@ -100,6 +100,7 @@ export function PeakValuesView({ siteSlug }: PeakValuesViewProps) {
   const highest = useMemo(
     () => ({
       solar: Math.max(0, ...peaks.map((peak) => peak.solar_production_w)),
+      consumption: Math.max(0, ...peaks.map((peak) => peak.consumption_w ?? 0)),
       charge: Math.max(0, ...peaks.map((peak) => peak.battery_charge_w)),
       discharge: Math.max(0, ...peaks.map((peak) => peak.battery_discharge_w)),
     }),
@@ -112,7 +113,7 @@ export function PeakValuesView({ siteSlug }: PeakValuesViewProps) {
         <div>
           <h3 id="peaks-title" className="section-title">Peakvärden</h3>
           <p className="muted peaks-intro">
-            Högsta uppmätta effekt för solproduktion, batteriladdning och batteriurladdning.
+            Högsta uppmätta effekt för solproduktion, husförbrukning, batteriladdning och batteriurladdning.
           </p>
         </div>
         {period !== "year" && (
@@ -149,6 +150,7 @@ export function PeakValuesView({ siteSlug }: PeakValuesViewProps) {
       {!loading && !error && peaks.length > 0 && (
         <dl className="peaks-summary">
           <div><dt>Högsta solpeak</dt><dd>{formatWatts(highest.solar)}</dd></div>
+          <div><dt>Högsta förbrukning</dt><dd>{formatWatts(highest.consumption)}</dd></div>
           <div><dt>Högsta laddning</dt><dd>{formatWatts(highest.charge)}</dd></div>
           <div><dt>Högsta urladdning</dt><dd>{formatWatts(highest.discharge)}</dd></div>
         </dl>
@@ -167,6 +169,7 @@ export function PeakValuesView({ siteSlug }: PeakValuesViewProps) {
               <tr>
                 <th scope="col">{period === "day" ? "Datum" : period === "month" ? "Månad" : "År"}</th>
                 <th scope="col">Solproduktion</th>
+                <th scope="col">Husförbrukning</th>
                 <th scope="col">Batteriladdning</th>
                 <th scope="col">Batteriurladdning</th>
               </tr>
@@ -176,6 +179,7 @@ export function PeakValuesView({ siteSlug }: PeakValuesViewProps) {
                 <tr key={peak.period_start}>
                   <th scope="row">{formatPeriod(peak.period_start, period)}</th>
                   <td>{formatWatts(peak.solar_production_w)}</td>
+                  <td>{formatWatts(peak.consumption_w ?? 0)}</td>
                   <td>{formatWatts(peak.battery_charge_w)}</td>
                   <td>{formatWatts(peak.battery_discharge_w)}</td>
                 </tr>

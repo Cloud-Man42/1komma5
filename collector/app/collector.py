@@ -31,8 +31,9 @@ from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
-from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
-from energy_core.vehicles.sessions import VehicleChargeSessionCoordinator
+from energy_core.aggregation.service import EnergyAggregationService
+from energy_core.snapshots.writer import SnapshotWriter
+from site_poll_context import SitePollContext
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ class Collector:
         self._energy_balance = EnergyBalanceCoordinator()
         self._vehicle_supervisor = VehicleIntegrationSupervisor(self._session_factory, self._settings)
         self._vehicle_charge_sessions = VehicleChargeSessionCoordinator()
+        self._snapshot_writer = SnapshotWriter(self._settings)
+        self._energy_aggregation = EnergyAggregationService(is_sqlite=self._settings.is_sqlite)
 
     async def setup(self) -> None:
         try:
@@ -83,11 +86,16 @@ class Collector:
                 await reading_repo.upsert_reading(site.id, normalized)
                 reading_count += 1
             await self._collect_market_prices(session, site_repo)
-            await self._run_spa_integration(session, site_repo)
-            await self._run_ev_accounting(session, site_repo)
-            await self._run_vehicle_charge_sessions(session, site_repo)
-            await self._run_energy_balance(session, site_repo)
+            poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
+            await self._run_spa_integration(session, site_repo, poll_ctx)
+            await self._run_ev_accounting(session, site_repo, poll_ctx)
+            await self._run_vehicle_charge_sessions(session, site_repo, poll_ctx)
+            await self._run_energy_balance(session, site_repo, poll_ctx)
             await self._run_solar_forecast(session, site_repo)
+            sites = await site_repo.list_all()
+            for site in sites:
+                await self._energy_aggregation.rollup_site(session, site)
+            await self._snapshot_writer.write_all_sites(session, sites)
             await session.commit()
 
         bridge_count = 0
@@ -133,20 +141,15 @@ class Collector:
             except Exception:
                 logger.exception("Failed to collect market prices for site %s", site.slug)
 
-    async def _run_spa_integration(self, session, site_repo: SiteRepository) -> None:
+    async def _run_spa_integration(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
         if not self._settings.arctic_spa_enabled:
             return
         try:
-            client = await create_heartbeat_client(session)
             live_overviews: dict[str, dict] = {}
-            if client is not None:
-                for site in await site_repo.list_all():
-                    if not site.external_system_id:
-                        continue
-                    try:
-                        live_overviews[site.slug] = await client.fetch_live_overview(site.external_system_id)
-                    except Exception:
-                        logger.exception("Failed to fetch live overview for spa site %s", site.slug)
+            for site in await site_repo.list_all():
+                overview = await poll_ctx.live_overview(site)
+                if overview is not None:
+                    live_overviews[site.slug] = overview
             polled = await self._spa_polling.poll_due_consumers(
                 session,
                 live_overviews=live_overviews,
@@ -170,16 +173,10 @@ class Collector:
         except Exception:
             logger.exception("Arctic Spa integration failed")
 
-    async def _run_ev_accounting(self, session, site_repo: SiteRepository) -> None:
-        client = await create_heartbeat_client(session)
+    async def _run_ev_accounting(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
         total = 0
         for site in await site_repo.list_all():
-            live_overview = None
-            if client is not None and site.external_system_id:
-                try:
-                    live_overview = await client.fetch_live_overview(site.external_system_id)
-                except Exception:
-                    logger.exception("Failed to fetch live overview for EV accounting site %s", site.slug)
+            live_overview = await poll_ctx.live_overview(site)
             total += await self._ev_accounting.process_site(
                 session,
                 site=site,
@@ -189,16 +186,10 @@ class Collector:
         if total:
             logger.debug("EV accounting processed %d charger ticks", total)
 
-    async def _run_vehicle_charge_sessions(self, session, site_repo: SiteRepository) -> None:
-        client = await create_heartbeat_client(session)
+    async def _run_vehicle_charge_sessions(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
         total = 0
         for site in await site_repo.list_all():
-            live_overview = None
-            if client is not None and site.external_system_id:
-                try:
-                    live_overview = await client.fetch_live_overview(site.external_system_id)
-                except Exception:
-                    logger.exception("Failed to fetch live overview for vehicle sessions site %s", site.slug)
+            live_overview = await poll_ctx.live_overview(site)
             total += await self._vehicle_charge_sessions.process_site(
                 session,
                 site=site,
@@ -208,19 +199,13 @@ class Collector:
         if total:
             logger.debug("Vehicle charge sessions processed %d vehicle ticks", total)
 
-    async def _run_energy_balance(self, session, site_repo: SiteRepository) -> None:
+    async def _run_energy_balance(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
         from energy_core.db.ev_charger_repo import EvChargerRepository
 
-        client = await create_heartbeat_client(session)
         charger_repo = EvChargerRepository(session)
         total = 0
         for site in await site_repo.list_all():
-            live_overview = None
-            if client is not None and site.external_system_id:
-                try:
-                    live_overview = await client.fetch_live_overview(site.external_system_id)
-                except Exception:
-                    logger.exception("Failed to fetch live overview for energy balance site %s", site.slug)
+            live_overview = await poll_ctx.live_overview(site)
             chargers = await charger_repo.list_for_site(site.id)
             for charger in chargers:
                 if not charger.bridge_enabled and not charger.virtual_evse_enabled:
@@ -377,6 +362,12 @@ class Collector:
 
     async def _run_solar_forecast(self, session, site_repo: SiteRepository) -> None:
         sites = await site_repo.list_all()
+        now = datetime.now(UTC)
+        for site in sites:
+            try:
+                await self._solar_forecast.evaluate_site_observations(session, site, now=now)
+            except Exception:
+                logger.exception("Solar observation evaluation failed for site %s", site.slug)
         count = await self._solar_forecast.run_due_sites(session, sites)
         if count:
             logger.debug("Solar forecast refreshed for %d sites", count)

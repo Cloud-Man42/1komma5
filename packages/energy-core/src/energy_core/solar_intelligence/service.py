@@ -20,15 +20,11 @@ from energy_core.db.solar_intelligence_repo import (
     SolarWeatherSnapshotRepository,
 )
 from energy_core.solar_forecast.daily_evaluation import actual_kwh_for_day
-from energy_core.solar_forecast.open_meteo import OpenMeteoWeatherProvider
 from energy_core.solar_intelligence.anomaly import compute_performance_daily
 from energy_core.solar_intelligence.backfill import SolarBackfillService
 from energy_core.solar_intelligence.calibration import SolarCalibrationService, should_promote_challenger
-from energy_core.solar_intelligence.engine import SolarIntelligenceEngine
 from energy_core.solar_intelligence.physical_model import PvArraySpec
-from energy_core.solar_intelligence.providers.open_meteo_adapter import OpenMeteoAdapter
-from energy_core.solar_intelligence.providers.smhi_snow import SmhiSnowWeatherProvider
-from energy_core.solar_intelligence.providers.smhi_strang import SmhiStrangRadiationProvider
+from energy_core.solar_intelligence.provider_factory import SolarIntelligenceProviderFactory
 
 logger = logging.getLogger(__name__)
 
@@ -36,33 +32,15 @@ logger = logging.getLogger(__name__)
 class SolarIntelligenceCoordinator:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
-        om = OpenMeteoWeatherProvider(
-            base_url=self._settings.open_meteo_base_url,
-            historical_url=self._settings.open_meteo_historical_url,
-            api_key=self._settings.open_meteo_api_key or None,
-            timeout_seconds=self._settings.open_meteo_timeout_seconds,
-        )
-        fallback = OpenMeteoAdapter(om)
-        self._strang = SmhiStrangRadiationProvider(
-            base_url=self._settings.smhi_strang_base_url,
-            timeout_seconds=self._settings.smhi_timeout_seconds,
-        )
-        self._snow = SmhiSnowWeatherProvider(
-            base_url=self._settings.smhi_snow_base_url,
-            timeout_seconds=self._settings.smhi_timeout_seconds,
-        )
-        self._engine = SolarIntelligenceEngine(
-            radiation_provider=self._strang,
-            weather_provider=self._snow,
-            open_meteo_fallback=fallback,
-            horizon_hours=self._settings.solar_forecast_horizon_hours,
-        )
-        self._backfill = SolarBackfillService(
-            radiation_provider=self._strang,
-            weather_provider=self._snow,
-            open_meteo_fallback=fallback,
-        )
+        self._factory = SolarIntelligenceProviderFactory(self._settings)
         self._calibration = SolarCalibrationService(self._settings)
+
+    def _bundle_for(self, record) -> tuple:
+        return self._factory.bundle_for(
+            country_code=getattr(record, "country_code", None),
+            latitude=record.latitude or 0.0,
+            longitude=record.longitude or 0.0,
+        )
 
     async def refresh_site(self, session: AsyncSession, site, *, now: datetime | None = None) -> bool:
         now = now or datetime.now(UTC)
@@ -74,29 +52,29 @@ class SolarIntelligenceCoordinator:
         if not domain.is_complete():
             return False
 
+        bundle = self._bundle_for(record)
         health_repo = SolarProviderHealthRepository(session)
         model_repo = SolarModelRepository(session)
         champion = await model_repo.get_champion(site.id)
 
         try:
-            forecast = await self._engine.generate(site=domain, champion=champion, now=now)
-            await health_repo.record_success(site.id, "smhi-strang")
-            await health_repo.record_success(site.id, "smhi-snow")
+            forecast = await bundle.engine.generate(site=domain, champion=champion, now=now)
+            await health_repo.record_success(site.id, bundle.radiation_name)
+            await health_repo.record_success(site.id, bundle.weather_name)
         except Exception as exc:
             logger.exception("Solar intelligence refresh failed site=%s", site.slug)
-            await health_repo.record_failure(site.id, "smhi-strang", str(exc))
+            await health_repo.record_failure(site.id, bundle.radiation_name, str(exc))
             return False
 
         hourly_repo = SolarHourlyForecastRepository(session)
         await hourly_repo.replace_for_site(site.id, forecast)
 
-        # Cache radiation/weather for admin coverage views
         try:
             to_ts = now + timedelta(hours=self._settings.solar_forecast_horizon_hours)
-            rad = await self._strang.fetch_radiation(
+            rad = await bundle.radiation_provider.fetch_radiation(
                 latitude=domain.latitude, longitude=domain.longitude, from_ts=now, to_ts=to_ts
             )
-            wx = await self._snow.fetch_weather(
+            wx = await bundle.weather_provider.fetch_weather(
                 latitude=domain.latitude, longitude=domain.longitude, from_ts=now, to_ts=to_ts
             )
             await SolarRadiationCacheRepository(session).upsert_samples(site.id, rad)
@@ -106,10 +84,11 @@ class SolarIntelligenceCoordinator:
 
         await config_repo.touch_forecast(site.id)
         logger.info(
-            "Solar intelligence forecast site=%s today=%.2f kWh status=%s",
+            "Solar intelligence forecast site=%s today=%.2f kWh status=%s provider=%s",
             site.id,
             forecast.expected_today_kwh,
             forecast.status,
+            bundle.radiation_name,
         )
         return True
 
@@ -119,6 +98,12 @@ class SolarIntelligenceCoordinator:
         if record is None or not record.enabled:
             return 0
         domain = _to_domain_config(record)
+        bundle = self._bundle_for(record)
+        backfill = SolarBackfillService(
+            radiation_provider=bundle.radiation_provider,
+            weather_provider=bundle.weather_provider,
+            open_meteo_fallback=self._factory.open_meteo_fallback,
+        )
         since = datetime.now(UTC) - timedelta(days=days + 2)
         reading_repo = EnergyReadingRepository(session, is_sqlite=self._settings.is_sqlite)
         readings = await reading_repo.list_readings(site.id, from_time=since, limit=100000)
@@ -130,7 +115,7 @@ class SolarIntelligenceCoordinator:
 
         to_day = date.today()
         from_day = to_day.fromordinal(to_day.toordinal() - days)
-        samples = await self._backfill.backfill_site(domain, raw, from_day=from_day, to_day=to_day, arrays=arrays)
+        samples = await backfill.backfill_site(domain, raw, from_day=from_day, to_day=to_day, arrays=arrays)
         repo = SolarTrainingSampleRepository(session)
         return await repo.upsert_samples(samples)
 
@@ -165,6 +150,34 @@ class SolarIntelligenceCoordinator:
         actual, _ = actual_kwh_for_day(raw, day, site.timezone)
         perf = compute_performance_daily(performance_date=day, actual_kwh=actual, expected_kwh=expected_kwh)
         await SolarPerformanceDailyRepository(session).upsert(site.id, perf)
+
+    async def fetch_dmi_forecast(
+        self,
+        *,
+        latitude: float,
+        longitude: float,
+        from_ts: datetime,
+        to_ts: datetime,
+    ) -> list[dict]:
+        rows = await self._factory.dmi_client.fetch_rows(
+            latitude=latitude,
+            longitude=longitude,
+            from_ts=from_ts,
+            to_ts=to_ts,
+        )
+        return [
+            {
+                "timestamp": row["ts_utc"].isoformat(),
+                "ghi_wm2": row.get("ghi_wm2"),
+                "dhi_wm2": row.get("dhi_wm2"),
+                "temperature_c": row.get("temperature_c"),
+                "cloud_cover_pct": row.get("cloud_cover_pct"),
+                "precipitation_mm": row.get("precipitation_mm"),
+                "humidity_pct": row.get("humidity_pct"),
+                "wind_speed_ms": row.get("wind_speed_ms"),
+            }
+            for row in rows
+        ]
 
     async def _load_arrays(self, session, site_id: int, domain) -> list[PvArraySpec]:
         from sqlalchemy import select

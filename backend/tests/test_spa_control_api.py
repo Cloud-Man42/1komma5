@@ -175,6 +175,38 @@ async def test_spa_run_cleaning_now_success(client):
     body = res.json()
     assert body["success"] is True
     assert body["dry_run"] is True
+    assert "test" in body["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_spa_run_cleaning_now_shadow_mode_allows_manual(client):
+    ac, _, _ = client
+    await ac.put(
+        "/api/sites/akarp/spa/control/config",
+        json={"smart_control_enabled": True, "dry_run": False, "shadow_mode": True},
+    )
+    res = await ac.post("/api/sites/akarp/spa/cleaning/run-now")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["dry_run"] is False
+
+
+@pytest.mark.asyncio
+async def test_spa_control_config_toggle_shadow_mode(client):
+    ac, _, _ = client
+    enabled = await ac.put(
+        "/api/sites/akarp/spa/control/config",
+        json={"shadow_mode": True},
+    )
+    assert enabled.status_code == 200
+    assert enabled.json()["shadow_mode"] is True
+
+    disabled = await ac.put(
+        "/api/sites/akarp/spa/control/config",
+        json={"shadow_mode": False},
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["shadow_mode"] is False
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,1126 @@
+/* EMIC Energy Intelligence Dashboard — exact mockup layout */
+
+.emic-app-dashboard {
+  min-height: 100vh;
+  background: #040810;
+}
+
+.emic-app-dashboard .header,
+.emic-app-dashboard .container {
+  display: none;
+}
+
+.idash-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(56, 189, 248, 0.08), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, rgba(251, 191, 36, 0.06), transparent 50%),
+    #050a14;
+  color: #e2e8f0;
+}
+
+/* ── Sidebar ── */
+.idash-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1rem 1rem;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  background: linear-gradient(180deg, #070d18 0%, #050910 100%);
+}
+
+.idash-sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0 0.25rem 0.5rem;
+}
+
+.idash-brand-mark {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.idash-brand-sub {
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.idash-location-card {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.idash-location-photo-wrap {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(135deg, #1e293b, #0f172a);
+}
+
+.idash-location-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+}
+
+.idash-location-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  background: linear-gradient(180deg, transparent 20%, rgba(4, 8, 16, 0.92) 100%);
+}
+
+.idash-location-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.idash-live-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #4ade80;
+  letter-spacing: 0.04em;
+}
+
+.idash-location-coords {
+  margin: 0;
+  font-size: 0.62rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.idash-location-weather {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: #e2e8f0;
+}
+
+.idash-location-sun {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  color: #cbd5e1;
+}
+
+.idash-elprice-card {
+  margin-top: 0.65rem;
+  padding: 0.85rem 0.8rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 12, 24, 0.98));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.idash-elprice-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.idash-elprice-header h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.idash-elprice-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #4ade80;
+}
+
+.idash-elprice-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.75);
+}
+
+.idash-elprice-empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.idash-elprice-chart-wrap {
+  position: relative;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.idash-elprice-y-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  font-size: 0.58rem;
+  color: #64748b;
+  z-index: 1;
+}
+
+.idash-elprice-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.idash-elprice-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.55rem 0.35rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.idash-elprice-stat.is-current {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(30, 41, 59, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.06);
+}
+
+.idash-elprice-stat strong {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.1;
+}
+
+.idash-elprice-stat-label {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.idash-elprice-stat-label.is-low {
+  color: #4ade80;
+}
+
+.idash-elprice-stat-label.is-high {
+  color: #f87171;
+}
+
+.idash-elprice-trend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  line-height: 1.35;
+}
+
+.idash-elprice-trend em {
+  font-style: normal;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.idash-elprice-trend.is-rising em {
+  color: #fb923c;
+}
+
+.idash-elprice-trend-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.idash-elprice-trend.is-rising .idash-elprice-trend-icon {
+  background: rgba(251, 146, 60, 0.12);
+  color: #fb923c;
+}
+
+.idash-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.idash-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.88rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.idash-sidebar-link:hover {
+  background: rgba(148, 163, 184, 0.08);
+  color: #e2e8f0;
+}
+
+.idash-sidebar-link-active {
+  background: rgba(96, 165, 250, 0.12);
+  color: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.25);
+}
+
+.idash-nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.idash-system-status {
+  margin-top: auto;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.idash-system-status-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: #64748b;
+}
+
+.idash-system-status-body {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.idash-system-status-body strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.idash-system-status-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.idash-pulse-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+}
+
+.idash-pulse-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.idash-pulse-icon-ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.25);
+  animation: idash-pulse 2.4s ease-in-out infinite;
+}
+
+.idash-pulse-icon-warn {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+@keyframes idash-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 12px rgba(74, 222, 128, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(74, 222, 128, 0.35);
+  }
+}
+
+/* ── Main / Topbar ── */
+.idash-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.idash-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(7, 12, 22, 0.85);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.idash-topbar-nav {
+  display: flex;
+  gap: 0.15rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.idash-topbar-link {
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  color: #64748b;
+  text-decoration: none;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+
+.idash-topbar-link:hover {
+  color: #cbd5e1;
+}
+
+.idash-topbar-link-active {
+  color: #f8fafc;
+  border-bottom-color: #60a5fa;
+  box-shadow: 0 8px 20px rgba(96, 165, 250, 0.12);
+}
+
+.idash-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.idash-icon-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.8);
+  color: #cbd5e1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.idash-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.idash-notify-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.idash-topbar .theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.idash-user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+}
+
+.idash-content {
+  padding: 1rem 1.25rem 1.5rem;
+  max-width: 1600px;
+}
+
+/* ── Overview ── */
+.idash-overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.idash-site-title {
+  margin: 0;
+  font-size: clamp(1.6rem, 2vw, 2rem);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  letter-spacing: 0.02em;
+}
+
+.idash-date-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.75);
+  font-size: 0.85rem;
+}
+
+.idash-date-chip-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: #64748b;
+}
+
+/* ── Gauge row ── */
+.idash-gauge-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.idash-gauge-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.95) 0%, rgba(10, 15, 26, 0.98) 100%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  padding: 0.75rem 0.85rem 0.65rem;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+}
+
+.idash-card-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: #64748b;
+}
+
+.idash-gauge-card-production .idash-card-kicker {
+  color: #fbbf24;
+}
+
+.idash-gauge-card-consumption .idash-card-kicker {
+  color: #38bdf8;
+}
+
+.idash-gauge-card-battery .idash-card-kicker {
+  color: #a78bfa;
+}
+
+.idash-gauge-card-grid .idash-card-kicker {
+  color: #4ade80;
+}
+
+.idash-gauge-card-body {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+.idash-gauge-card .analog-boost-gauge-label,
+.idash-gauge-card .analog-boost-gauge-icon {
+  display: none;
+}
+
+.idash-gauge-card .analog-boost-gauge-value {
+  font-size: 1.35rem;
+}
+
+.idash-gauge-meta {
+  text-align: center;
+  margin-top: -0.35rem;
+}
+
+.idash-gauge-inset {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+}
+
+.idash-gauge-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.idash-gauge-footer {
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+
+.idash-sparkline {
+  width: 100%;
+  height: 28px;
+}
+
+.idash-soc-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.15);
+  overflow: hidden;
+}
+
+.idash-soc-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #fbbf24, #4ade80);
+}
+
+/* ── Grid layout ── */
+.idash-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.idash-overview-main,
+.idash-overview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* ── Panels ── */
+.idash-panel {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92) 0%, rgba(8, 12, 22, 0.98) 100%);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+  padding: 0.9rem 1rem;
+}
+
+.idash-panel-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  color: #94a3b8;
+}
+
+.idash-panel-subtitle {
+  margin: -0.45rem 0 0.75rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: #64748b;
+}
+
+.idash-muted {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+/* ── Energy flow strip ── */
+.idash-flow-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr auto 1fr auto;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0;
+}
+
+.idash-flow-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 72px;
+  text-align: center;
+}
+
+.idash-flow-node-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.1rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.idash-flow-node-solar .idash-flow-node-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.15);
+}
+
+.idash-flow-node-house .idash-flow-node-icon {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.idash-flow-node-battery .idash-flow-node-icon {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+}
+
+.idash-flow-node-grid .idash-flow-node-icon {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+.idash-flow-node strong {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.idash-flow-node-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.idash-flow-node-sub {
+  font-size: 0.62rem;
+  color: #64748b;
+  max-width: 110px;
+}
+
+.idash-flow-line {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.idash-flow-line-active .idash-flow-line-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #60a5fa, transparent);
+  animation: idash-flow-move 1.8s linear infinite;
+}
+
+.idash-flow-line[data-tone="solar"].idash-flow-line-active .idash-flow-line-glow {
+  background: linear-gradient(90deg, transparent, #fbbf24, transparent);
+}
+
+.idash-flow-line[data-tone="battery"].idash-flow-line-active .idash-flow-line-glow {
+  background: linear-gradient(90deg, transparent, #a78bfa, transparent);
+}
+
+.idash-flow-line[data-tone="grid"].idash-flow-line-active .idash-flow-line-glow {
+  background: linear-gradient(90deg, transparent, #4ade80, transparent);
+}
+
+@keyframes idash-flow-move {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Today stats ── */
+.idash-today-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.idash-today-stat {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  padding: 0.65rem;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+.idash-today-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+}
+
+.idash-today-stat-solar .idash-today-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
+.idash-today-stat-house .idash-today-icon {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+}
+
+.idash-today-stat-battery .idash-today-icon {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+}
+
+.idash-today-stat-grid .idash-today-icon {
+  background: rgba(74, 222, 128, 0.12);
+  color: #4ade80;
+}
+
+.idash-today-label {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.idash-today-value {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+/* ── Performance ── */
+.idash-performance-body {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.idash-performance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.idash-performance-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.idash-performance-value {
+  color: #4ade80;
+}
+
+.idash-performance-negative {
+  color: #fb7185;
+}
+
+/* ── Circular gauge ── */
+.idash-circular-gauge {
+  position: relative;
+}
+
+.idash-circular-gauge-fill {
+  filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.35));
+}
+
+.idash-circular-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.idash-circular-gauge-center strong {
+  font-size: 1.15rem;
+}
+
+.idash-circular-gauge-center span {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+/* ── Weather ── */
+.idash-weather-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  align-items: start;
+}
+
+.idash-weather-now {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.idash-weather-icon {
+  flex-shrink: 0;
+}
+
+.idash-weather-temp-main {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.idash-weather-condition {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.idash-weather-impact {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.07);
+  border-left: 2px solid rgba(56, 189, 248, 0.35);
+}
+
+.idash-weather-sun {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+}
+
+.idash-weather-stats {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 0.2rem 0.75rem;
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.idash-weather-stats dt {
+  color: #64748b;
+}
+
+.idash-weather-stats dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.idash-weather-hours {
+  list-style: none;
+  display: flex;
+  gap: 0.15rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.idash-weather-hours li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 38px;
+  padding: 0.35rem 0.15rem;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.35);
+}
+
+.idash-weather-hour-time {
+  font-size: 0.6rem;
+  color: #64748b;
+}
+
+.idash-weather-hour-temp {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.idash-weather-source {
+  margin: 0.5rem 0 0;
+  font-size: 0.6rem;
+  color: #475569;
+}
+
+/* ── Solar window ── */
+.idash-solar-window-range {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.idash-solar-window-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.35rem;
+  height: 56px;
+  margin-bottom: 0.5rem;
+}
+
+.idash-solar-window-bars span {
+  flex: 1;
+  border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #fbbf24, rgba(251, 191, 36, 0.15));
+  min-height: 8px;
+}
+
+.idash-solar-window-surplus {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+/* ── Confidence ── */
+.idash-confidence-body {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.idash-confidence-model {
+  margin-top: 0.35rem;
+}
+
+.idash-confidence-body strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+/* ── Production chart ── */
+.idash-production-chart {
+  min-height: 260px;
+}
+
+.idash-production-chart-hint {
+  margin-top: 0.35rem;
+}
+
+.idash-production-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.idash-production-stats {
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.idash-production-stats dt {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.idash-production-stats dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.idash-negative {
+  color: #fb923c;
+}
+
+/* ── Subpages inside dashboard shell ── */
+.idash-content .dashboard-surface,
+.idash-content .dashboard-section,
+.idash-content section {
+  color: inherit;
+}
+
+.idash-content .site-tabs {
+  display: none;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1200px) {
+  .idash-gauge-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .idash-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .idash-production-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .idash-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .idash-sidebar {
+    display: none;
+  }
+
+  .idash-today-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .idash-flow-strip {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .idash-flow-line {
+    width: 3px;
+    height: 24px;
+    justify-self: center;
+  }
+}

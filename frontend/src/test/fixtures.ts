@@ -8,7 +8,7 @@ import type {
 export function makeSite(overrides: Partial<Site> = {}): Site {
   return {
     slug: "akarp",
-    name: "Åkarp",
+    name: "Demo Home",
     timezone: "Europe/Stockholm",
     main_fuse_a: 20,
     fallback_purchase_price_sek_kwh: 2,

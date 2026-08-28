@@ -208,6 +208,7 @@ async def get_site_peaks(
             PeakReadingResponse(
                 period_start=peak.period_start,
                 solar_production_w=peak.solar_production_w,
+                consumption_w=peak.consumption_w,
                 battery_charge_w=peak.battery_charge_w,
                 battery_discharge_w=peak.battery_discharge_w,
             )

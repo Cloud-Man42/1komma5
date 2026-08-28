@@ -38,4 +38,8 @@ def get_site_repository(session: AsyncSession = Depends(get_db_session)) -> Site
 
 def get_reading_repository(session: AsyncSession = Depends(get_db_session)) -> EnergyReadingRepository:
     settings = get_app_settings()
-    return EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    return EnergyReadingRepository(
+        session,
+        is_sqlite=settings.is_sqlite,
+        enable_timescaledb=settings.enable_timescaledb,
+    )

@@ -80,6 +80,12 @@ class Settings(BaseSettings):
         alias="SMHI_SNOW_BASE_URL",
     )
     smhi_timeout_seconds: float = Field(default=30.0, ge=5.0, alias="SMHI_TIMEOUT_SECONDS")
+    dmi_edr_base_url: str = Field(
+        default="https://opendataapi.dmi.dk/v1/forecastedr",
+        alias="DMI_EDR_BASE_URL",
+    )
+    dmi_harmonie_collection: str = Field(default="harmonie_dini_sf", alias="DMI_HARMONIE_COLLECTION")
+    dmi_timeout_seconds: float = Field(default=30.0, ge=5.0, alias="DMI_TIMEOUT_SECONDS")
 
     # Sungrow / energy balance / Virtual EVSE (Phase 1)
     sungrow_telemetry_max_age_seconds: float = Field(default=60.0, ge=5.0, alias="SUNGROW_TELEMETRY_MAX_AGE_SECONDS")
@@ -109,6 +115,7 @@ class Settings(BaseSettings):
     widget_snapshot_cache_seconds: int = Field(default=15, ge=0, alias="WIDGET_SNAPSHOT_CACHE_SECONDS")
     widget_savings_cache_seconds: int = Field(default=300, ge=0, alias="WIDGET_SAVINGS_CACHE_SECONDS")
     widget_rate_limit_per_minute: int = Field(default=60, ge=1, alias="WIDGET_RATE_LIMIT_PER_MINUTE")
+    enable_timescaledb: bool = Field(default=False, alias="ENABLE_TIMESCALEDB")
 
     @field_validator("heartbeat_provider", mode="before")
     @classmethod

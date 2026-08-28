@@ -12,6 +12,7 @@ from energy_core.integrations.arctic_spa.control_service import ArcticSpaControl
 from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
 
 
+from energy_core.spa_energy.filter_policy import is_spa_filter_self_managed
 from energy_core.spa_energy.runtime import (
     DEGRADED_MESSAGE_SV,
     SpaActuatorRuntime,
@@ -71,48 +72,53 @@ class SpaCleaningActuator:
             self._runtime.state = SpaActuatorState.DEGRADED
             return SpaActuatorDecision("none", "spa_fault", "spa_fel", dry_run=self._control.dry_run)
 
-        dry_run = self._control.dry_run or self._control.shadow_mode
-        if dry_run and not manual_override:
+        auto_dry_run = self._control.dry_run or self._control.shadow_mode
+        if auto_dry_run and not manual_override:
             return SpaActuatorDecision("plan_only", "dry_run", "torrkorning", dry_run=True)
 
+        if is_spa_filter_self_managed(self._control) and not manual_override:
+            return SpaActuatorDecision("plan_only", "spa_self_managed", "eco_pak_styr_filter", dry_run=True)
+
         if manual_override:
+            # Explicit user action — honor dry_run test flag but not shadow mode.
+            manual_dry_run = self._control.dry_run
             return await self._start_cleaning(
                 control_service,
                 now=now,
                 reason="manual_override",
                 reason_sv="manuell_overstyrning",
-                dry_run=dry_run,
+                dry_run=manual_dry_run,
             )
 
         if self._runtime.integration_degraded:
-            return SpaActuatorDecision("none", "integration_degraded", "integration_degraderad", dry_run=dry_run)
+            return SpaActuatorDecision("none", "integration_degraded", "integration_degraderad", dry_run=auto_dry_run)
 
         window = self._select_window(plan, now)
 
         if self._runtime.state == SpaActuatorState.CLEANING:
-            return await self._handle_active_cleaning(control_service, status, now, dry_run, window)
+            return await self._handle_active_cleaning(control_service, status, now, auto_dry_run, window)
 
         if window is None:
-            return SpaActuatorDecision("none", "no_plan", "ingen_plan", dry_run=dry_run)
+            return SpaActuatorDecision("none", "no_plan", "ingen_plan", dry_run=auto_dry_run)
 
         if now < window.start:
             if now >= window.start - timedelta(minutes=5):
-                return SpaActuatorDecision("wait", "pre_window", "vantar_fonster", dry_run=dry_run)
-            return SpaActuatorDecision("none", "scheduled", "planerad", dry_run=dry_run)
+                return SpaActuatorDecision("wait", "pre_window", "vantar_fonster", dry_run=auto_dry_run)
+            return SpaActuatorDecision("none", "scheduled", "planerad", dry_run=auto_dry_run)
 
         if window.start <= now < window.end:
             if self._cooldown_blocks_start(now):
-                return SpaActuatorDecision("none", "cooldown", "paus", dry_run=dry_run)
+                return SpaActuatorDecision("none", "cooldown", "paus", dry_run=auto_dry_run)
             return await self._start_cleaning(
                 control_service,
                 now=now,
                 reason=plan.reason if plan else "scheduled",
                 reason_sv=plan.reason_sv if plan else "planerad",
-                dry_run=dry_run,
+                dry_run=auto_dry_run,
                 stop_at=window.end,
             )
 
-        return SpaActuatorDecision("none", "window_passed", "fonster_passerat", dry_run=dry_run)
+        return SpaActuatorDecision("none", "window_passed", "fonster_passerat", dry_run=auto_dry_run)
 
     def _select_window(self, plan: LoadPlan | None, now: datetime) -> PlanWindow | None:
         if not plan or not plan.windows:

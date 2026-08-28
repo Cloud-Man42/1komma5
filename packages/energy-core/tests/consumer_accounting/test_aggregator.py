@@ -49,6 +49,22 @@ def test_sum_interval_fields_empty():
     assert sum_interval_fields([]) == {}
 
 
+def test_group_intervals_by_local_period_hour():
+    hour1 = datetime(2026, 8, 27, 10, 15, tzinfo=UTC)
+    hour2 = datetime(2026, 8, 27, 10, 45, tzinfo=UTC)
+    hour3 = datetime(2026, 8, 27, 11, 10, tzinfo=UTC)
+    intervals = [
+        SimpleNamespace(start_time=hour1, energy_kwh=0.5, solar_direct_kwh=0.0, solar_battery_kwh=0.0, grid_battery_kwh=0.0, grid_direct_kwh=0.5, unknown_kwh=0.0, actual_cost_sek=0.5, reference_cost_sek=1.0, savings_sek=0.5, heater_runtime_seconds=0.0, pump_runtime_seconds=0.0, average_power_w=1000.0),
+        SimpleNamespace(start_time=hour2, energy_kwh=0.6, solar_direct_kwh=0.0, solar_battery_kwh=0.0, grid_battery_kwh=0.0, grid_direct_kwh=0.6, unknown_kwh=0.0, actual_cost_sek=0.6, reference_cost_sek=1.2, savings_sek=0.6, heater_runtime_seconds=0.0, pump_runtime_seconds=0.0, average_power_w=1200.0),
+        SimpleNamespace(start_time=hour3, energy_kwh=0.7, solar_direct_kwh=0.0, solar_battery_kwh=0.0, grid_battery_kwh=0.0, grid_direct_kwh=0.7, unknown_kwh=0.0, actual_cost_sek=0.7, reference_cost_sek=1.4, savings_sek=0.7, heater_runtime_seconds=0.0, pump_runtime_seconds=0.0, average_power_w=1400.0),
+    ]
+    grouped = group_intervals_by_local_period(intervals, granularity="hour", timezone="Europe/Stockholm")
+    assert len(grouped) == 2
+    assert grouped[0][1][0].energy_kwh == 0.5
+    assert grouped[0][1][1].energy_kwh == 0.6
+    assert grouped[1][1][0].energy_kwh == 0.7
+
+
 def test_group_intervals_by_local_period_day():
     day1 = datetime(2026, 8, 24, 10, 0, tzinfo=UTC)
     day2 = datetime(2026, 8, 25, 10, 0, tzinfo=UTC)

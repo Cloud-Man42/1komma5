@@ -131,7 +131,7 @@ async def test_disable_vehicle_hides_it_from_list(client, monkeypatch):
                 site_id=site.id,
                 provider="mercedes",
                 external_id="eqe-vin",
-                vin="W1K12345678903146",
+                vin="W1K12345678901234",
                 manufacturer="Mercedes-Benz",
                 model="EQE",
                 display_name="EQE",

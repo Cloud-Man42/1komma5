@@ -25,6 +25,9 @@ def _sample_weather(site_id: int = 1) -> WeatherForecast:
             gti_wm2=550.0,
             cloud_cover_pct=20.0,
             temperature_c=18.0,
+            weather_code=1,
+            wind_speed_ms=3.1,
+            relative_humidity_pct=52.0,
         )
         for i in range(16)
     )

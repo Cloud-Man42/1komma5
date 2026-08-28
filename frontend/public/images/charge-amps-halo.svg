@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 293" role="img" aria-label="Charge Amps Halo">
+  <defs>
+    <linearGradient id="body" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d1d5db"/>
+      <stop offset="100%" stop-color="#9ca3af"/>
+    </linearGradient>
+  </defs>
+  <rect x="72" y="18" width="76" height="250" rx="38" fill="url(#body)" stroke="#6b7280" stroke-width="2"/>
+  <rect x="92" y="48" width="36" height="56" rx="8" fill="#111827" opacity="0.85"/>
+  <circle cx="110" cy="130" r="18" fill="#1f2937" stroke="#4ade80" stroke-width="3"/>
+  <path d="M110 148 v44" stroke="#374151" stroke-width="8" stroke-linecap="round"/>
+  <rect x="98" y="210" width="24" height="34" rx="6" fill="#374151"/>
+</svg>
