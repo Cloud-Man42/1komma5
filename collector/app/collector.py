@@ -34,9 +34,10 @@ from energy_core.seed import seed_sites
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.aggregation.service import EnergyAggregationService
 from energy_core.snapshots.writer import SnapshotWriter
+from energy_core.heartbeat.market_prices import parse_market_prices
 from energy_core.vehicles.sessions.coordinator import VehicleChargeSessionCoordinator
 from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
-from site_poll_context import SitePollContext
+from app.site_poll_context import SitePollContext
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +89,25 @@ class Collector:
                     continue
                 await reading_repo.upsert_reading(site.id, normalized)
                 reading_count += 1
-            await self._collect_market_prices(session, site_repo)
-            poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
-            await self._run_spa_integration(session, site_repo, poll_ctx)
-            await self._run_ev_accounting(session, site_repo, poll_ctx)
-            await self._run_vehicle_charge_sessions(session, site_repo, poll_ctx)
-            await self._run_energy_balance(session, site_repo, poll_ctx)
-            await self._run_solar_forecast(session, site_repo)
-            sites = await site_repo.list_all()
-            for site in sites:
-                await self._energy_aggregation.rollup_site(session, site)
-            await self._snapshot_writer.write_all_sites(session, sites)
             await session.commit()
+
+        try:
+            async with self._session_factory() as session:
+                site_repo = SiteRepository(session)
+                await self._collect_market_prices(session, site_repo)
+                poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
+                await self._run_spa_integration(session, site_repo, poll_ctx)
+                await self._run_ev_accounting(session, site_repo, poll_ctx)
+                await self._run_vehicle_charge_sessions(session, site_repo, poll_ctx)
+                await self._run_energy_balance(session, site_repo, poll_ctx)
+                await self._run_solar_forecast(session, site_repo)
+                sites = await site_repo.list_all()
+                for site in sites:
+                    await self._energy_aggregation.rollup_site(session, site)
+                await self._snapshot_writer.write_all_sites(session, sites)
+                await session.commit()
+        except Exception:
+            logger.exception("Collector enrichment cycle failed")
 
         bridge_count = 0
         try:
