@@ -1,21 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createUseSectionFromHash } from "@/lib/useSectionFromHash";
 import { readEnergySectionFromLocation, type EnergySectionId } from "./energySection";
 
-export function useEnergySection(): { section: EnergySectionId } {
-  const [section, setSection] = useState<EnergySectionId>("flow");
-
-  useEffect(() => {
-    const update = () => setSection(readEnergySectionFromLocation());
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, []);
-
-  return { section };
-}
+export const useEnergySection = createUseSectionFromHash<EnergySectionId>(readEnergySectionFromLocation);

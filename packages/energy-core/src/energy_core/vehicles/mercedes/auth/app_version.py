@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from energy_core.vehicles.mercedes.constants import (
@@ -59,8 +60,23 @@ class MercedesAppVersionManager:
         self._last_check_monotonic = time.monotonic()
         return updated
 
-    async def refresh(self, config_loader, *, force: bool = False) -> bool:
-        """Fetch /v1/config and refresh headers when stale or forced."""
+    async def refresh(
+        self,
+        config_loader: Callable[[], Awaitable[Any]],
+        *,
+        force: bool = False,
+    ) -> bool:
+        """Fetch /v1/config and refresh headers when stale or forced.
+
+        `config_loader` must be a zero-argument coroutine function. Passing an
+        `httpx.AsyncClient` here instead broke every token refresh for a week
+        with `'AsyncClient' object is not callable`, so the type is explicit and
+        a non-callable is rejected before it reaches the await.
+        """
+        if not callable(config_loader):
+            raise TypeError(
+                f"config_loader must be callable, got {type(config_loader).__name__}"
+            )
         if not force and (time.monotonic() - self._last_check_monotonic) < APP_VERSION_CHECK_INTERVAL_SECONDS:
             return False
         config = await config_loader()
@@ -99,16 +115,26 @@ class MercedesAppVersionManager:
         return headers
 
     def webapi_headers(self, session_id: str) -> dict[str, str]:
-        return {
-            **self.oauth_headers(),
-            "X-SessionId": session_id,
-            "X-TrackingId": str(uuid.uuid4()).upper(),
-            "ris-os-name": RIS_OS_NAME,
-            "ris-os-version": RIS_OS_VERSION,
-            "X-ApplicationName": self._application_name,
-            "ris-application-version": self._application_version,
-            "ris-sdk-version": RIS_SDK_VERSION,
-        }
+        """Headers for the REST and widget APIs.
+
+        Merged case-insensitively: these keys restate ones `oauth_headers` already
+        set with different capitalisation. A plain dict spread keeps both, and
+        since HTTP header names are case-insensitive the request then carries each
+        one twice. The widget API rejects that with
+        `400 Expected one value for X-ApplicationName, got 2`.
+        """
+        return _merge_headers(
+            self.oauth_headers(),
+            {
+                "X-SessionId": session_id,
+                "X-TrackingId": str(uuid.uuid4()).upper(),
+                "ris-os-name": RIS_OS_NAME,
+                "ris-os-version": RIS_OS_VERSION,
+                "X-ApplicationName": self._application_name,
+                "ris-application-version": self._application_version,
+                "ris-sdk-version": RIS_SDK_VERSION,
+            },
+        )
 
     def websocket_headers(self, session_id: str, access_token: str) -> dict[str, str]:
         return {
@@ -125,6 +151,16 @@ class MercedesAppVersionManager:
             "ris-sdk-version": RIS_SDK_VERSION,
             "User-Agent": WEBSOCKET_USER_AGENT,
         }
+
+
+def _merge_headers(base: dict[str, str], overrides: dict[str, str]) -> dict[str, str]:
+    """Apply overrides over base, matching header names case-insensitively."""
+    merged = dict(base)
+    for name, value in overrides.items():
+        for existing in [key for key in merged if key.lower() == name.lower()]:
+            del merged[existing]
+        merged[name] = value
+    return merged
 
 
 def _coalesce_version(*values: Any) -> str | None:

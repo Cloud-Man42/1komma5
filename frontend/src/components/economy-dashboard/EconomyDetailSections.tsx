@@ -2,7 +2,7 @@
 
 import { PriceChart } from "@/components/PriceChart";
 import type { FinancialStat, MarketPricesResponse } from "@/lib/api";
-import { eurToOre } from "./economyDashboardHelpers";
+import { formatPriceOre, marketPriceToOre } from "./economyDashboardHelpers";
 import type { EconomyInsight, PriceAnalysis } from "./economyDashboardHelpers";
 import { exportFinancialCsv, formatEconomyKr } from "./economyDashboardHelpers";
 import { navigateEconomySection } from "./economySection";
@@ -159,13 +159,13 @@ export function EconomyPriceDetailsSection({
         <article className="edash-panel edash-panel-prices">
           <h3>SNITT &amp; EXTREMVÄRDEN</h3>
           <dl className="edash-price-list">
-            <div><dt>Spotpris (snitt)</dt><dd>{priceAnalysis.spotOre} öre</dd></div>
-            <div><dt>Köpt pris</dt><dd>{priceAnalysis.purchaseOre} öre</dd></div>
-            <div><dt>Sålt pris</dt><dd>{priceAnalysis.exportOre} öre</dd></div>
+            <div><dt>Spotpris (snitt)</dt><dd>{formatPriceOre(priceAnalysis.spotOre)}</dd></div>
+            <div><dt>Köpt pris</dt><dd>{formatPriceOre(priceAnalysis.purchaseOre)}</dd></div>
+            <div><dt>Sålt pris</dt><dd>{formatPriceOre(priceAnalysis.exportOre)}</dd></div>
           </dl>
           <div className="edash-price-extremes">
-            <p><span>Billigaste timme</span><strong>{priceAnalysis.cheapestOre} öre</strong><em>{priceAnalysis.cheapestAt ?? "—"}</em></p>
-            <p><span>Dyraste timme</span><strong>{priceAnalysis.expensiveOre} öre</strong><em>{priceAnalysis.expensiveAt ?? "—"}</em></p>
+            <p><span>Billigaste timme</span><strong>{formatPriceOre(priceAnalysis.cheapestOre)}</strong><em>{priceAnalysis.cheapestAt ?? "—"}</em></p>
+            <p><span>Dyraste timme</span><strong>{formatPriceOre(priceAnalysis.expensiveOre)}</strong><em>{priceAnalysis.expensiveAt ?? "—"}</em></p>
           </div>
         </article>
         <article className="edash-panel edash-panel-chart-wide">
@@ -195,9 +195,9 @@ export function EconomyPriceDetailsSection({
                       timeZone: timezone,
                     })}
                   </td>
-                  <td>{Math.round(eurToOre(point.spot_eur_kwh))}</td>
+                  <td>{marketPriceToOre(point.spot_eur_kwh)}</td>
                   <td>
-                    {point.all_in_eur_kwh != null ? Math.round(eurToOre(point.all_in_eur_kwh)) : "—"}
+                    {point.all_in_eur_kwh != null ? marketPriceToOre(point.all_in_eur_kwh) : "—"}
                   </td>
                 </tr>
               ))}

@@ -83,9 +83,13 @@ class MercedesLoginFlow:
         return token_info
 
     async def refresh_access_token(self, refresh_token: str) -> dict[str, Any]:
-        logger.info("Mercedes access token refreshed")
+        """Exchange the refresh token for a new access token.
+
+        No app-version refresh here. `/v1/config` needs a Bearer token, which is
+        the very thing we are missing, and the cached version is what the initial
+        login uses too. `MercedesProvider.connect` refreshes it authoritatively.
+        """
         async with httpx.AsyncClient(timeout=self._timeout) as client:
-            await self._app_version.refresh(client)
             headers = self._app_version.oauth_headers()
             headers["Content-Type"] = "application/x-www-form-urlencoded"
             headers["X-Device-Id"] = self._device_guid
@@ -98,6 +102,7 @@ class MercedesLoginFlow:
             token_info = response.json()
             if "refresh_token" not in token_info:
                 token_info["refresh_token"] = refresh_token
+            logger.info("Mercedes access token refreshed")
             return _add_expires_at(token_info)
 
     def _ensure_pkce(self) -> None:

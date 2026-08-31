@@ -14,11 +14,26 @@ function periodColumnLabel(period: string): string {
   return "Datum";
 }
 
-export function SpaEnergyBreakdown({ siteSlug, period }: { siteSlug: string; period: string }) {
-  const [data, setData] = useState<SpaEnergyBreakdownData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function SpaEnergyBreakdown({
+  siteSlug,
+  period,
+  data: externalData,
+  error: externalError,
+}: {
+  siteSlug: string;
+  period: string;
+  data?: SpaEnergyBreakdownData | null;
+  error?: string | null;
+}) {
+  const [data, setData] = useState<SpaEnergyBreakdownData | null>(externalData ?? null);
+  const [error, setError] = useState<string | null>(externalError ?? null);
 
   useEffect(() => {
+    if (externalData !== undefined || externalError !== undefined) {
+      setData(externalData ?? null);
+      setError(externalError ?? null);
+      return;
+    }
     setError(null);
     fetchSpaEnergyBreakdown(siteSlug, period)
       .then(setData)
@@ -26,7 +41,7 @@ export function SpaEnergyBreakdown({ siteSlug, period }: { siteSlug: string; per
         setData(null);
         setError(err instanceof Error ? err.message : "Kunde inte ladda energifördelning");
       });
-  }, [siteSlug, period]);
+  }, [siteSlug, period, externalData, externalError]);
 
   if (error) {
     return <p className="form-error" role="alert">{error}</p>;

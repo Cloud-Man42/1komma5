@@ -40,3 +40,13 @@ MIN_COVERAGE_FRACTION = 0.5
 
 # Interval energy from average power
 INTERVAL_HOURS = 15 / 60.0
+
+
+def diurnal_solar_factor(hour: float) -> float:
+    """Gaussian-ish solar elevation proxy for local hour of day (0–23)."""
+    import math
+
+    if hour < 6 or hour > 20:
+        return 0.0
+    x = (hour - 13) / 4.0
+    return math.exp(-0.5 * x * x)

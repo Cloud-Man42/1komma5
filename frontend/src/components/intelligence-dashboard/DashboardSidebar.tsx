@@ -16,7 +16,7 @@ import { SidebarElectricityPriceCard } from "@/components/intelligence-dashboard
 import { DashboardNavIcon, isNavActive, visibleNavItems } from "./navItems";
 import { WeatherIcon } from "./weatherIcons";
 import {
-  VEHICLE_SIDEBAR_NAV,
+  VEHICLE_SIDEBAR_SUBNAV,
   isVehicleSidebarNavActive,
 } from "@/components/vehicle-dashboard/vehicleSidebarNavItems";
 import { navigateVehicleSection } from "@/components/vehicle-dashboard/vehicleSection";
@@ -26,20 +26,21 @@ import {
 } from "@/components/economy-dashboard/economySidebarNavItems";
 import { navigateEconomySection } from "@/components/economy-dashboard/economySection";
 import {
-  ENERGY_SIDEBAR_NAV,
+  ENERGY_SIDEBAR_SUBNAV,
   isEnergySidebarNavActive,
 } from "@/components/energy-dashboard/energySidebarNavItems";
 import { navigateEnergySection } from "@/components/energy-dashboard/energySection";
 import {
-  EV_SIDEBAR_NAV,
+  EV_SIDEBAR_SUBNAV,
   isEvSidebarNavActive,
 } from "@/components/ev-dashboard/evSidebarNavItems";
 import { navigateEvSection } from "@/components/ev-dashboard/evSection";
 import {
-  SOLAR_SIDEBAR_NAV,
+  SOLAR_SIDEBAR_SUBNAV,
   isSolarSidebarNavActive,
 } from "@/components/solar-dashboard/solarSidebarNavItems";
 import { navigateSolarSection } from "@/components/solar-dashboard/solarSection";
+import { readLocationHash, subscribeToHashNavigation } from "@/lib/hashSectionNavigation";
 import { EV_SIDEBAR_PHOTO } from "@/lib/evScenePhoto";
 
 function formatClock(iso: string, timezone: string): string {
@@ -48,6 +49,23 @@ function formatClock(iso: string, timezone: string): string {
     minute: "2-digit",
     timeZone: timezone,
   });
+}
+
+function sectionAccentClass(itemId: DashboardNavIcon): string {
+  switch (itemId) {
+    case "energy":
+      return "idash-sidebar-link-active-energy";
+    case "solar":
+      return "idash-sidebar-link-active-solar";
+    case "ev":
+      return "idash-sidebar-link-active-ev";
+    case "vehicle":
+      return "idash-sidebar-link-active-vehicle";
+    case "costs":
+      return "idash-sidebar-link-economy-active";
+    default:
+      return "";
+  }
 }
 
 function NavIcon({ name }: { name: DashboardNavIcon }) {
@@ -143,91 +161,37 @@ export function DashboardSidebar({
   const isEnergyRoute = pathname.includes(`/sites/${slug}/energy`);
   const isEvRoute = pathname.includes(`/sites/${slug}/ev`);
   const isSolarRoute = pathname.includes(`/sites/${slug}/solar`) && !pathname.includes("/intelligence");
-  const [vehicleHash, setVehicleHash] = useState("");
-  const [economyHash, setEconomyHash] = useState("");
-  const [energyHash, setEnergyHash] = useState("");
-  const [evHash, setEvHash] = useState("");
-  const [solarHash, setSolarHash] = useState("");
+  const usesHashSubnav =
+    isEnergyRoute || isEvRoute || isSolarRoute || isVehicleRoute || isCostsRoute;
+  const [locationHash, setLocationHash] = useState("");
   const [marketPrices, setMarketPrices] = useState<MarketPricesResponse | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetchMarketPrices(slug, 24)
-      .then((data) => {
-        if (active) setMarketPrices(data);
-      })
-      .catch(() => {
-        if (active) setMarketPrices(null);
-      });
-    const interval = setInterval(() => {
-      fetchMarketPrices(slug, 24)
+    const load = () =>
+      fetchMarketPrices(slug, 24, timezone)
         .then((data) => {
           if (active) setMarketPrices(data);
         })
         .catch(() => {
           if (active) setMarketPrices(null);
         });
-    }, 300_000);
+    load();
+    const interval = setInterval(load, 300_000);
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [slug]);
+  }, [slug, timezone]);
   useEffect(() => {
-    if (!isVehicleRoute) return;
-    const update = () => setVehicleHash(window.location.href.includes("#") ? window.location.href.slice(window.location.href.indexOf("#")) : "");
+    if (!usesHashSubnav) {
+      setLocationHash("");
+      return;
+    }
+    const update = () => setLocationHash(readLocationHash());
     update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, [isVehicleRoute]);
-  useEffect(() => {
-    if (!isCostsRoute) return;
-    const update = () => setEconomyHash(window.location.href.includes("#") ? window.location.href.slice(window.location.href.indexOf("#")) : "");
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, [isCostsRoute]);
-  useEffect(() => {
-    if (!isEnergyRoute) return;
-    const update = () => setEnergyHash(window.location.href.includes("#") ? window.location.href.slice(window.location.href.indexOf("#")) : "");
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, [isEnergyRoute]);
-  useEffect(() => {
-    if (!isEvRoute) return;
-    const update = () => setEvHash(window.location.href.includes("#") ? window.location.href.slice(window.location.href.indexOf("#")) : "");
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, [isEvRoute]);
-  useEffect(() => {
-    if (!isSolarRoute) return;
-    const update = () => setSolarHash(window.location.href.includes("#") ? window.location.href.slice(window.location.href.indexOf("#")) : "");
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, [isSolarRoute]);
+    return subscribeToHashNavigation(update);
+  }, [usesHashSubnav]);
   const locationPhoto = isSpaRoute
     ? SPA_SIDEBAR_PHOTO
     : isVehicleRoute
@@ -301,109 +265,144 @@ export function DashboardSidebar({
       <SidebarElectricityPriceCard prices={marketPrices} />
 
       <nav className="idash-sidebar-nav">
-        {isVehicleRoute
-          ? VEHICLE_SIDEBAR_NAV.map((item) => {
-              const active = isVehicleSidebarNavActive(pathname, slug, item, vehicleHash);
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href(slug)}
-                  onClick={(event) => {
+        {items.map((item) => {
+          const active = isNavActive(pathname, slug, item);
+          const accentClass = sectionAccentClass(item.id);
+          const showSubnav =
+            (item.id === "costs" && isCostsRoute) ||
+            (item.id === "energy" && isEnergyRoute) ||
+            (item.id === "solar" && isSolarRoute) ||
+            (item.id === "ev" && isEvRoute) ||
+            (item.id === "vehicle" && isVehicleRoute);
+
+          return (
+            <div key={item.id}>
+              <Link
+                href={item.href(slug)}
+                onClick={(event) => {
+                  if (item.id === "energy" && isEnergyRoute) {
                     event.preventDefault();
-                    navigateVehicleSection(slug, item.id);
-                  }}
-                  className={`idash-sidebar-link ${active ? "idash-sidebar-link-active idash-sidebar-link-active-vehicle" : ""}`.trim()}
-                >
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })
-          : isEnergyRoute
-            ? ENERGY_SIDEBAR_NAV.map((item) => {
-                const active = isEnergySidebarNavActive(pathname, slug, item, energyHash);
-                return (
-                  <Link
-                    key={item.id}
-                    href={item.href(slug)}
-                    onClick={(event) => {
-                      if (item.id === "overview") return;
-                      event.preventDefault();
-                      navigateEnergySection(slug, item.id);
-                    }}
-                    className={`idash-sidebar-link ${active ? "idash-sidebar-link-active idash-sidebar-link-active-energy" : ""}`.trim()}
-                  >
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })
-            : isEvRoute
-              ? EV_SIDEBAR_NAV.map((item) => {
-                  const active = isEvSidebarNavActive(pathname, slug, item, evHash);
-                  return (
-                    <Link
-                      key={item.id}
-                      href={item.href(slug)}
-                      onClick={(event) => {
-                        if (item.id === "settings") return;
-                        event.preventDefault();
-                        navigateEvSection(slug, item.id);
-                      }}
-                      className={`idash-sidebar-link ${active ? "idash-sidebar-link-active idash-sidebar-link-active-ev" : ""}`.trim()}
-                    >
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })
-              : isSolarRoute
-                ? SOLAR_SIDEBAR_NAV.map((item) => {
-                    const active = isSolarSidebarNavActive(pathname, slug, item, solarHash);
+                    navigateEnergySection(slug, "flow");
+                    return;
+                  }
+                  if (item.id === "solar" && isSolarRoute) {
+                    event.preventDefault();
+                    navigateSolarSection(slug, "overview");
+                    return;
+                  }
+                  if (item.id === "ev" && isEvRoute) {
+                    event.preventDefault();
+                    navigateEvSection(slug, "overview");
+                    return;
+                  }
+                  if (item.id === "vehicle" && isVehicleRoute) {
+                    event.preventDefault();
+                    navigateVehicleSection(slug, "overview");
+                    return;
+                  }
+                  if (item.id === "costs" && isCostsRoute) {
+                    event.preventDefault();
+                    navigateEconomySection(slug, "analysis");
+                  }
+                }}
+                className={`idash-sidebar-link ${active ? "idash-sidebar-link-active" : ""} ${showSubnav && accentClass ? accentClass : ""}`.trim()}
+              >
+                <NavIcon name={item.id} />
+                <span>{item.label}</span>
+              </Link>
+              {showSubnav && item.id === "costs"
+                ? ECONOMY_SIDEBAR_SUBNAV.map((sub) => {
+                    const subActive = isEconomySidebarSubnavActive(pathname, slug, sub, locationHash);
                     return (
                       <Link
-                        key={item.id}
-                        href={item.href(slug)}
+                        key={sub.id}
+                        href={sub.href(slug)}
                         onClick={(event) => {
                           event.preventDefault();
-                          navigateSolarSection(slug, item.id);
+                          navigateEconomySection(slug, sub.id);
                         }}
-                        className={`idash-sidebar-link ${active ? "idash-sidebar-link-active idash-sidebar-link-active-solar" : ""}`.trim()}
+                        className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? "idash-sidebar-link-subnav-active" : ""}`.trim()}
                       >
-                        <span>{item.label}</span>
+                        <span>{sub.label}</span>
                       </Link>
                     );
                   })
-                : items.map((item) => {
-              const active = isNavActive(pathname, slug, item);
-              const isEconomyItem = item.id === "costs" && isCostsRoute;
-              return (
-                <div key={item.id}>
-                  <Link
-                    href={item.href(slug)}
-                    className={`idash-sidebar-link ${active ? "idash-sidebar-link-active" : ""} ${isEconomyItem ? "idash-sidebar-link-economy-active" : ""}`.trim()}
-                  >
-                    <NavIcon name={item.id} />
-                    <span>{item.label}</span>
-                  </Link>
-                  {isEconomyItem
-                    ? ECONOMY_SIDEBAR_SUBNAV.map((sub) => {
-                        const subActive = isEconomySidebarSubnavActive(pathname, slug, sub, economyHash);
-                        return (
-                          <Link
-                            key={sub.id}
-                            href={sub.href(slug)}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              navigateEconomySection(slug, sub.id);
-                            }}
-                            className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? "idash-sidebar-link-subnav-active" : ""}`.trim()}
-                          >
-                            <span>{sub.label}</span>
-                          </Link>
-                        );
-                      })
-                    : null}
-                </div>
-              );
-            })}
+                : null}
+              {showSubnav && item.id === "energy"
+                ? ENERGY_SIDEBAR_SUBNAV.map((sub) => {
+                    const subActive = isEnergySidebarNavActive(pathname, slug, sub, locationHash);
+                    return (
+                      <Link
+                        key={sub.id}
+                        href={sub.href(slug)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigateEnergySection(slug, sub.id);
+                        }}
+                        className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? `idash-sidebar-link-subnav-active ${accentClass}`.trim() : ""}`.trim()}
+                      >
+                        <span>{sub.label}</span>
+                      </Link>
+                    );
+                  })
+                : null}
+              {showSubnav && item.id === "solar"
+                ? SOLAR_SIDEBAR_SUBNAV.map((sub) => {
+                    const subActive = isSolarSidebarNavActive(pathname, slug, sub, locationHash);
+                    return (
+                      <Link
+                        key={sub.id}
+                        href={sub.href(slug)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigateSolarSection(slug, sub.id);
+                        }}
+                        className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? `idash-sidebar-link-subnav-active ${accentClass}`.trim() : ""}`.trim()}
+                      >
+                        <span>{sub.label}</span>
+                      </Link>
+                    );
+                  })
+                : null}
+              {showSubnav && item.id === "ev"
+                ? EV_SIDEBAR_SUBNAV.map((sub) => {
+                    const subActive = isEvSidebarNavActive(pathname, slug, sub, locationHash);
+                    return (
+                      <Link
+                        key={sub.id}
+                        href={sub.href(slug)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigateEvSection(slug, sub.id);
+                        }}
+                        className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? `idash-sidebar-link-subnav-active ${accentClass}`.trim() : ""}`.trim()}
+                      >
+                        <span>{sub.label}</span>
+                      </Link>
+                    );
+                  })
+                : null}
+              {showSubnav && item.id === "vehicle"
+                ? VEHICLE_SIDEBAR_SUBNAV.map((sub) => {
+                    const subActive = isVehicleSidebarNavActive(pathname, slug, sub, locationHash);
+                    return (
+                      <Link
+                        key={sub.id}
+                        href={sub.href(slug)}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          navigateVehicleSection(slug, sub.id);
+                        }}
+                        className={`idash-sidebar-link idash-sidebar-link-subnav ${subActive ? `idash-sidebar-link-subnav-active ${accentClass}`.trim() : ""}`.trim()}
+                      >
+                        <span>{sub.label}</span>
+                      </Link>
+                    );
+                  })
+                : null}
+            </div>
+          );
+        })}
       </nav>
 
       {isEvRoute ? (

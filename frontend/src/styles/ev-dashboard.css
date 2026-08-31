@@ -504,6 +504,8 @@
 .evdash-source-solar { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
 .evdash-source-grid { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
 .evdash-source-mixed { background: rgba(192, 132, 252, 0.15); color: #c084fc; }
+.evdash-source-battery { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.evdash-source-unknown { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 
 .evdash-savings-top {
   display: grid;

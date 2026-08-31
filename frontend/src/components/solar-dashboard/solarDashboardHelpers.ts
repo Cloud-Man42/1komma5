@@ -12,19 +12,17 @@ import type {
 
 } from "@/lib/api";
 
-import { isAggregated } from "@/lib/api";
-
-import {
-
-  buildProductionChartData,
-
-  formatChartClock,
-
-  type ProductionChartRow,
-
-} from "@/components/intelligence-dashboard/productionChartData";
-
+import { buildProductionChartData, type ProductionChartRow } from "@/components/intelligence-dashboard/productionChartData";
 import { forecastConfidencePct } from "@/components/intelligence-dashboard/confidenceLabels";
+import {
+  formatChartClock,
+  inferForecastIntervalMs,
+  localDateKey,
+  readingTimestamp,
+  roundKwh,
+  roundKw,
+  sumEnergyKwh,
+} from "@/lib/chartTime";
 
 
 
@@ -174,22 +172,6 @@ export interface SolarKpiSparklines {
 
 
 
-function readingTimestamp(reading: Reading): string {
-
-  return isAggregated(reading) ? reading.bucket_start : reading.recorded_at;
-
-}
-
-
-
-function localDateKey(iso: string, timezone: string): string {
-
-  return new Date(iso).toLocaleDateString("sv-SE", { timeZone: timezone });
-
-}
-
-
-
 export function nextDateKey(dateKey: string): string {
 
   const [y, m, d] = dateKey.split("-").map(Number);
@@ -210,27 +192,17 @@ export function tomorrowDateKey(now: string, timezone: string): string {
 
 
 
-export function isForecastStale(generatedAt: string | null | undefined, maxAgeHours = 12): boolean {
+export function isForecastStale(
+  generatedAt: string | null | undefined,
+  maxAgeHours = 12,
+  now: string | Date = new Date(),
+): boolean {
 
   if (!generatedAt) return true;
 
-  return Date.now() - new Date(generatedAt).getTime() > maxAgeHours * 3_600_000;
+  const referenceMs = typeof now === "string" ? new Date(now).getTime() : now.getTime();
 
-}
-
-
-
-function roundKw(watts: number): number {
-
-  return Math.round((watts / 1000) * 100) / 100;
-
-}
-
-
-
-function roundKwh(value: number): number {
-
-  return Math.round(value * 10) / 10;
+  return referenceMs - new Date(generatedAt).getTime() > maxAgeHours * 3_600_000;
 
 }
 
@@ -241,14 +213,6 @@ function avg(values: number[]): number | null {
   if (values.length === 0) return null;
 
   return values.reduce((sum, v) => sum + v, 0) / values.length;
-
-}
-
-
-
-function sumEnergyKwh(points: { corrected_power_w: number }[], hoursPerPoint: number): number {
-
-  return points.reduce((sum, p) => sum + (p.corrected_power_w * hoursPerPoint) / 1000, 0);
 
 }
 
@@ -384,6 +348,8 @@ function aggregateChartRows(
 
   resolution: SolarChartResolution,
 
+  timezone: string,
+
 ): ProductionChartRow[] {
 
   if (resolution === 15) return rows;
@@ -426,7 +392,7 @@ function aggregateChartRows(
 
       timestamp: entry.timestamp,
 
-      time: formatChartClock(entry.timestamp, "UTC"),
+      time: formatChartClock(entry.timestamp, timezone),
 
       sort: entry.sort,
 
@@ -538,7 +504,7 @@ function scaledYesterdayFromPerformance(
 
 
 
-  const hoursPerPoint = INTERVAL_MS / 3_600_000;
+  const hoursPerPoint = inferForecastIntervalMs(todayPoints) / 3_600_000;
 
   const templateEnergy = sumEnergyKwh(todayPoints, hoursPerPoint);
 
@@ -572,13 +538,15 @@ function batterySocForTimestamp(
 
   timezone: string,
 
+  intervalMs = INTERVAL_MS,
+
 ): number | null {
 
   const targetMs = new Date(timestamp).getTime();
 
   const start = targetMs;
 
-  const end = start + INTERVAL_MS;
+  const end = start + intervalMs;
 
   const bucket = readings.filter((r) => {
 
@@ -630,7 +598,17 @@ export function buildProductionChartSeries({
 
   const baseRows = buildProductionChartData({ readings, forecast, timezone, now });
 
-  const rows = aggregateChartRows(baseRows, resolution);
+  const rows = aggregateChartRows(baseRows, resolution, timezone);
+
+  const todayKey = localDateKey(now, timezone);
+
+  const todayForecast = (forecast?.points ?? []).filter(
+
+    (p) => localDateKey(p.timestamp, timezone) === todayKey,
+
+  );
+
+  const chartIntervalMs = inferForecastIntervalMs(todayForecast);
 
 
 
@@ -668,7 +646,7 @@ export function buildProductionChartSeries({
 
       yesterdayKw: yesterdayScaled.get(slotKey) ?? null,
 
-      batterySocPct: hasBattery ? batterySocForTimestamp(readings, row.timestamp, timezone) : null,
+      batterySocPct: hasBattery ? batterySocForTimestamp(readings, row.timestamp, timezone, chartIntervalMs) : null,
 
     };
 
@@ -816,7 +794,7 @@ export function buildPeriodDistribution(
 
   );
 
-  const hoursPerPoint = INTERVAL_MS / 3_600_000;
+  const hoursPerPoint = inferForecastIntervalMs(todayPoints) / 3_600_000;
 
 
 
@@ -840,7 +818,13 @@ export function buildPeriodDistribution(
 
     const bucket = buckets.find((b) => hour >= b.startH && hour < b.endH);
 
-    if (bucket) bucket.kwh += (point.corrected_power_w * hoursPerPoint) / 1000;
+    if (bucket) {
+
+      bucket.kwh +=
+
+        point.expected_energy_kwh ?? (point.corrected_power_w * hoursPerPoint) / 1000;
+
+    }
 
   }
 
@@ -880,7 +864,7 @@ export function buildMultiDayOverview(
 
 
 
-  const hoursPerPoint = INTERVAL_MS / 3_600_000;
+  const hoursPerPoint = inferForecastIntervalMs(forecast.points) / 3_600_000;
 
   const byDate = new Map<string, typeof forecast.points>();
 
@@ -908,15 +892,19 @@ export function buildMultiDayOverview(
 
   const rows: SolarMultiDayRow[] = [...byDate.entries()]
 
+    .filter(([dateKey]) => dateKey >= todayKey)
+
     .sort(([a], [b]) => a.localeCompare(b))
 
-    .slice(0, 5)
+    .slice(0, 7)
 
     .map(([dateKey, points]) => {
 
       let expectedKwh = roundKwh(sumEnergyKwh(points, hoursPerPoint));
 
-      let isPartial = points.length < 24;
+      const isHourly = points.length <= 24;
+
+      let isPartial = isHourly ? points.length < 20 : points.length < 80;
 
 
 
@@ -1208,13 +1196,13 @@ export function tomorrowForecastPoints(
 
   const tomorrowKey = tomorrowDateKey(now, timezone);
 
-  const hoursPerPoint = INTERVAL_MS / 3_600_000;
+  const tomorrowPoints = forecast.points.filter((p) => localDateKey(p.timestamp, timezone) === tomorrowKey);
+
+  const hoursPerPoint = inferForecastIntervalMs(tomorrowPoints.length ? tomorrowPoints : forecast.points) / 3_600_000;
 
 
 
-  return forecast.points
-
-    .filter((p) => localDateKey(p.timestamp, timezone) === tomorrowKey)
+  return tomorrowPoints
 
     .map((p) => ({
 
@@ -1268,7 +1256,7 @@ export function buildTomorrowForecast(
 
 
 
-  const stale = isForecastStale(forecast.generated_at);
+  const stale = isForecastStale(forecast.generated_at, 12, now);
 
   const points = tomorrowForecastPoints(forecast, timezone, now);
 

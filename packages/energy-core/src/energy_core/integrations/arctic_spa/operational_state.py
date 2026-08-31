@@ -9,6 +9,27 @@ MIN_SPA_LOAD_W = 100.0
 MIN_PUMP_LOAD_W = 75.0
 MIN_HEATER_LOAD_W = 50.0
 
+# Arctic Spa reports filter status in English; Swedish surfaces (kiosk display,
+# dashboards) must never show the raw API value.
+FILTER_STATUS_SV = {
+    "Filtering": "Pågår",
+    "Idle": "Av",
+    "Boost": "Boost",
+    "Resuming": "Återstartar",
+    "Overtemperature": "Övertemperatur",
+    "Sanitize": "Rening",
+    "Purge": "Rensning",
+    "Heating": "Värmer",
+    "Off": "Av",
+}
+
+
+def filter_status_sv(filter_status: str | None) -> str | None:
+    """Swedish label for an Arctic Spa filter status, or None when unknown."""
+    if not filter_status:
+        return None
+    return FILTER_STATUS_SV.get(filter_status.strip().title(), filter_status)
+
 
 def pump_power_w(breakdown: dict[str, float]) -> float:
     return sum(watts for key, watts in breakdown.items() if "pump" in key.lower())

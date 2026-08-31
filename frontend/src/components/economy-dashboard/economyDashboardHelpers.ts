@@ -1,40 +1,84 @@
-import type { FinancialStat, MarketPricePoint, YearForecastResponse } from "@/lib/api";
+/**
+ * EMIC economy calculations (frontend display layer).
+ *
+ * Backend source: EnergyReadingRepository.list_financial_stats
+ * Docs: docs/ekonomi-berakning.md
+ *
+ * Per interval (backend):
+ * - solar_savings_sek = solar_self_kwh × purchase_price
+ * - battery_savings_sek = battery_self_kwh × purchase_price
+ * - energy_sale_revenue_sek = export_kwh × effective_sell_price (spot-matched)
+ * - grid_benefit_revenue_sek = export_kwh × grid_benefit_rate
+ * - export_revenue_sek = energy_sale + grid_benefit (excludes tax credit)
+ * - tax_credit_sek = historical skattereduktion (≤2025, allocated by export share)
+ * - grid_import_cost_sek = import_kwh × purchase_price
+ *
+ * Display formulas:
+ * - economicBenefit = solar + battery + export (+ optional smart categories)
+ * - totalEconomicValue = economicBenefit + taxCredit (historical only)
+ * - avoidedCostSavings = solar + battery (+ smart categories) — excludes export
+ * - netCost = gridImportCost − exportRevenue (no tax credit)
+ * - ytdReturnPct = ytdEconomicBenefit / investment × 100
+ * - paybackYears = remainingInvestment / annualizedBenefit (trailing 12m, prognos)
+ * - costBreakdown slices = estimated shares of grid_import_cost (56/23/15/6 %)
+ */
+import type {
+  ExportPricingMode,
+  FinancialStat,
+  MarketPricePoint,
+  MarketPricesResponse,
+  YearForecastResponse,
+} from "@/lib/api";
+import { toOrePerKwh } from "@/lib/prices";
 
-export const DEFAULT_INVESTMENT_SEK = 152_000;
+export type EconomyValueQuality = "ACTUAL" | "CALCULATED" | "ESTIMATED" | "MISSING";
 
 export const SITE_INVESTMENT_SEK: Record<string, number> = {
   akarp: 148_000,
   "summer-house-denmark": 90_000,
 };
 
-export function resolveSiteInvestmentSek(siteSlug: string): number {
-  return SITE_INVESTMENT_SEK[siteSlug.trim().toLowerCase()] ?? DEFAULT_INVESTMENT_SEK;
+export function resolveSiteInvestmentSek(siteSlug: string): number | null {
+  const value = SITE_INVESTMENT_SEK[siteSlug.trim().toLowerCase()];
+  return value != null && value > 0 ? value : null;
 }
+
 export const DEFAULT_MONTHLY_BUDGET_SEK = 2_700;
 
 export interface EconomyTotals {
   solarSavingsSek: number;
   batterySavingsSek: number;
   exportRevenueSek: number;
+  energySaleRevenueSek: number;
+  gridBenefitRevenueSek: number;
+  taxCreditSek: number;
   gridImportCostSek: number;
   importedKwh: number;
   exportedKwh: number;
+  uncontractedExportedKwh: number;
   solarSelfConsumedKwh: number;
   batterySelfConsumedKwh: number;
+  exportSpotPricedFraction: number;
 }
 
 export interface EconomyMetricChange {
   value: number;
+  previous: number;
+  deltaSek: number;
   pct: number | null;
   direction: "up" | "down" | "flat";
 }
 
 export interface EconomyDisplayMetrics {
   totalSavingsSek: number;
+  avoidedCostSavingsSek: number;
+  economicBenefitSek: number;
   gridImportCostSek: number;
   exportRevenueSek: number;
   netCostSek: number;
-  ytdReturnPct: number;
+  ytdReturnPct: number | null;
+  ytdEconomicBenefitSek: number;
+  lifetimeEconomicBenefitSek: number;
   changes: {
     totalSavings: EconomyMetricChange;
     gridImportCost: EconomyMetricChange;
@@ -43,6 +87,15 @@ export interface EconomyDisplayMetrics {
   };
 }
 
+export interface PaybackMetrics {
+  investmentSek: number | null;
+  repaidSek: number;
+  remainingSek: number | null;
+  repaidPct: number | null;
+  paybackYears: number | null;
+  annualizedBenefitSek: number | null;
+  isForecast: boolean;
+}
 export interface CostBreakdownSlice {
   id: string;
   label: string;
@@ -54,6 +107,7 @@ export interface CostBreakdownSlice {
 export interface DailyCostPoint {
   date: string;
   label: string;
+  dayLabel: string;
   purchasedSek: number;
   gridFeeSek: number;
   taxSek: number;
@@ -61,15 +115,15 @@ export interface DailyCostPoint {
   netSek: number;
   importedKwh: number;
   exportedKwh: number;
+  effectivePriceKrKwh: number | null;
 }
-
 export interface PriceAnalysis {
-  spotOre: number;
-  purchaseOre: number;
-  exportOre: number;
-  cheapestOre: number;
+  spotOre: number | null;
+  purchaseOre: number | null;
+  exportOre: number | null;
+  cheapestOre: number | null;
   cheapestAt: string | null;
-  expensiveOre: number;
+  expensiveOre: number | null;
   expensiveAt: string | null;
 }
 
@@ -84,7 +138,7 @@ export interface EconomyGoal {
   targetLabel: string;
   valuePct: number;
   displayValue: string;
-  tone: "green" | "orange" | "blue";
+  tone: "green" | "orange" | "blue" | "warn";
 }
 
 export function aggregateFinancialStats(stats: FinancialStat[]): EconomyTotals {
@@ -93,23 +147,135 @@ export function aggregateFinancialStats(stats: FinancialStat[]): EconomyTotals {
       solarSavingsSek: sum.solarSavingsSek + stat.solar_savings_sek,
       batterySavingsSek: sum.batterySavingsSek + stat.battery_savings_sek,
       exportRevenueSek: sum.exportRevenueSek + stat.export_revenue_sek,
+      energySaleRevenueSek: sum.energySaleRevenueSek + (stat.energy_sale_revenue_sek ?? stat.export_revenue_sek),
+      gridBenefitRevenueSek: sum.gridBenefitRevenueSek + (stat.grid_benefit_revenue_sek ?? 0),
+      taxCreditSek: sum.taxCreditSek + (stat.tax_credit_sek ?? 0),
       gridImportCostSek: sum.gridImportCostSek + stat.grid_import_cost_sek,
       importedKwh: sum.importedKwh + stat.imported_kwh,
       exportedKwh: sum.exportedKwh + stat.exported_kwh,
+      uncontractedExportedKwh: sum.uncontractedExportedKwh + (stat.uncontracted_exported_kwh ?? 0),
       solarSelfConsumedKwh: sum.solarSelfConsumedKwh + stat.solar_self_consumed_kwh,
       batterySelfConsumedKwh: sum.batterySelfConsumedKwh + stat.battery_self_consumed_kwh,
+      exportSpotPricedFraction: sum.exportSpotPricedFraction,
     }),
     {
       solarSavingsSek: 0,
       batterySavingsSek: 0,
       exportRevenueSek: 0,
+      energySaleRevenueSek: 0,
+      gridBenefitRevenueSek: 0,
+      taxCreditSek: 0,
       gridImportCostSek: 0,
       importedKwh: 0,
       exportedKwh: 0,
+      uncontractedExportedKwh: 0,
       solarSelfConsumedKwh: 0,
       batterySelfConsumedKwh: 0,
+      exportSpotPricedFraction: 0,
     },
   );
+}
+
+export function computeWeightedEffectiveSellPrice(totals: EconomyTotals): number | null {
+  if (totals.exportedKwh <= 0) return null;
+  return totals.energySaleRevenueSek / totals.exportedKwh;
+}
+
+export interface ExportRevenueBreakdown {
+  exportedKwh: number;
+  weightedSpotPriceKrKwh: number | null;
+  energySaleRevenueSek: number;
+  supplierAdjustmentSek: number;
+  gridBenefitRevenueSek: number;
+  taxCreditSek: number;
+  totalExportRevenueSek: number;
+  totalEconomicValueSek: number;
+  spotPricedFraction: number;
+  showTaxCreditNotice: boolean;
+  showPreContractExportNotice: boolean;
+  preContractExportedKwh: number;
+  sellContractStartDate: string | null;
+  lines: Array<{
+    id: string;
+    label: string;
+    valueSek: number;
+    quality: EconomyValueQuality;
+    detail?: string;
+  }>;
+}
+
+export function buildExportRevenueBreakdown(
+  totals: EconomyTotals,
+  stats: FinancialStat[],
+  now = new Date(),
+  pricingMode: ExportPricingMode = "spot",
+  sellContractStartDate: string | null = null,
+): ExportRevenueBreakdown {
+  const contractedExportKwh = Math.max(0, totals.exportedKwh - totals.uncontractedExportedKwh);
+  const weightedSpot =
+    contractedExportKwh > 0 && stats.length > 0
+      ? stats.reduce((sum, stat) => {
+          const energySale = stat.energy_sale_revenue_sek ?? stat.export_revenue_sek;
+          return sum + energySale;
+        }, 0) / contractedExportKwh
+      : null;
+  const spotFraction =
+    contractedExportKwh > 0 && stats.length > 0
+      ? stats.reduce(
+          (sum, stat) =>
+            sum + (stat.export_spot_priced_fraction ?? 0) * Math.max(0, stat.exported_kwh - (stat.uncontracted_exported_kwh ?? 0)),
+          0,
+        ) / contractedExportKwh
+      : 0;
+  const showTaxCreditNotice = now.getFullYear() >= 2026 && totals.taxCreditSek <= 0;
+  const preContractExportedKwh = totals.uncontractedExportedKwh;
+  const showPreContractExportNotice = preContractExportedKwh > 0.005;
+
+  const energySaleLabel =
+    pricingMode === "feed_in"
+      ? "Inmatningstariff"
+      : pricingMode === "flat"
+        ? "Schablonersättning"
+        : "Spotersättning";
+
+  const lines: ExportRevenueBreakdown["lines"] = [
+    {
+      id: "spot",
+      label: energySaleLabel,
+      valueSek: totals.energySaleRevenueSek,
+      quality: (spotFraction >= 0.99 ? "ACTUAL" : spotFraction > 0 ? "CALCULATED" : "ESTIMATED") as EconomyValueQuality,
+      detail: weightedSpot != null ? `${(weightedSpot * 100).toFixed(1)} öre/kWh i snitt` : undefined,
+    },
+    {
+      id: "grid-benefit",
+      label: "Nätnytta",
+      valueSek: totals.gridBenefitRevenueSek,
+      quality: (totals.gridBenefitRevenueSek > 0 ? "CALCULATED" : "MISSING") as EconomyValueQuality,
+    },
+    {
+      id: "tax-credit",
+      label: "Skattereduktion",
+      valueSek: totals.taxCreditSek,
+      quality: (totals.taxCreditSek > 0 ? "CALCULATED" : "MISSING") as EconomyValueQuality,
+    },
+  ].filter((line) => line.id !== "tax-credit" || line.valueSek > 0.005);
+
+  return {
+    exportedKwh: totals.exportedKwh,
+    weightedSpotPriceKrKwh: weightedSpot,
+    energySaleRevenueSek: totals.energySaleRevenueSek,
+    supplierAdjustmentSek: 0,
+    gridBenefitRevenueSek: totals.gridBenefitRevenueSek,
+    taxCreditSek: totals.taxCreditSek,
+    totalExportRevenueSek: totals.exportRevenueSek,
+    totalEconomicValueSek: totals.exportRevenueSek + totals.taxCreditSek,
+    spotPricedFraction: spotFraction,
+    showTaxCreditNotice,
+    showPreContractExportNotice,
+    preContractExportedKwh,
+    sellContractStartDate,
+    lines,
+  };
 }
 
 export function filterStatsForMonth(stats: FinancialStat[], year: number, month: number): FinancialStat[] {
@@ -118,49 +284,111 @@ export function filterStatsForMonth(stats: FinancialStat[], year: number, month:
 }
 
 export function computeMetricChange(current: number, previous: number): EconomyMetricChange {
+  const deltaSek = current - previous;
   if (Math.abs(previous) < 0.005) {
-    return { value: current, pct: null, direction: "flat" };
+    return { value: current, previous, deltaSek, pct: null, direction: "flat" };
   }
-  const pct = ((current - previous) / Math.abs(previous)) * 100;
+  const pct = (deltaSek / Math.abs(previous)) * 100;
   return {
     value: current,
+    previous,
+    deltaSek,
     pct,
     direction: Math.abs(pct) < 0.5 ? "flat" : pct > 0 ? "up" : "down",
   };
 }
 
-export function computeTotalSavings(totals: EconomyTotals, smartChargingSek = 0): number {
+/** Avoided purchase cost from self-consumed solar + battery (+ smart categories). */
+export function computeAvoidedCostSavings(totals: EconomyTotals, smartChargingSek = 0): number {
   return totals.solarSavingsSek + totals.batterySavingsSek + smartChargingSek;
 }
 
-export function computeNetCost(totals: EconomyTotals): number {
-  return Math.max(0, totals.gridImportCostSek - totals.exportRevenueSek);
+/** Full economic benefit: avoided cost + export revenue (no tax credit). */
+export function computeEconomicBenefit(totals: EconomyTotals, smartChargingSek = 0): number {
+  return computeAvoidedCostSavings(totals, smartChargingSek) + totals.exportRevenueSek;
 }
 
-export function computeYtdReturnPct(ytdSavingsSek: number, investmentSek = DEFAULT_INVESTMENT_SEK): number {
-  if (investmentSek <= 0) return 0;
-  return (ytdSavingsSek / investmentSek) * 100;
+/** Total economic value including historical tax credit (shown separately from net cost). */
+export function computeTotalEconomicValue(totals: EconomyTotals, smartChargingSek = 0): number {
+  return computeEconomicBenefit(totals, smartChargingSek) + totals.taxCreditSek;
+}
+
+/** @deprecated alias — use computeAvoidedCostSavings for KPI cards that exclude export */
+export function computeTotalSavings(totals: EconomyTotals, smartChargingSek = 0): number {
+  return computeEconomicBenefit(totals, smartChargingSek);
+}
+
+/** Net grid cost after export compensation: import cost − export revenue. */
+export function computeNetCost(totals: EconomyTotals): number {
+  return totals.gridImportCostSek - totals.exportRevenueSek;
+}
+
+export function computeYtdReturnPct(
+  ytdEconomicBenefitSek: number,
+  investmentSek: number | null,
+): number | null {
+  if (investmentSek == null || investmentSek <= 0) return null;
+  return (ytdEconomicBenefitSek / investmentSek) * 100;
+}
+
+export function computePaybackMetrics(
+  lifetimeBenefitSek: number,
+  trailing12mBenefitSek: number,
+  investmentSek: number | null,
+): PaybackMetrics {
+  if (investmentSek == null || investmentSek <= 0) {
+    return {
+      investmentSek: null,
+      repaidSek: lifetimeBenefitSek,
+      remainingSek: null,
+      repaidPct: null,
+      paybackYears: null,
+      annualizedBenefitSek: trailing12mBenefitSek > 0 ? trailing12mBenefitSek : null,
+      isForecast: true,
+    };
+  }
+  const remaining = Math.max(0, investmentSek - lifetimeBenefitSek);
+  const repaidPct = Math.min(100, (lifetimeBenefitSek / investmentSek) * 100);
+  const annualized = trailing12mBenefitSek > 0 ? trailing12mBenefitSek : null;
+  const paybackYears =
+    annualized != null && annualized > 0 ? remaining / annualized : null;
+  return {
+    investmentSek,
+    repaidSek: Math.min(lifetimeBenefitSek, investmentSek),
+    remainingSek: remaining,
+    repaidPct,
+    paybackYears,
+    annualizedBenefitSek: annualized,
+    isForecast: annualized == null,
+  };
 }
 
 export function buildEconomyMetrics(
   current: EconomyTotals,
   previous: EconomyTotals,
-  ytdSavingsSek: number,
+  ytdTotals: EconomyTotals,
+  lifetimeTotals: EconomyTotals,
+  investmentSek: number | null,
   smartChargingSek = 0,
 ): EconomyDisplayMetrics {
-  const totalSavingsSek = computeTotalSavings(current, smartChargingSek);
-  const prevTotalSavings = computeTotalSavings(previous, smartChargingSek);
+  const economicBenefitSek = computeEconomicBenefit(current, smartChargingSek);
+  const prevBenefit = computeEconomicBenefit(previous, smartChargingSek);
   const netCostSek = computeNetCost(current);
   const prevNetCost = computeNetCost(previous);
+  const ytdBenefit = computeEconomicBenefit(ytdTotals, smartChargingSek);
 
   return {
-    totalSavingsSek,
+    totalSavingsSek: economicBenefitSek,
+    avoidedCostSavingsSek: computeAvoidedCostSavings(current, smartChargingSek),
+    economicBenefitSek,
     gridImportCostSek: current.gridImportCostSek,
     exportRevenueSek: current.exportRevenueSek,
     netCostSek,
-    ytdReturnPct: computeYtdReturnPct(ytdSavingsSek),
+    ytdReturnPct: computeYtdReturnPct(ytdBenefit, investmentSek),
+    ytdEconomicBenefitSek: ytdBenefit,
+    lifetimeEconomicBenefitSek: computeEconomicBenefit(lifetimeTotals, smartChargingSek),
     changes: {
-      totalSavings: computeMetricChange(totalSavingsSek, prevTotalSavings),
+      totalSavings: computeMetricChange(economicBenefitSek, prevBenefit),
       gridImportCost: computeMetricChange(current.gridImportCostSek, previous.gridImportCostSek),
       exportRevenue: computeMetricChange(current.exportRevenueSek, previous.exportRevenueSek),
       netCost: computeMetricChange(netCostSek, prevNetCost),
@@ -168,6 +396,50 @@ export function buildEconomyMetrics(
   };
 }
 
+export function formatComparisonSubtext(
+  change: EconomyMetricChange,
+  periodLabel: string,
+  options: { invertGood?: boolean; higherIsGood?: boolean } = {},
+): string {
+  if (!periodLabel) return "Ingen jämförelse tillgänglig";
+  if (Math.abs(change.previous) < 0.005 && Math.abs(change.value) < 0.005) {
+    return `Ingen data ${periodLabel.toLowerCase()}`;
+  }
+  if (change.pct == null) {
+    if (Math.abs(change.deltaSek) < 0.5) return `Oförändrat ${periodLabel.toLowerCase()}`;
+    const dir = change.deltaSek > 0 ? "högre" : "lägre";
+    return `${formatEconomyKr(Math.abs(change.deltaSek))} ${dir} ${periodLabel.toLowerCase()}`;
+  }
+
+  const pctAbs = Math.abs(Math.round(change.pct));
+  const arrow = change.pct >= 0 ? "↑" : "↓";
+  const deltaAbs = Math.abs(Math.round(change.deltaSek));
+  const deltaDir = change.deltaSek >= 0 ? "högre" : "lägre";
+  const higherIsGood = options.higherIsGood ?? !options.invertGood;
+  const isGood =
+    change.direction === "flat"
+      ? true
+      : higherIsGood
+        ? change.deltaSek >= 0
+        : change.deltaSek <= 0;
+
+  void isGood;
+  return `${arrow} ${pctAbs} % · ${formatEconomyKr(deltaAbs)} ${deltaDir} ${periodLabel.toLowerCase()}`;
+}
+
+export function formatMetricValue(
+  amountSek: number | null | undefined,
+  options: { allowZero?: boolean } = {},
+): string {
+  if (amountSek == null || !Number.isFinite(amountSek)) return "Data saknas";
+  if (!options.allowZero && Math.abs(amountSek) < 0.005) return "Data saknas";
+  return formatEconomyKr(amountSek);
+}
+
+export function formatReturnPct(pct: number | null): string {
+  if (pct == null || !Number.isFinite(pct)) return "Investering ej angiven";
+  return `${pct.toFixed(1)} %`;
+}
 export function buildCostBreakdown(importCostSek: number): CostBreakdownSlice[] {
   const shares = [
     { id: "purchase", label: "Köpt el", pct: 0.56, color: "#a78bfa" },
@@ -191,9 +463,14 @@ export function buildDailyCostSeries(stats: FinancialStat[]): DailyCostPoint[] {
     const soldSek = stat.export_revenue_sek;
     const netSek = importCost - soldSek;
     const [, month, day] = stat.period_start.split("-").map(Number);
+    const dateObj = new Date(stat.period_start);
+    const dayLabel = dateObj.toLocaleDateString("sv-SE", { day: "numeric", month: "long" });
+    const effectivePriceKrKwh =
+      stat.imported_kwh > 0 ? importCost / stat.imported_kwh : null;
     return {
       date: stat.period_start,
       label: `${day}/${month}`,
+      dayLabel,
       purchasedSek,
       gridFeeSek,
       taxSek,
@@ -201,59 +478,90 @@ export function buildDailyCostSeries(stats: FinancialStat[]): DailyCostPoint[] {
       netSek,
       importedKwh: stat.imported_kwh,
       exportedKwh: stat.exported_kwh,
+      effectivePriceKrKwh,
     };
   });
 }
+/** Heartbeat prices are stored in kr/kWh; convert to whole öre for display. */
+export function marketPriceToOre(pricePerKwh: number): number {
+  return Math.round(toOrePerKwh(pricePerKwh));
+}
 
-const EUR_TO_SEK = 11.2;
+export function formatPriceOre(value: number | null): string {
+  return value == null ? "—" : `${value} öre`;
+}
 
-export function eurToOre(eurKwh: number): number {
-  return eurKwh * EUR_TO_SEK * 100;
+function effectiveAllInPrice(point: MarketPricePoint): number | null {
+  const value = point.all_in_eur_kwh ?? point.spot_eur_kwh;
+  return Number.isFinite(value) ? value : null;
+}
+
+function averagePrice(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function localDayKey(iso: string, timezone: string): string {
+  return new Date(iso).toLocaleDateString("sv-SE", { timeZone: timezone });
+}
+
+function formatPriceTimestamp(iso: string | null, timezone: string): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("sv-SE", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
 }
 
 export function buildPriceAnalysis(
-  points: MarketPricePoint[],
-  purchasePriceSekKwh: number,
+  marketPrices: MarketPricesResponse | null,
   exportPriceSekKwh: number,
   timezone: string,
+  now = new Date(),
 ): PriceAnalysis {
-  const spotValues = points.map((p) => p.spot_eur_kwh).filter((v) => Number.isFinite(v));
-  const spotOre = spotValues.length
-    ? eurToOre(spotValues.reduce((a, b) => a + b, 0) / spotValues.length)
-    : eurToOre(points[0]?.spot_eur_kwh ?? 0.04);
+  const allPoints = marketPrices?.points ?? [];
+  const todayKey = now.toLocaleDateString("sv-SE", { timeZone: timezone });
+  const todayPoints = allPoints.filter((point) => localDayKey(point.timestamp, timezone) === todayKey);
+  const points = todayPoints.length > 0 ? todayPoints : allPoints;
+
+  const spotValues = points.map((point) => point.spot_eur_kwh).filter(Number.isFinite);
+  const allInValues = points.map((point) => effectiveAllInPrice(point)).filter((value): value is number => value != null);
 
   let cheapest: MarketPricePoint | null = null;
   let expensive: MarketPricePoint | null = null;
   for (const point of points) {
-    const price = point.all_in_eur_kwh ?? point.spot_eur_kwh;
-    if (!Number.isFinite(price)) continue;
-    if (!cheapest || price < (cheapest.all_in_eur_kwh ?? cheapest.spot_eur_kwh)) {
+    const price = effectiveAllInPrice(point);
+    if (price == null) continue;
+    if (!cheapest || price < (effectiveAllInPrice(cheapest) ?? Number.POSITIVE_INFINITY)) {
       cheapest = point;
     }
-    if (!expensive || price > (expensive.all_in_eur_kwh ?? expensive.spot_eur_kwh)) {
+    if (!expensive || price > (effectiveAllInPrice(expensive) ?? Number.NEGATIVE_INFINITY)) {
       expensive = point;
     }
   }
 
-  const formatTs = (iso: string | null) => {
-    if (!iso) return null;
-    return new Date(iso).toLocaleString("sv-SE", {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: timezone,
-    });
-  };
+  const spotAverage = averagePrice(spotValues);
+  const purchaseAverage = averagePrice(allInValues);
+  const cheapestPrice =
+    cheapest != null
+      ? effectiveAllInPrice(cheapest)
+      : marketPrices?.lowest_all_in_eur_kwh ?? null;
+  const expensivePrice =
+    expensive != null
+      ? effectiveAllInPrice(expensive)
+      : marketPrices?.highest_all_in_eur_kwh ?? null;
 
   return {
-    spotOre: Math.round(spotOre),
-    purchaseOre: Math.round(purchasePriceSekKwh * 100),
-    exportOre: Math.round(exportPriceSekKwh * 100),
-    cheapestOre: cheapest ? Math.round(eurToOre(cheapest.all_in_eur_kwh ?? cheapest.spot_eur_kwh)) : 0,
-    cheapestAt: formatTs(cheapest?.timestamp ?? null),
-    expensiveOre: expensive ? Math.round(eurToOre(expensive.all_in_eur_kwh ?? expensive.spot_eur_kwh)) : 0,
-    expensiveAt: formatTs(expensive?.timestamp ?? null),
+    spotOre: spotAverage != null ? marketPriceToOre(spotAverage) : null,
+    purchaseOre: purchaseAverage != null ? marketPriceToOre(purchaseAverage) : null,
+    exportOre: Number.isFinite(exportPriceSekKwh) ? marketPriceToOre(exportPriceSekKwh) : null,
+    cheapestOre: cheapestPrice != null ? marketPriceToOre(cheapestPrice) : null,
+    cheapestAt: formatPriceTimestamp(cheapest?.timestamp ?? null, timezone),
+    expensiveOre: expensivePrice != null ? marketPriceToOre(expensivePrice) : null,
+    expensiveAt: formatPriceTimestamp(expensive?.timestamp ?? null, timezone),
   };
 }
 
@@ -264,26 +572,37 @@ export interface SavingsBreakdownItem {
   pct: number;
   color: string;
   description: string;
+  quality: EconomyValueQuality;
 }
 
 export const SAVINGS_BREAKDOWN_META = [
   {
     id: "solar",
-    label: "Självförbrukning",
+    label: "Egenanvänd solel",
     color: "#4ade80",
     description: "Solenergi som använts i huset istället för köpt el.",
+    quality: "CALCULATED" as EconomyValueQuality,
   },
   {
     id: "battery",
     label: "Batterioptimering",
     color: "#38bdf8",
     description: "Besparing när lagrad el ersätter dyr nätimport.",
+    quality: "CALCULATED" as EconomyValueQuality,
+  },
+  {
+    id: "export",
+    label: "Såld el",
+    color: "#a78bfa",
+    description: "Intäkt från el som matats ut på nätet.",
+    quality: "CALCULATED" as EconomyValueQuality,
   },
   {
     id: "ev",
-    label: "Laddsmart optimering",
+    label: "EV-laddningsoptimering",
     color: "#fb923c",
     description: "Besparing från laddning vid låga elpriser.",
+    quality: "MISSING" as EconomyValueQuality,
   },
 ] as const;
 
@@ -294,16 +613,21 @@ export function buildSavingsBreakdown(
   const amounts: Record<(typeof SAVINGS_BREAKDOWN_META)[number]["id"], number> = {
     solar: totals.solarSavingsSek,
     battery: totals.batterySavingsSek,
+    export: totals.exportRevenueSek,
     ev: smartChargingSek,
   };
-  const total = Object.values(amounts).reduce((sum, value) => sum + value, 0) || 1;
-  return SAVINGS_BREAKDOWN_META.map((meta) => ({
+  const visible = SAVINGS_BREAKDOWN_META.filter((meta) => {
+    if (meta.id === "ev") return smartChargingSek > 0;
+    return amounts[meta.id] > 0.005;
+  });
+  const total = visible.reduce((sum, meta) => sum + amounts[meta.id], 0) || 1;
+  return visible.map((meta) => ({
     ...meta,
     amountSek: amounts[meta.id],
     pct: (amounts[meta.id] / total) * 100,
+    quality: meta.id === "ev" && smartChargingSek > 0 ? "ESTIMATED" : meta.quality,
   }));
 }
-
 export function computeDailyEconomicResult(stat: FinancialStat): number {
   return (
     stat.solar_savings_sek +
@@ -351,7 +675,61 @@ export function formatDailyEconomicResultLabel(sek: number): string {
   return `${sign}${formatEconomyKr(Math.abs(sek))} netto`;
 }
 
-export function buildEconomyGoals(totals: EconomyTotals): EconomyGoal[] {
+export function buildCostReductionGoal(
+  current: EconomyTotals,
+  previous: EconomyTotals | null,
+  comparisonLabel: string,
+): EconomyGoal {
+  if (!previous || previous.gridImportCostSek <= 0) {
+    const budgetPct =
+      current.gridImportCostSek > 0 && DEFAULT_MONTHLY_BUDGET_SEK > 0
+        ? Math.min(100, (current.gridImportCostSek / DEFAULT_MONTHLY_BUDGET_SEK) * 100)
+        : 0;
+    return {
+      id: "cost",
+      label: "Minska elkostnad",
+      targetLabel: comparisonLabel || "Kräver jämförelseperiod",
+      valuePct: budgetPct,
+      displayValue:
+        current.gridImportCostSek > 0
+          ? `${formatEconomyKr(current.gridImportCostSek)} i perioden`
+          : "Data saknas",
+      tone: "orange",
+    };
+  }
+
+  const change = computeMetricChange(current.gridImportCostSek, previous.gridImportCostSek);
+  const lowerIsBetter = change.deltaSek <= 0;
+  const barPct =
+    change.pct != null
+      ? Math.min(100, Math.max(4, Math.abs(change.pct)))
+      : Math.abs(change.deltaSek) >= 0.5
+        ? 8
+        : 0;
+
+  let displayValue = "Oförändrat";
+  if (change.pct != null) {
+    const arrow = change.pct <= 0 ? "↓" : "↑";
+    displayValue = `${arrow} ${Math.abs(Math.round(change.pct))} % · ${formatEconomyKr(Math.abs(Math.round(change.deltaSek)))} ${change.deltaSek <= 0 ? "lägre" : "högre"}`;
+  } else if (Math.abs(change.deltaSek) >= 0.5) {
+    displayValue = formatComparisonSubtext(change, comparisonLabel, { higherIsGood: false, invertGood: true });
+  }
+
+  return {
+    id: "cost",
+    label: "Minska elkostnad",
+    targetLabel: comparisonLabel,
+    valuePct: barPct,
+    displayValue,
+    tone: change.direction === "flat" ? "orange" : lowerIsBetter ? "green" : "warn",
+  };
+}
+
+export function buildEconomyGoals(
+  totals: EconomyTotals,
+  previousTotals: EconomyTotals | null,
+  comparisonLabel = "Föregående period",
+): EconomyGoal[] {
   const selfUseKwh = totals.solarSelfConsumedKwh + totals.batterySelfConsumedKwh;
   const producedKwh = selfUseKwh + totals.exportedKwh;
   const selfUsePct = producedKwh > 0 ? (selfUseKwh / producedKwh) * 100 : 0;
@@ -359,14 +737,7 @@ export function buildEconomyGoals(totals: EconomyTotals): EconomyGoal[] {
   const co2Kg = Math.round(selfUseKwh * 0.4);
 
   return [
-    {
-      id: "cost",
-      label: "Minska elkostnad",
-      targetLabel: "Target −50%",
-      valuePct: 45,
-      displayValue: "45%",
-      tone: "orange",
-    },
+    buildCostReductionGoal(totals, previousTotals, comparisonLabel),
     {
       id: "selfuse",
       label: "Öka självförbrukning",
@@ -409,18 +780,36 @@ export function buildEconomyInsights(
     : null;
   const bestDayNet = bestDay ? computeDailyEconomicResult(bestDay) : null;
 
-  const insights: EconomyInsight[] = [
-    { id: "peak", text: "Du köpte mest el mellan 17:00–20:00." },
-    {
-      id: "selfuse",
-      text: `${selfUsePct}% av solenergin användes själv eller lagrades.`,
-    },
-    {
-      id: "battery",
-      text: `Batteriet tjänade dig ${Math.round(totals.batterySavingsSek).toLocaleString("sv-SE")} kr denna månad.`,
-    },
-  ];
+  const peakImportDay = dailyStats.reduce<FinancialStat | null>((best, current) => {
+    if (current.grid_import_cost_sek <= 0) return best;
+    if (!best || current.grid_import_cost_sek > best.grid_import_cost_sek) return current;
+    return best;
+  }, null);
 
+  const insights: EconomyInsight[] = [];
+
+  if (peakImportDay && peakImportDay.grid_import_cost_sek > 0) {
+    const peakLabel = new Date(peakImportDay.period_start).toLocaleDateString("sv-SE", {
+      day: "numeric",
+      month: "short",
+    });
+    insights.push({
+      id: "peak",
+      text: `Högsta elkostnad: ${peakLabel} (${formatEconomyKr(peakImportDay.grid_import_cost_sek)}).`,
+    });
+  }
+
+  insights.push({
+    id: "selfuse",
+    text: `${selfUsePct}% av solenergin användes själv eller lagrades.`,
+  });
+
+  if (totals.batterySavingsSek > 0) {
+    insights.push({
+      id: "battery",
+      text: `Batteriet bidrog med ${formatEconomyKr(totals.batterySavingsSek)} i besparing.`,
+    });
+  }
   if (bestDay && bestDayLabel && bestDayNet != null) {
     insights.push({
       id: "bestday",

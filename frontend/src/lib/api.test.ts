@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ENERGY_BALANCE_HISTORY_MAX_LIMIT,
   fetchChargerFeatureMatrix,
   fetchChargerIntegrationMethods,
   fetchChargerManufacturer,
@@ -228,5 +229,30 @@ describe("charger catalog API client", () => {
       "/api/sites/akarp/ev-chargers/4/energy-balance/history?limit=25&offset=5",
       { cache: "no-store" },
     );
+  });
+
+  it("clamps the balance history page size to what the API accepts", async () => {
+    const response = { items: [], total: 0 };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(response),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchEnergyBalanceHistory("akarp", 4, 288, 0)).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/sites/akarp/ev-chargers/4/energy-balance/history?limit=${ENERGY_BALANCE_HISTORY_MAX_LIMIT}&offset=0`,
+      { cache: "no-store" },
+    );
+  });
+
+  it("surfaces a rejected balance history request instead of returning empty data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      text: vi.fn().mockResolvedValue("limit too large"),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(fetchEnergyBalanceHistory("akarp", 4)).rejects.toThrow("limit too large");
   });
 });

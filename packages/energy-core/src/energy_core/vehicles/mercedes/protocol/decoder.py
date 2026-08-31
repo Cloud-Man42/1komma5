@@ -70,6 +70,15 @@ class MercedesMessageDecoder:
             return None
         return self._map_vep_update(message)
 
+    def decode_vehicle_status(self, payload: bytes) -> MercedesPushMessage | None:
+        """Decode widget REST ``vehicleattributes`` payloads (``VehicleStatus``)."""
+        try:
+            message = vehicle_events_pb2.VehicleStatus()
+            message.ParseFromString(payload)
+        except (DecodeError, TypeError):
+            return None
+        return self._map_vep_update(message)
+
     def _map_push_message(self, message: Any) -> MercedesPushMessage | None:
         msg_type = message.WhichOneof("msg")
         if msg_type == "vepUpdate":
@@ -160,9 +169,12 @@ def _extract_status_field_value(field_obj: Any) -> Any:
 
 
 def _extract_attribute_status_value(status: Any) -> Any:
-    for field_name in ("double_value", "int_value", "bool_value", "string_value", "display_value"):
+    for field_name in ("double_value", "int_value", "bool_value", "string_value"):
         if status.HasField(field_name):
             value = getattr(status, field_name)
             if value not in (None, ""):
                 return value
+    display_value = getattr(status, "display_value", None)
+    if display_value not in (None, ""):
+        return display_value
     return None

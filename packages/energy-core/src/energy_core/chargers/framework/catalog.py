@@ -1,4 +1,10 @@
-"""Central EV charger vendor catalog — data-driven integration profiles."""
+"""Central EV charger vendor catalog — data-driven integration profiles.
+
+Only ``CHARGE_AMPS_CLOUD`` has a live adapter in EMIC today. Every other
+integration method and manufacturer model in this file is a **catalog placeholder**
+(``status="UNSUPPORTED"`` / ``implementation_status="UNSUPPORTED"``) reserved for
+future work — selecting them returns the unsupported adapter.
+"""
 
 from __future__ import annotations
 
@@ -105,6 +111,7 @@ def _unsupported_caps() -> ChargerCapabilities:
 
 
 INTEGRATION_METHODS: dict[str, ChargerIntegrationMethodDefinition] = {
+    # --- Implemented (live adapter) ------------------------------------------------
     CHARGE_AMPS_CLOUD: ChargerIntegrationMethodDefinition(
         id=CHARGE_AMPS_CLOUD,
         label="Charge Amps Cloud API",
@@ -120,6 +127,7 @@ INTEGRATION_METHODS: dict[str, ChargerIntegrationMethodDefinition] = {
             CredentialFieldDefinition("charger_id", "Laddbox-ID", help_text="Charge Amps charge point ID"),
         ),
     ),
+    # --- Not implemented (catalog placeholders) ------------------------------------
     ZAPTEC_REST: ChargerIntegrationMethodDefinition(
         id=ZAPTEC_REST,
         label="Zaptec REST API",
@@ -416,6 +424,28 @@ def _model(
     )
 
 
+def _not_implemented_model(
+    manufacturer_id: str,
+    model_id: str,
+    name: str,
+    *,
+    methods: tuple[str, ...],
+    protocols: tuple[str, ...] = ("CLOUD_API",),
+    docs: str | None = None,
+) -> ChargerModelDefinition:
+    """Catalog-only model — no live EMIC integration adapter exists yet."""
+    return _model(
+        manufacturer_id,
+        model_id,
+        name,
+        methods=methods,
+        status="UNSUPPORTED",
+        caps=_unsupported_caps(),
+        protocols=protocols,
+        docs=docs,
+    )
+
+
 MANUFACTURERS: tuple[ChargerManufacturerDefinition, ...] = (
     ChargerManufacturerDefinition(
         id="charge-amps",
@@ -432,176 +462,176 @@ MANUFACTURERS: tuple[ChargerManufacturerDefinition, ...] = (
         id="zaptec",
         name="Zaptec",
         models=(
-            _model("zaptec", "go", "Go", methods=(ZAPTEC_REST, OCPP_16J), status="UNSUPPORTED"),
-            _model("zaptec", "go-2", "Go 2", methods=(ZAPTEC_REST, OCPP_16J), status="UNSUPPORTED"),
-            _model("zaptec", "pro", "Pro", methods=(ZAPTEC_REST, OCPP_16J), status="UNSUPPORTED"),
-            _model("zaptec", "pro-mid", "Pro MID", methods=(ZAPTEC_REST, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("zaptec", "go", "Go", methods=(ZAPTEC_REST, OCPP_16J)),
+            _not_implemented_model("zaptec", "go-2", "Go 2", methods=(ZAPTEC_REST, OCPP_16J)),
+            _not_implemented_model("zaptec", "pro", "Pro", methods=(ZAPTEC_REST, OCPP_16J)),
+            _not_implemented_model("zaptec", "pro-mid", "Pro MID", methods=(ZAPTEC_REST, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="easee",
         name="Easee",
         models=(
-            _model("easee", "charge-up", "Charge Up", methods=(EASEE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("easee", "charge-core", "Charge Core", methods=(EASEE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("easee", "charge-max", "Charge Max", methods=(EASEE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("easee", "charge-pro", "Charge Pro", methods=(EASEE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("easee", "charge-up", "Charge Up", methods=(EASEE_CLOUD, OCPP_16J)),
+            _not_implemented_model("easee", "charge-core", "Charge Core", methods=(EASEE_CLOUD, OCPP_16J)),
+            _not_implemented_model("easee", "charge-max", "Charge Max", methods=(EASEE_CLOUD, OCPP_16J)),
+            _not_implemented_model("easee", "charge-pro", "Charge Pro", methods=(EASEE_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="go-e",
         name="go-e",
         models=(
-            _model("go-e", "gemini", "Gemini", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("go-e", "gemini-2", "Gemini 2.0", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("go-e", "gemini-flex", "Gemini Flex", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("go-e", "gemini-flex-2", "Gemini Flex 2.0", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("go-e", "pro", "PRO", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("go-e", "core", "CORE", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("go-e", "gemini", "Gemini", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
+            _not_implemented_model("go-e", "gemini-2", "Gemini 2.0", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
+            _not_implemented_model("go-e", "gemini-flex", "Gemini Flex", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
+            _not_implemented_model("go-e", "gemini-flex-2", "Gemini Flex 2.0", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
+            _not_implemented_model("go-e", "pro", "PRO", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
+            _not_implemented_model("go-e", "core", "CORE", methods=(GOE_LOCAL_HTTP, GOE_MODBUS, GOE_MQTT, GOE_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="nexblue",
         name="NexBlue",
         models=(
-            _model("nexblue", "edge", "Edge", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201), status="UNSUPPORTED"),
-            _model("nexblue", "edge-2", "Edge 2", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201), status="UNSUPPORTED"),
-            _model("nexblue", "edge-max", "Edge Max", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201), status="UNSUPPORTED"),
-            _model("nexblue", "delta", "Delta", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201), status="UNSUPPORTED"),
-            _model("nexblue", "delta-max", "Delta Max", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201), status="UNSUPPORTED"),
+            _not_implemented_model("nexblue", "edge", "Edge", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201)),
+            _not_implemented_model("nexblue", "edge-2", "Edge 2", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201)),
+            _not_implemented_model("nexblue", "edge-max", "Edge Max", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201)),
+            _not_implemented_model("nexblue", "delta", "Delta", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201)),
+            _not_implemented_model("nexblue", "delta-max", "Delta Max", methods=(NEXBLUE_MODBUS, NEXBLUE_OCPP_16J, NEXBLUE_OCPP_201)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="garo",
         name="GARO",
         models=(
-            _model("garo", "entity-home", "Entity Home", methods=(GARO_CONNECT, OCPP_16J), status="UNSUPPORTED"),
-            _model("garo", "entity-compact", "Entity Compact", methods=(GARO_CONNECT, OCPP_16J), status="UNSUPPORTED"),
-            _model("garo", "entity-pro", "Entity Pro", methods=(GARO_CONNECT, OCPP_16J), status="UNSUPPORTED"),
-            _model("garo", "entity-pro-mid", "Entity Pro MID", methods=(GARO_CONNECT, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("garo", "entity-home", "Entity Home", methods=(GARO_CONNECT, OCPP_16J)),
+            _not_implemented_model("garo", "entity-compact", "Entity Compact", methods=(GARO_CONNECT, OCPP_16J)),
+            _not_implemented_model("garo", "entity-pro", "Entity Pro", methods=(GARO_CONNECT, OCPP_16J)),
+            _not_implemented_model("garo", "entity-pro-mid", "Entity Pro MID", methods=(GARO_CONNECT, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="defa",
         name="DEFA",
         models=(
-            _model("defa", "power", "Power", methods=(DEFA_CLOUD, OCPP_201), status="UNSUPPORTED"),
-            _model("defa", "power-home", "Power Home", methods=(DEFA_CLOUD, OCPP_201), status="UNSUPPORTED"),
-            _model("defa", "power-s", "Power S", methods=(DEFA_CLOUD, OCPP_201), status="UNSUPPORTED"),
-            _model("defa", "power-facility", "Power Facility", methods=(DEFA_CLOUD, OCPP_201), status="UNSUPPORTED"),
-            _model("defa", "power-up", "Power Up", methods=(DEFA_CLOUD, OCPP_201), status="UNSUPPORTED"),
+            _not_implemented_model("defa", "power", "Power", methods=(DEFA_CLOUD, OCPP_201)),
+            _not_implemented_model("defa", "power-home", "Power Home", methods=(DEFA_CLOUD, OCPP_201)),
+            _not_implemented_model("defa", "power-s", "Power S", methods=(DEFA_CLOUD, OCPP_201)),
+            _not_implemented_model("defa", "power-facility", "Power Facility", methods=(DEFA_CLOUD, OCPP_201)),
+            _not_implemented_model("defa", "power-up", "Power Up", methods=(DEFA_CLOUD, OCPP_201)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="wallbox",
         name="Wallbox",
         models=(
-            _model("wallbox", "pulsar-max", "Pulsar Max", methods=(WALLBOX_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("wallbox", "pulsar-plus", "Pulsar Plus", methods=(WALLBOX_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("wallbox", "copper-sb", "Copper SB", methods=(WALLBOX_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("wallbox", "commander", "Commander", methods=(WALLBOX_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("wallbox", "pulsar-max", "Pulsar Max", methods=(WALLBOX_CLOUD, OCPP_16J)),
+            _not_implemented_model("wallbox", "pulsar-plus", "Pulsar Plus", methods=(WALLBOX_CLOUD, OCPP_16J)),
+            _not_implemented_model("wallbox", "copper-sb", "Copper SB", methods=(WALLBOX_CLOUD, OCPP_16J)),
+            _not_implemented_model("wallbox", "commander", "Commander", methods=(WALLBOX_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="myenergi",
         name="myenergi",
         models=(
-            _model("myenergi", "zappi-v21", "Zappi v2.1", methods=(MYENERGI_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("myenergi", "zappi-v21", "Zappi v2.1", methods=(MYENERGI_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="tesla",
         name="Tesla",
         models=(
-            _model("tesla", "wall-connector-gen3", "Wall Connector Gen 3", methods=(OCPP_16J,), status="UNSUPPORTED"),
+            _not_implemented_model("tesla", "wall-connector-gen3", "Wall Connector Gen 3", methods=(OCPP_16J,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="ctek",
         name="CTEK",
         models=(
-            _model("ctek", "chargestorm-connected-2", "Chargestorm Connected 2", methods=(CTEK_CLOUD, OCPP_16J), status="UNSUPPORTED"),
-            _model("ctek", "njord-go", "Njord Go", methods=(CTEK_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("ctek", "chargestorm-connected-2", "Chargestorm Connected 2", methods=(CTEK_CLOUD, OCPP_16J)),
+            _not_implemented_model("ctek", "njord-go", "Njord Go", methods=(CTEK_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="abb",
         name="ABB",
         models=(
-            _model("abb", "terra-ac", "Terra AC", methods=(OCPP_16J,), status="UNSUPPORTED"),
+            _not_implemented_model("abb", "terra-ac", "Terra AC", methods=(OCPP_16J,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="schneider",
         name="Schneider Electric",
         models=(
-            _model("schneider", "evlink-pro-ac", "EVlink Pro AC", methods=(SCHNEIDER_MODBUS, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("schneider", "evlink-pro-ac", "EVlink Pro AC", methods=(SCHNEIDER_MODBUS, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="keba",
         name="KEBA",
         models=(
-            _model("keba", "kecontact-p30", "KeContact P30", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J), status="UNSUPPORTED"),
-            _model("keba", "kecontact-p40", "KeContact P40", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J), status="UNSUPPORTED"),
-            _model("keba", "kecontact-p40-pro", "KeContact P40 Pro", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("keba", "kecontact-p30", "KeContact P30", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J)),
+            _not_implemented_model("keba", "kecontact-p40", "KeContact P40", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J)),
+            _not_implemented_model("keba", "kecontact-p40-pro", "KeContact P40 Pro", methods=(KEBA_REST, KEBA_MODBUS, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="alfen",
         name="Alfen",
         models=(
-            _model("alfen", "eve-single-pro-line", "Eve Single Pro-line", methods=(OCPP_16J,), status="UNSUPPORTED"),
+            _not_implemented_model("alfen", "eve-single-pro-line", "Eve Single Pro-line", methods=(OCPP_16J,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="mennekes",
         name="Mennekes",
         models=(
-            _model("mennekes", "amtron-professional", "AMTRON Professional", methods=(OCPP_16J,), status="UNSUPPORTED"),
+            _not_implemented_model("mennekes", "amtron-professional", "AMTRON Professional", methods=(OCPP_16J,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="autel",
         name="Autel",
         models=(
-            _model("autel", "maxicharger-ac", "MaxiCharger AC", methods=(OCPP_16J,), status="UNSUPPORTED"),
+            _not_implemented_model("autel", "maxicharger-ac", "MaxiCharger AC", methods=(OCPP_16J,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="amina",
         name="Amina",
         models=(
-            _model("amina", "amina-s", "Amina S", methods=(AMINA_PARTNER,), status="UNSUPPORTED"),
+            _not_implemented_model("amina", "amina-s", "Amina S", methods=(AMINA_PARTNER,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="eo-charging",
         name="EO Charging",
         models=(
-            _model("eo-charging", "mini-pro-3", "Mini Pro 3", methods=(EO_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("eo-charging", "mini-pro-3", "Mini Pro 3", methods=(EO_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="ohme",
         name="Ohme",
         models=(
-            _model("ohme", "home-pro", "Home Pro", methods=(OHME_CLOUD, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("ohme", "home-pro", "Home Pro", methods=(OHME_CLOUD, OCPP_16J)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="hypervolt",
         name="Hypervolt",
         models=(
-            _model("hypervolt", "home-3", "Home 3.0", methods=(HYPERVOLT_CLOUD,), status="UNSUPPORTED"),
+            _not_implemented_model("hypervolt", "home-3", "Home 3.0", methods=(HYPERVOLT_CLOUD,)),
         ),
     ),
     ChargerManufacturerDefinition(
         id="enua",
         name="Enua",
         models=(
-            _model("enua", "charge", "Charge", methods=(ENUa_PLATFORM, OCPP_16J), status="UNSUPPORTED"),
-            _model("enua", "wallmount", "Wallmount", methods=(ENUa_PLATFORM, OCPP_16J), status="UNSUPPORTED"),
+            _not_implemented_model("enua", "charge", "Charge", methods=(ENUa_PLATFORM, OCPP_16J)),
+            _not_implemented_model("enua", "wallmount", "Wallmount", methods=(ENUa_PLATFORM, OCPP_16J)),
         ),
     ),
 )

@@ -2,6 +2,8 @@
 
 
 
+import dynamic from "next/dynamic";
+
 import { useState } from "react";
 
 import Link from "next/link";
@@ -28,8 +30,6 @@ import {
 
   SolarMultiDayPanel,
 
-  SolarProductionChartPanel,
-
   SolarTomorrowPanel,
 
   SolarWeatherFactorsPanel,
@@ -37,6 +37,11 @@ import {
   SolarWeatherPanel,
 
 } from "./SolarPanels";
+
+const SolarProductionChartPanel = dynamic(
+  () => import("./SolarPanels").then((mod) => ({ default: mod.SolarProductionChartPanel })),
+  { ssr: false, loading: () => <Skeleton lines={8} /> },
+);
 
 import {
 

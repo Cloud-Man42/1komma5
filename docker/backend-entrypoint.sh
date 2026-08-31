@@ -33,6 +33,34 @@ PY
 ensure_secret_key
 
 cd /app
+python - <<'PY'
+"""Alembic stores revision ids in alembic_version.version_num (default VARCHAR(32))."""
+import asyncio
+import os
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+
+async def main() -> None:
+    engine = create_async_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+                DO $$ BEGIN
+                  IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = 'alembic_version'
+                  ) THEN
+                    ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64);
+                  END IF;
+                END $$;
+                """
+            )
+        )
+    await engine.dispose()
+
+asyncio.run(main())
+PY
 alembic upgrade head
 cd /app
 python scripts/seed.py

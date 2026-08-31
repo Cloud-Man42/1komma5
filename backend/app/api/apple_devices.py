@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/apple-devices", tags=["apple-devices"])
 
+# Full-screen dashboards read the display API; phones get the smaller widget feed.
+DISPLAY_DEVICE_TYPES = frozenset({"raspberry_pi", "tablet"})
+
 
 class AppleDeviceCreateRequest(BaseModel):
     owner_label: str = Field(min_length=1, max_length=128)
@@ -83,11 +86,17 @@ async def create_apple_device(
 ) -> AppleDeviceCreateResponse:
     repo = AppleDeviceRepository(session)
     generated = generate_device_token()
+    scopes = (
+        "display.read"
+        if payload.device_type.strip().lower() in DISPLAY_DEVICE_TYPES
+        else "widget.read"
+    )
     record, token = await repo.create(
         owner_label=payload.owner_label.strip(),
         device_name=payload.device_name.strip(),
         device_type=payload.device_type.strip(),
         generated=generated,
+        scopes=scopes,
         default_site_slug=payload.default_site_slug,
     )
     await session.commit()

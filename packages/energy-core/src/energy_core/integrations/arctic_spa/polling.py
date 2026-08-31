@@ -87,7 +87,7 @@ class ArcticSpaPollingService:
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
             db_base_url=config.api_base_url,
-            db_api_key=config.api_key,
+            db_api_key=repo.decrypt_spa_api_key(config),
             db_spa_id=config.external_spa_id,
             db_poll_interval=config.poll_interval_seconds,
             db_energy_enabled=config.energy_collection_enabled,

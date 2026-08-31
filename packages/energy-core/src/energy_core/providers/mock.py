@@ -6,7 +6,7 @@ import math
 import random
 from datetime import UTC, datetime
 
-from energy_core.domain import RawEnergyReading, SiteSnapshot
+from energy_core.domain import CORE_READING_FIELDS, RawEnergyReading, SiteSnapshot
 
 MOCK_SITES: tuple[SiteSnapshot, ...] = (
     SiteSnapshot(
@@ -80,6 +80,7 @@ class MockHeartbeatProvider:
                 grid_export_w=akarp_export,
                 battery_soc_pct=akarp_battery_soc,
                 battery_power_w=akarp_battery_power,
+                present_fields=CORE_READING_FIELDS,
             ),
             RawEnergyReading(
                 site_slug="summer-house-denmark",
@@ -90,5 +91,6 @@ class MockHeartbeatProvider:
                 grid_export_w=summer_export,
                 battery_soc_pct=summer_battery_soc,
                 battery_power_w=summer_battery_power,
+                present_fields=CORE_READING_FIELDS,
             ),
         ]

@@ -48,11 +48,14 @@ class EVStatisticsService:
         period_to = to_time or now
         period_from = from_time or self._default_from(period, period_to)
 
+        # ACTIVE belongs here: the sampler keeps a running session's totals up to
+        # date, and leaving it out made a day of charging show as 0 kWh until the
+        # car was unplugged.
         sessions = await self._repo.list_for_charger(
             charger_id,
             from_time=period_from,
             to_time=period_to,
-            statuses=("COMPLETED", "ESTIMATED", "INCOMPLETE"),
+            statuses=("COMPLETED", "ESTIMATED", "INCOMPLETE", "ACTIVE"),
         )
         return self._aggregate(sessions, period=period, period_from=period_from, period_to=period_to)
 

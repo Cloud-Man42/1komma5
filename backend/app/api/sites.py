@@ -33,6 +33,7 @@ def _site_response(site, latest_reading) -> SiteResponse:
         export_compensation_sek_kwh=site.export_compensation_sek_kwh,
         main_fuse_a=site.main_fuse_a,
         safety_margin_a=site.safety_margin_a,
+        sell_contract_start_date=getattr(site, "sell_contract_start_date", None),
         latest_reading=(
             ReadingResponse(
                 recorded_at=latest_reading.recorded_at,

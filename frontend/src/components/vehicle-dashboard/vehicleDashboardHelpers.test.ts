@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   buildVehicleDisplay,
+  chargingSubtitle,
   estimateCo2SavedKg,
   recentSessionEnergyBars,
+  resolveTargetSocPct,
   sessionEnergyKwh,
   surplusLabel,
 } from "./vehicleDashboardHelpers";
-import type { VehicleChargeSession, VehicleIntegrationStatus, VehicleListItem } from "@/lib/api";
+import type {
+  EnergyReasoning,
+  VehicleChargeSession,
+  VehicleIntegrationStatus,
+  VehicleListItem,
+} from "@/lib/api";
 
 const vehicle: VehicleListItem = {
   id: 1,
@@ -115,5 +122,63 @@ describe("vehicleDashboardHelpers", () => {
     expect(recentSessionEnergyBars([session])).toEqual([100]);
     expect(estimateCo2SavedKg(28.7)).toBeCloseTo(4.305);
     expect(surplusLabel(session)).toBe("100% förnybar");
+  });
+});
+
+describe("resolveTargetSocPct", () => {
+  const withoutTargetSoc: VehicleListItem = {
+    ...vehicle,
+    target_soc_percent: 0,
+    capabilities: { ...vehicle.capabilities, can_read_target_soc: false },
+  };
+
+  it("uses the target the car reports", () => {
+    expect(resolveTargetSocPct(vehicle, null, null)).toBe(80);
+  });
+
+  it("ignores the car's 0% when it cannot read a charge limit", () => {
+    expect(resolveTargetSocPct(withoutTargetSoc, null, null)).toBeNull();
+  });
+
+  it("falls back to the session target when the car reports nothing", () => {
+    expect(resolveTargetSocPct(withoutTargetSoc, session, null)).toBe(80);
+  });
+
+  it("falls back to the charging plan when neither car nor session has a target", () => {
+    const plan = { vehicle_target_soc_pct: 65 } as EnergyReasoning;
+    expect(resolveTargetSocPct(withoutTargetSoc, { ...session, target_soc: null }, plan)).toBe(65);
+  });
+
+  it("treats a 0% target from any source as no target at all", () => {
+    const plan = { vehicle_target_soc_pct: 0 } as EnergyReasoning;
+    expect(resolveTargetSocPct(withoutTargetSoc, { ...session, target_soc: 0 }, plan)).toBeNull();
+  });
+
+  it("reports no target when there is no vehicle", () => {
+    expect(resolveTargetSocPct(null, null, null)).toBeNull();
+  });
+
+  it("keeps a 0% reading out of the built display", () => {
+    const display = buildVehicleDisplay({
+      vehicle: withoutTargetSoc,
+      session: { ...session, target_soc: null },
+      sessions: [],
+      integration,
+      reasoning: null,
+      refreshIntervalSec: 15,
+      siteSlug: "akarp",
+    });
+
+    expect(display.targetSocPct).toBeNull();
+  });
+
+  it("does not claim the car is plugged in when Mercedes data is stale", () => {
+    expect(
+      chargingSubtitle(
+        { ...vehicle, freshness_label: "INAKTUELL", is_plugged_in: null, is_charging: null },
+        session,
+        null,
+      ),
+    ).toContain("Ingen färsk fordonsdata");
   });
 });

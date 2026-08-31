@@ -33,7 +33,7 @@ from energy_core.db.solar_intelligence_repo import (
 )
 from energy_core.solar_forecast.calibration import metrics_insufficient
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
-from energy_core.solar_forecast.historical import actual_solar_kwh_today_from_readings
+from energy_core.solar_forecast.rollup_queries import actual_solar_kwh_today
 from energy_core.solar_forecast.performance import (
     build_performance_summary,
     estimate_raw_so_far_from_totals,
@@ -130,14 +130,9 @@ async def get_performance(
 
     now = datetime.now(UTC)
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-    from datetime import time
-    from zoneinfo import ZoneInfo
-
-    tz = ZoneInfo(site.timezone)
-    day_start = datetime.combine(now.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(UTC)
-    readings = await reading_repo.list_readings(site.id, from_time=day_start, to_time=now, limit=50000)
-    actual_today = actual_solar_kwh_today_from_readings(
-        [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings],
+    actual_today = await actual_solar_kwh_today(
+        reading_repo,
+        site.id,
         timezone=site.timezone,
         now=now,
     )

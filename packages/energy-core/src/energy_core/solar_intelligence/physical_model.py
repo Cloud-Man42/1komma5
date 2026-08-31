@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from energy_core.solar_forecast.constants import INTERVAL_HOURS, REFERENCE_TEMP_C, TEMP_COEFFICIENT_PER_C
+from energy_core.solar_forecast.intervals import DEFAULT_HOURLY_INTERVAL_HOURS
 from energy_core.solar_intelligence.geometry import SolarGeometryService
 from energy_core.solar_intelligence.poa import PoaTranspositionService
 from energy_core.solar_intelligence.types import WeatherSnapshot
@@ -75,8 +76,8 @@ class PhysicalPvModel:
             power_w = min(power_w, self._inverter_max_kw * 1000.0)
         return power_w, avg_poa
 
-    def energy_kwh(self, power_w: float) -> float:
-        return (power_w / 1000.0) * INTERVAL_HOURS
+    def energy_kwh(self, power_w: float, *, interval_hours: float = DEFAULT_HOURLY_INTERVAL_HOURS) -> float:
+        return (power_w / 1000.0) * interval_hours
 
     def from_weather_snapshot(self, snap: WeatherSnapshot, *, ghi: float) -> tuple[float, float]:
         return self.expected_power_w(

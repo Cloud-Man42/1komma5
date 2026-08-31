@@ -3,13 +3,19 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Sparkline } from "@/components/intelligence-dashboard/Sparkline";
-import { navigateEconomySection } from "./economySection";
+import { formatPriceOre } from "./economyDashboardHelpers";
 import type { DailyCostPoint } from "./economyDashboardHelpers";
 import { formatEconomyKr } from "./economyDashboardHelpers";
+import { navigateEconomySection } from "./economySection";
+
+function formatKrPerKwh(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)} kr/kWh`;
+}
 
 export function EconomyCostOverviewChart({ series }: { series: DailyCostPoint[] }) {
   const [mode, setMode] = useState<"kr" | "kwh">("kr");
-  const width = 560;
+  const [hovered, setHovered] = useState<DailyCostPoint | null>(null);  const width = 560;
   const height = 220;
   const pad = { top: 16, right: 12, bottom: 28, left: 40 };
   const innerW = width - pad.left - pad.right;
@@ -35,12 +41,17 @@ export function EconomyCostOverviewChart({ series }: { series: DailyCostPoint[] 
         const importH = ((point.importedKwh - min) / range) * innerH;
         const exportH = ((point.exportedKwh - min) / range) * innerH;
         return (
-          <g key={point.date}>
+          <g
+            key={point.date}
+            onMouseEnter={() => setHovered(point)}
+            onMouseLeave={() => setHovered(null)}
+            tabIndex={0}
+            role="graphics-symbol"
+          >
             <rect x={x(i)} y={y(point.importedKwh)} width={barW / 2} height={importH} fill="#a78bfa" rx="2" />
             <rect x={x(i) + barW / 2} y={y(point.exportedKwh)} width={barW / 2} height={exportH} fill="#4ade80" rx="2" />
           </g>
-        );
-      }
+        );      }
       const stackTop = point.purchasedSek + point.gridFeeSek + point.taxSek;
       const purchasedH = (point.purchasedSek / range) * innerH;
       const gridH = (point.gridFeeSek / range) * innerH;
@@ -49,9 +60,17 @@ export function EconomyCostOverviewChart({ series }: { series: DailyCostPoint[] 
       const baseY = y(0);
       let cursor = baseY;
       return (
-        <g key={point.date}>
-          <rect x={x(i)} y={cursor - purchasedH} width={barW} height={purchasedH} fill="#a78bfa" />
-          {(() => {
+        <g
+          key={point.date}
+          onMouseEnter={() => setHovered(point)}
+          onMouseLeave={() => setHovered(null)}
+          onFocus={() => setHovered(point)}
+          onBlur={() => setHovered(null)}
+          tabIndex={0}
+          role="graphics-symbol"
+          aria-label={`${point.dayLabel}: nettokostnad ${formatEconomyKr(point.netSek)}`}
+        >
+          <rect x={x(i)} y={cursor - purchasedH} width={barW} height={purchasedH} fill="#a78bfa" />          {(() => {
             cursor -= purchasedH;
             return null;
           })()}
@@ -104,25 +123,37 @@ export function EconomyCostOverviewChart({ series }: { series: DailyCostPoint[] 
       {series.length === 0 ? (
         <p className="edash-muted">Ingen kostnadsdata för vald period.</p>
       ) : (
-        <svg viewBox={`0 0 ${width} ${height}`} className="edash-cost-chart" aria-label="Kostnadsöversikt">
-          {chart?.bars}
-          {chart?.linePoints ? (
-            <polyline points={chart.linePoints} fill="none" stroke="#fb923c" strokeWidth="2.5" />
+        <>
+          {hovered && mode === "kr" ? (
+            <div className="edash-chart-tooltip" data-testid="economy-chart-tooltip">
+              <strong>{hovered.dayLabel}</strong>
+              <p>Köpt el: {hovered.importedKwh.toFixed(1)} kWh · {formatEconomyKr(hovered.purchasedSek)}</p>
+              <p>Nätavgift: {formatEconomyKr(hovered.gridFeeSek)}</p>
+              <p>Skatt: {formatEconomyKr(hovered.taxSek)}</p>
+              <p>Såld el: −{formatEconomyKr(Math.abs(hovered.soldSek))}</p>
+              <p>Nettokostnad: {formatEconomyKr(hovered.netSek)}</p>
+              <p>Snittpris: {formatKrPerKwh(hovered.effectivePriceKrKwh)}</p>
+            </div>
           ) : null}
-          {series.map((point, i) => (
-            <text
-              key={`lbl-${point.date}`}
-              x={pad.left + i * (innerW / series.length) + innerW / series.length / 2}
-              y={height - 6}
-              textAnchor="middle"
-              className="edash-chart-axis-label"
-            >
-              {point.label}
-            </text>
-          ))}
-        </svg>
-      )}
-    </article>
+          <svg viewBox={`0 0 ${width} ${height}`} className="edash-cost-chart" aria-label="Kostnadsöversikt">
+            {chart?.bars}
+            {chart?.linePoints ? (
+              <polyline points={chart.linePoints} fill="none" stroke="#fb923c" strokeWidth="2.5" />
+            ) : null}
+            {series.map((point, i) => (
+              <text
+                key={`lbl-${point.date}`}
+                x={pad.left + i * (innerW / series.length) + innerW / series.length / 2}
+                y={height - 6}
+                textAnchor="middle"
+                className="edash-chart-axis-label"
+              >
+                {point.label}
+              </text>
+            ))}
+          </svg>
+        </>
+      )}    </article>
   );
 }
 
@@ -194,25 +225,25 @@ export function EconomyPricePanel({
   expensiveAt,
 }: {
   siteSlug: string;
-  spotOre: number;
-  purchaseOre: number;
-  exportOre: number;
-  cheapestOre: number;
+  spotOre: number | null;
+  purchaseOre: number | null;
+  exportOre: number | null;
+  cheapestOre: number | null;
   cheapestAt: string | null;
-  expensiveOre: number;
+  expensiveOre: number | null;
   expensiveAt: string | null;
 }) {
   return (
     <article className="edash-panel edash-panel-prices" data-testid="economy-price-panel">
       <h3>ELPRIS ANALYS</h3>
       <dl className="edash-price-list">
-        <div><dt>Spotpris</dt><dd>{spotOre} öre</dd></div>
-        <div><dt>Köpt pris</dt><dd>{purchaseOre} öre</dd></div>
-        <div><dt>Sålt pris</dt><dd>{exportOre} öre</dd></div>
+        <div><dt>Spotpris</dt><dd>{formatPriceOre(spotOre)}</dd></div>
+        <div><dt>Köpt pris</dt><dd>{formatPriceOre(purchaseOre)}</dd></div>
+        <div><dt>Sålt pris</dt><dd>{formatPriceOre(exportOre)}</dd></div>
       </dl>
       <div className="edash-price-extremes">
-        <p><span>Billigaste timme</span><strong>{cheapestOre} öre</strong><em>{cheapestAt ?? "—"}</em></p>
-        <p><span>Dyraste timme</span><strong>{expensiveOre} öre</strong><em>{expensiveAt ?? "—"}</em></p>
+        <p><span>Billigaste timme</span><strong>{formatPriceOre(cheapestOre)}</strong><em>{cheapestAt ?? "—"}</em></p>
+        <p><span>Dyraste timme</span><strong>{formatPriceOre(expensiveOre)}</strong><em>{expensiveAt ?? "—"}</em></p>
       </div>
       <button
         type="button"

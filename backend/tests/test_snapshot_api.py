@@ -50,3 +50,5 @@ async def test_performance_metrics_endpoint(app) -> None:
     body = res.json()
     assert "request_count" in body
     assert "cache" in body
+    assert "site_snapshots" in body
+    assert isinstance(body["site_snapshots"], list)

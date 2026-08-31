@@ -16,6 +16,7 @@ from energy_core.energy.builder import build_energy_state
 from energy_core.energy.state import EnergyState
 from energy_core.energy_balance.correlation import correlate_telemetry
 from energy_core.energy_balance.engine import EnergyBalanceEngine
+from energy_core.secrets import CredentialCipher
 from energy_core.sungrow.heartbeat_provider import map_heartbeat_to_sungrow
 from energy_core.sungrow.types import SungrowTelemetrySnapshot
 from energy_core.virtual_evse.device_profile import VirtualEvseDeviceProfile
@@ -122,7 +123,7 @@ class EnergyBalanceCoordinator:
         try:
             adapter = ChargeAmpsMeterAdapter.build(
                 charger.chargeamp_charger_id,
-                api_key=charger.chargeamps_api_key,
+                api_key=CredentialCipher().decrypt(charger.chargeamps_api_key),
                 phases=charger.phases,
                 nominal_voltage_v=charger.nominal_voltage_v,
             )

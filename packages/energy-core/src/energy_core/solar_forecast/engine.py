@@ -85,7 +85,9 @@ class SolarForecastEngine:
                 corrected_w = baseline_w
                 factor = 1.0
             else:
-                corrected_w, factor = self._correction.apply(baseline_w, profile, wp, wp.timestamp)
+                corrected_w, factor = self._correction.apply(
+                    baseline_w, profile, wp, wp.timestamp, site.timezone
+                )
                 corrected_w *= v2_factor
                 factor *= v2_factor
             if site.inverter_max_power_kw:

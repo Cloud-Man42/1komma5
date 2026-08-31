@@ -9,8 +9,10 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from energy_core.config import Settings
+from energy_core.energy.integration import integrate_site_energy
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.repositories import EnergyReadingRepository, MarketPriceRepository
+from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
 from energy_core.db.snapshot_repo import SiteLiveSnapshotRepository
 from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
@@ -90,8 +92,6 @@ class SiteSnapshotBuilder:
         start_utc = start_local.astimezone(UTC)
         now_utc = now_local.astimezone(UTC)
 
-        from itertools import pairwise
-
         from energy_core.db.models import EnergyReadingModel
         from sqlalchemy import select
 
@@ -111,22 +111,11 @@ class SiteSnapshotBuilder:
             .order_by(EnergyReadingModel.recorded_at)
         )
         readings = (await session.execute(stmt)).all()
-        produced = consumed = imported = exported = 0.0
-        for previous, current in pairwise(readings):
-            started_at = previous.recorded_at
-            ended_at = current.recorded_at
-            if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None:
-                ended_at = ended_at.replace(tzinfo=UTC)
-            seconds = (ended_at - started_at).total_seconds()
-            if seconds <= 0 or seconds > 300:
-                continue
-            hours = seconds / 3600.0
-            produced += max(0.0, float(previous.solar_production_w or 0.0)) * hours / 1000.0
-            consumed += max(0.0, float(previous.consumption_w or 0.0)) * hours / 1000.0
-            imported += max(0.0, float(previous.grid_import_w or 0.0)) * hours / 1000.0
-            exported += max(0.0, float(previous.grid_export_w or 0.0)) * hours / 1000.0
+        totals = integrate_site_energy(readings)
+        produced = totals.solar_kwh
+        consumed = totals.consumption_kwh
+        imported = totals.import_kwh
+        exported = totals.export_kwh
 
         stats = await reading_repo.list_financial_stats(
             site_id=site.id,
@@ -136,6 +125,7 @@ class SiteSnapshotBuilder:
             export_compensation_sek_kwh=site.export_compensation_sek_kwh,
             from_time=start_utc,
             to_time=now_utc + timedelta(seconds=1),
+            sell_config=sell_price_config_from_site(site),
         )
         today_key = now_local.strftime("%Y-%m-%d")
         stat = next((row for row in stats if row.period_start == today_key), None)
@@ -186,7 +176,7 @@ class SiteSnapshotBuilder:
             current = prices[-1] if prices else None
         if current is None:
             return {}
-        all_in = current.all_in_price_sek_kwh or current.spot_price_sek_kwh
+        all_in = current.all_in_price_eur_kwh or current.spot_price_eur_kwh
         tier = "normal"
         return {
             "current_eur_kwh": round(all_in, 4),

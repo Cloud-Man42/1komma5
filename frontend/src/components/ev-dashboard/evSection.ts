@@ -1,3 +1,5 @@
+import { createSectionNavigation } from "@/lib/hashSectionNavigation";
+
 export type EvSectionId =
   | "overview"
   | "charging"
@@ -8,63 +10,54 @@ export type EvSectionId =
   | "access"
   | "diagnostics";
 
-export const EV_SECTION_HASH: Record<EvSectionId, string> = {
-  overview: "",
-  charging: "laddning",
-  schedules: "scheman",
-  history: "historik",
-  statistics: "statistik",
-  settings: "installningar",
-  access: "atkomst",
-  diagnostics: "diagnostik",
-};
+const evNav = createSectionNavigation<EvSectionId>({
+  defaultSection: "overview",
+  pathname: (slug) => `/sites/${slug}/ev`,
+  sectionHash: {
+    overview: "",
+    charging: "laddning",
+    schedules: "scheman",
+    history: "historik",
+    statistics: "statistik",
+    settings: "installningar",
+    access: "atkomst",
+    diagnostics: "diagnostik",
+  },
+  sectionLabels: {
+    overview: "Översikt",
+    charging: "Laddning",
+    schedules: "Scheman",
+    history: "Historik",
+    statistics: "Statistik",
+    settings: "Inställningar",
+    access: "Åtkomst & QR",
+    diagnostics: "Diagnostik",
+  },
+  sidebarOrder: [
+    "overview",
+    "charging",
+    "schedules",
+    "history",
+    "statistics",
+    "settings",
+    "access",
+    "diagnostics",
+  ],
+  isSectionActive(pathname, slug, section, hash, parseSection) {
+    if (pathname !== `/sites/${slug}/ev`) {
+      return section === "settings" && pathname.startsWith("/config");
+    }
+    return parseSection(hash) === section;
+  },
+});
 
-export const EV_SECTION_LABELS: Record<EvSectionId, string> = {
-  overview: "Översikt",
-  charging: "Laddning",
-  schedules: "Scheman",
-  history: "Historik",
-  statistics: "Statistik",
-  settings: "Inställningar",
-  access: "Åtkomst & QR",
-  diagnostics: "Diagnostik",
-};
-
-export function parseEvSection(hash: string): EvSectionId {
-  const normalized = hash.replace(/^#/, "").toLowerCase();
-  const entry = Object.entries(EV_SECTION_HASH).find(([, h]) => h === normalized);
-  if (entry) return entry[0] as EvSectionId;
-  return "overview";
-}
-
-export function evSectionHref(slug: string, section: EvSectionId): string {
-  const base = `/sites/${slug}/ev`;
-  const hash = EV_SECTION_HASH[section];
-  return hash ? `${base}#${hash}` : base;
-}
-
-export function isEvSectionActive(
-  pathname: string,
-  slug: string,
-  section: EvSectionId,
-  hash: string,
-): boolean {
-  if (pathname !== `/sites/${slug}/ev`) {
-    return section === "settings" && pathname.startsWith("/config");
-  }
-  return parseEvSection(hash) === section;
-}
-
-export function readEvSectionFromLocation(): EvSectionId {
-  if (typeof window === "undefined") return "overview";
-  const idx = window.location.href.indexOf("#");
-  const hash = idx >= 0 ? window.location.href.slice(idx) : "";
-  return parseEvSection(hash);
-}
-
-export function navigateEvSection(slug: string, section: EvSectionId): void {
-  if (typeof window === "undefined") return;
-  const href = evSectionHref(slug, section);
-  window.history.pushState(null, "", href);
-  window.dispatchEvent(new HashChangeEvent("hashchange"));
-}
+export const EV_SECTION_HASH = evNav.sectionHash;
+export const EV_SECTION_LABELS = evNav.sectionLabels;
+export const parseEvSection = evNav.parseSection;
+export const evSectionHref = evNav.sectionHref;
+export const isEvSectionActive = evNav.isSectionActive;
+export const readEvSectionFromLocation = evNav.readSectionFromLocation;
+export const navigateEvSection = evNav.navigateSection;
+export const EV_SIDEBAR_SUBNAV = evNav.sidebarSubnav;
+export const isEvSidebarNavActive = evNav.isSidebarNavActive;
+export type EvSidebarNavItem = (typeof evNav.sidebarSubnav)[number];

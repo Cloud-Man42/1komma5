@@ -56,7 +56,11 @@ from energy_core.solar_forecast.calibration import metrics_insufficient
 
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 
-from energy_core.solar_forecast.historical import count_production_days
+from energy_core.solar_forecast.rollup_queries import (
+    actual_solar_kwh_today,
+    count_production_days_observed,
+    load_consumption_profile_readings,
+)
 
 from energy_core.solar_forecast.types import MODEL_VERSION, ModelState, confidence_label_from_score
 
@@ -99,27 +103,13 @@ async def _ensure_solar_observations_evaluated(session: AsyncSession, site, sett
 
 
 async def _production_days_observed(session: AsyncSession, site, settings, *, now: datetime) -> int:
-
-    window_days = settings.solar_forecast_rolling_window_days
-
-    since = now - timedelta(days=window_days + 2)
-
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-
-    readings = await reading_repo.list_readings(site.id, from_time=since, to_time=now, limit=100000)
-
-    raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
-
-    return count_production_days(
-
-        raw,
-
+    return await count_production_days_observed(
+        reading_repo,
+        site.id,
         timezone=site.timezone,
-
-        window_days=window_days,
-
+        window_days=settings.solar_forecast_rolling_window_days,
         now=now,
-
     )
 
 
@@ -182,9 +172,41 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 
     forecast_repo = SolarForecastRepository(session)
 
+    now = datetime.now(UTC)
+
+    stale_after = timedelta(minutes=settings.solar_forecast_refresh_minutes)
+
     forecast = await forecast_repo.get_latest(site.id)
 
-    if forecast is not None:
+    def _is_stale(f) -> bool:
+        if f is None:
+            return True
+        generated = f.generated_at
+        if generated.tzinfo is None:
+            generated = generated.replace(tzinfo=UTC)
+        return now - generated > stale_after
+
+
+
+    if record.solar_intelligence_enabled:
+
+        if _is_stale(forecast):
+
+            from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
+
+            intel = SolarIntelligenceCoordinator(settings)
+
+            if await intel.refresh_site(session, site, now=now):
+
+                await session.flush()
+
+                forecast = await forecast_repo.get_latest(site.id)
+
+        if forecast is not None:
+
+            return forecast
+
+    elif forecast is not None:
 
         return forecast
 
@@ -221,22 +243,16 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 async def _forecast_response(session, site, forecast, settings) -> SolarForecastResponse:
 
     from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics, compute_tomorrow_kwh
-    from energy_core.solar_forecast.historical import actual_solar_kwh_today_from_readings
 
     now = datetime.now(UTC)
     day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone, now=now)
     forecast_so_far_kwh = day_metrics.forecast_so_far_kwh
     expected_tomorrow_kwh = compute_tomorrow_kwh(forecast, timezone=site.timezone, now=now)
 
-    from zoneinfo import ZoneInfo
-    from datetime import time
-
-    tz = ZoneInfo(site.timezone)
-    day_start = datetime.combine(now.astimezone(tz).date(), time.min, tzinfo=tz).astimezone(UTC)
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-    readings = await reading_repo.list_readings(site.id, from_time=day_start, to_time=now, limit=50000)
-    actual_today_kwh = actual_solar_kwh_today_from_readings(
-        [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings],
+    actual_today_kwh = await actual_solar_kwh_today(
+        reading_repo,
+        site.id,
         timezone=site.timezone,
         now=now,
     )
@@ -828,12 +844,12 @@ async def get_solar_energy_budget(
 
 
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
-
-    since = datetime.now(UTC) - timedelta(days=14)
-
-    readings = await reading_repo.list_readings(site.id, from_time=since, limit=50000)
-
-    raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
+    raw = await load_consumption_profile_readings(
+        reading_repo,
+        site.id,
+        days=14,
+        now=datetime.now(UTC),
+    )
 
     consumption = ConsumptionForecastProvider().forecast_remaining_today(
 

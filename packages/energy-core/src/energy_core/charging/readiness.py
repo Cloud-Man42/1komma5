@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
 from energy_core.db.models import EvChargerModel, SiteModel
+from energy_core.secrets import CredentialCipher
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +31,9 @@ class ChargingReadinessReport:
 def evaluate_charging_readiness(
     chargers: list[tuple[EvChargerModel, SiteModel]],
 ) -> ChargingReadinessReport:
-    charger_api_keys_configured = sum(1 for charger, _ in chargers if charger.chargeamps_api_key)
+    charger_api_keys_configured = sum(
+        1 for charger, _ in chargers if CredentialCipher.is_configured(charger.chargeamps_api_key)
+    )
     chargeamps = build_chargeamps_connection_info(
         charger_api_keys_configured=charger_api_keys_configured,
     )
@@ -63,7 +66,7 @@ def evaluate_charging_readiness(
                     message="Charge Amps laddbox-ID saknas.",
                 )
             )
-        if not charger.chargeamps_api_key and not os.getenv("CHARGEAMPS_API_KEY", "").strip():
+        if not CredentialCipher.is_configured(charger.chargeamps_api_key) and not os.getenv("CHARGEAMPS_API_KEY", "").strip():
             provider = os.getenv("CHARGEAMPS_PROVIDER", "").strip().lower()
             has_web = bool(os.getenv("CHARGEAMPS_EMAIL", "").strip()) and bool(
                 os.getenv("CHARGEAMPS_PASSWORD", "").strip()

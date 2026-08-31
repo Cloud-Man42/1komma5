@@ -71,3 +71,38 @@ def _normalize_key(raw: str) -> bytes:
         return raw.encode("ascii")
     except UnicodeEncodeError as exc:
         raise SecretBoxError("EMIC secret key must be ASCII Fernet key material") from exc
+
+
+_FERNET_PREFIX = "gAAAA"
+
+
+class CredentialCipher:
+    """Encrypt integration credentials at rest with legacy plaintext fallback."""
+
+    def __init__(self, secret_box: SecretBox | None = None) -> None:
+        self._box = secret_box or SecretBox.from_settings()
+
+    def encrypt(self, value: str) -> str:
+        if value == "":
+            return ""
+        if value.startswith(_FERNET_PREFIX):
+            try:
+                self._box.decrypt(value)
+                return value
+            except SecretBoxError:
+                pass
+        return self._box.encrypt(value)
+
+    def decrypt(self, stored: str) -> str:
+        if stored == "":
+            return ""
+        if not stored.startswith(_FERNET_PREFIX):
+            return stored
+        try:
+            return self._box.decrypt(stored)
+        except SecretBoxError:
+            return stored
+
+    @staticmethod
+    def is_configured(stored: str | None) -> bool:
+        return bool(stored and stored.strip())

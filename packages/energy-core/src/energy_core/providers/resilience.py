@@ -59,6 +59,7 @@ async def resilient_call(
     key: str,
     call: Callable[[], Any],
     max_age_seconds: float = 600.0,
+    should_cache: Callable[[Any], bool] | None = None,
 ) -> Any:
     if not breaker.allow():
         cached = lkg.get(key, max_age_seconds=max_age_seconds)
@@ -76,5 +77,6 @@ async def resilient_call(
         raise
 
     breaker.record_success()
-    lkg.set(key, result)
+    if should_cache is None or should_cache(result):
+        lkg.set(key, result)
     return result

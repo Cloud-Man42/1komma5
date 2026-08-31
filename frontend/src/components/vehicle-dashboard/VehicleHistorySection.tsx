@@ -7,6 +7,11 @@ import {
   sessionEnergyKwh,
 } from "./vehicleDashboardHelpers";
 
+function formatConfidence(value: string | null | undefined): string {
+  if (!value) return "—";
+  return value.replace("_", " ");
+}
+
 export function VehicleHistorySection({ sessions }: { sessions: VehicleChargeSession[] }) {
   if (sessions.length === 0) {
     return (
@@ -21,32 +26,48 @@ export function VehicleHistorySection({ sessions }: { sessions: VehicleChargeSes
     <section className="vdash-section" data-testid="vehicle-section-history">
       <h2 className="vdash-section-title">Laddhistorik</h2>
       <p className="vdash-section-sub">{sessions.length} sessioner</p>
-      <ul className="vdash-history-list">
-        {sessions.map((session) => (
-          <li key={session.id} className="vdash-history-item">
-            <div className="vdash-history-head">
-              <strong>{session.status === "ACTIVE" ? "Pågår" : "Avslutad"}</strong>
-              <span>{formatIsoTime(session.charging_started_at ?? session.connected_at)}</span>
-            </div>
-            <dl className="vdash-history-stats">
-              <div><dt>Energi</dt><dd>{sessionEnergyKwh(session).toFixed(1)} kWh</dd></div>
-              <div>
-                <dt>Varaktighet</dt>
-                <dd>
-                  {formatSessionDuration(
-                    session.charging_started_at ?? session.connected_at,
-                    session.charging_stopped_at ?? session.disconnected_at,
-                  )}
-                </dd>
-              </div>
-              <div><dt>SoC</dt><dd>{formatPercent(session.start_soc)} → {formatPercent(session.end_soc)}</dd></div>
-              <div><dt>Förnybar</dt><dd>{session.renewable_share_pct != null ? `${Math.round(session.renewable_share_pct)}%` : "—"}</dd></div>
-              <div><dt>Kostnad</dt><dd>{formatSek(session.actual_cost_sek)}</dd></div>
-              <div><dt>Besparing</dt><dd>{formatSek(session.savings_sek)}</dd></div>
-            </dl>
-          </li>
-        ))}
-      </ul>
+      <div className="vdash-table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Plats</th>
+              <th>Operatör</th>
+              <th>Typ</th>
+              <th>Start</th>
+              <th>Slut</th>
+              <th>SoC</th>
+              <th>Energi</th>
+              <th>Kostnad</th>
+              <th>Effekt</th>
+              <th>Confidence</th>
+              <th>Källa</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((session) => {
+              const energy = sessionEnergyKwh(session);
+              const estimated = session.energy_quality === "ESTIMATED" || session.vehicle_data_quality === "STALE";
+              return (
+                <tr key={session.id}>
+                  <td>{formatIsoTime(session.connected_at)}</td>
+                  <td>{session.location_name ?? (session.home_charging ? "Hemma" : "—")}</td>
+                  <td>{session.charger_operator ?? "—"}</td>
+                  <td>{session.charging_type ?? "—"}</td>
+                  <td>{formatIsoTime(session.charging_started_at ?? session.connected_at)}</td>
+                  <td>{formatIsoTime(session.charging_stopped_at ?? session.disconnected_at)}</td>
+                  <td>{formatPercent(session.start_soc)} → {formatPercent(session.end_soc)}</td>
+                  <td>{energy.toFixed(1)} kWh{estimated ? " (est.)" : ""}</td>
+                  <td>{formatSek(session.charging_cost_sek ?? session.actual_cost_sek)}</td>
+                  <td>{session.charging_power_avg_kw != null ? `${session.charging_power_avg_kw.toFixed(1)} kW` : "—"}</td>
+                  <td>{formatConfidence(session.detection_confidence)}</td>
+                  <td>{session.energy_source ?? session.energy_quality ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

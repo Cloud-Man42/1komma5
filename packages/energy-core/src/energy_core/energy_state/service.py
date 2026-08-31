@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from energy_core.charging.engine import bridge_status_from_charger
+from energy_core.energy.integration import integrate_site_energy
 from energy_core.charging.policy import normalized_mode
 from energy_core.charging.state_machine import SmartChargingState as EngineSmartChargingState
 from energy_core.config import Settings
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel, MarketPriceModel, SiteModel
 from energy_core.db.repositories import EnergyReadingRepository
+from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.energy_state.decision_text import EnergyDecisionTextService
 from energy_core.energy_state.models import (
     BatteryState,
@@ -26,7 +27,7 @@ from energy_core.energy_state.models import (
     battery_state_text_sv,
     ev_state_text_sv,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 _POWER_DEADBAND_W = 25.0
@@ -165,9 +166,16 @@ class EnergyStateService:
         self._settings = settings
         self._reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
 
-    async def build_snapshot(self, site: SiteModel) -> EnergySiteSnapshot:
-        latest = await self._reading_repo.get_latest_for_site(site.id)
-        latest_row = await self._get_latest_row(site.id)
+    async def build_snapshot(
+        self,
+        site: SiteModel,
+        *,
+        prefetched_latest: EnergyReadingModel | None = None,
+    ) -> EnergySiteSnapshot:
+        latest_row = prefetched_latest
+        if latest_row is None:
+            latest_row = await self._get_latest_row(site.id)
+        latest = self._reading_repo._to_record(latest_row, site.slug) if latest_row is not None else None
         now = datetime.now(UTC)
 
         updated_at: datetime | None = None
@@ -265,6 +273,38 @@ class EnergyStateService:
         )
         return await self._session.scalar(stmt)
 
+    async def _get_latest_rows(self, site_ids: list[int]) -> dict[int, EnergyReadingModel]:
+        if not site_ids:
+            return {}
+        latest_subq = (
+            select(
+                EnergyReadingModel.site_id,
+                func.max(EnergyReadingModel.recorded_at).label("max_recorded_at"),
+            )
+            .where(EnergyReadingModel.site_id.in_(site_ids))
+            .group_by(EnergyReadingModel.site_id)
+            .subquery()
+        )
+        stmt = (
+            select(EnergyReadingModel)
+            .join(
+                latest_subq,
+                (EnergyReadingModel.site_id == latest_subq.c.site_id)
+                & (EnergyReadingModel.recorded_at == latest_subq.c.max_recorded_at),
+            )
+        )
+        rows = (await self._session.scalars(stmt)).all()
+        return {row.site_id: row for row in rows}
+
+    async def build_snapshots_batch(self, sites: list[SiteModel]) -> list[EnergySiteSnapshot]:
+        if not sites:
+            return []
+        latest_rows = await self._get_latest_rows([site.id for site in sites])
+        return [
+            await self.build_snapshot(site, prefetched_latest=latest_rows.get(site.id))
+            for site in sites
+        ]
+
     async def _compute_today_energy(self, site: SiteModel) -> _TodayEnergy:
         zone = ZoneInfo(site.timezone)
         now_local = datetime.now(zone)
@@ -294,38 +334,15 @@ class EnergyStateService:
         if len(readings) < 2:
             return _TodayEnergy(None, None, None, None, None, None)
 
-        produced = consumed = imported = exported = charged = discharged = 0.0
-        for previous, current in pairwise(readings):
-            started_at = previous.recorded_at
-            ended_at = current.recorded_at
-            if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None:
-                ended_at = ended_at.replace(tzinfo=UTC)
-            seconds = (ended_at - started_at).total_seconds()
-            if seconds <= 0 or seconds > 300:
-                continue
-            hours = seconds / 3600.0
-            produced += max(0.0, float(previous.solar_production_w or 0.0)) * hours / 1000.0
-            consumed += max(0.0, float(previous.consumption_w or 0.0)) * hours / 1000.0
-            imported += max(0.0, float(previous.grid_import_w or 0.0)) * hours / 1000.0
-            exported += max(0.0, float(previous.grid_export_w or 0.0)) * hours / 1000.0
-            charge_w = previous.battery_charge_w
-            discharge_w = previous.battery_discharge_w
-            if charge_w is None and previous.battery_power_w is not None:
-                charge_w = max(0.0, float(previous.battery_power_w))
-            if discharge_w is None and previous.battery_power_w is not None:
-                discharge_w = max(0.0, -float(previous.battery_power_w))
-            charged += max(0.0, float(charge_w or 0.0)) * hours / 1000.0
-            discharged += max(0.0, float(discharge_w or 0.0)) * hours / 1000.0
+        totals = integrate_site_energy(readings, include_battery=True)
 
         return _TodayEnergy(
-            solar_kwh=round(produced, 1),
-            house_kwh=round(consumed, 1),
-            import_kwh=round(imported, 1),
-            export_kwh=round(exported, 1),
-            battery_charged_kwh=round(charged, 1),
-            battery_discharged_kwh=round(discharged, 1),
+            solar_kwh=round(totals.solar_kwh, 1),
+            house_kwh=round(totals.consumption_kwh, 1),
+            import_kwh=round(totals.import_kwh, 1),
+            export_kwh=round(totals.export_kwh, 1),
+            battery_charged_kwh=round(totals.battery_charged_kwh, 1),
+            battery_discharged_kwh=round(totals.battery_discharged_kwh, 1),
         )
 
     async def _compute_savings(self, site: SiteModel) -> _Savings:
@@ -345,6 +362,7 @@ class EnergyStateService:
             export_compensation_sek_kwh=site.export_compensation_sek_kwh,
             from_time=start_day_utc,
             to_time=now_utc + timedelta(seconds=1),
+            sell_config=sell_price_config_from_site(site),
         )
         month_stats = await self._reading_repo.list_financial_stats(
             site_id=site.id,
@@ -354,6 +372,7 @@ class EnergyStateService:
             export_compensation_sek_kwh=site.export_compensation_sek_kwh,
             from_time=start_month_utc,
             to_time=now_utc + timedelta(seconds=1),
+            sell_config=sell_price_config_from_site(site),
         )
 
         today_key = now_local.strftime("%Y-%m-%d")
@@ -389,7 +408,7 @@ class EnergyStateService:
         row = await self._session.scalar(stmt)
         if row is None:
             return None, None
-        return row.spot_price_sek_kwh, row.all_in_price_sek_kwh
+        return row.spot_price_eur_kwh, row.all_in_price_eur_kwh
 
     async def _compute_ev(self, site: SiteModel, latest_row: EnergyReadingModel | None):
         @dataclass(frozen=True, slots=True)

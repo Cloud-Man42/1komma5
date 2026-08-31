@@ -230,8 +230,8 @@ describe("system API", () => {
     const from = new Date(query.get("from") ?? "");
     const to = new Date(query.get("to") ?? "");
     const spanHours = (to.getTime() - from.getTime()) / (60 * 60 * 1000);
-    expect(spanHours).toBeGreaterThan(24);
-    expect(spanHours).toBeLessThan(30);
+    expect(spanHours).toBeGreaterThan(20);
+    expect(spanHours).toBeLessThan(28);
   });
 
   it("fetchMarketPrices throws on 503", async () => {

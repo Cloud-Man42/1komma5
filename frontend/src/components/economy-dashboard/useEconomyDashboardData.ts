@@ -11,6 +11,7 @@ import {
   type SiteDashboard,
   type YearForecastResponse,
 } from "@/lib/api";
+import { useOptionalSiteData } from "@/lib/SiteDataProvider";
 import {
   aggregateFinancialStats,
   buildDailyCostSeries,
@@ -19,38 +20,63 @@ import {
   buildExtendedEconomyInsights,
   buildEconomyMetrics,
   buildCostBreakdown,
+  buildExportRevenueBreakdown,
   buildPriceAnalysis,
   buildSavingsBreakdown,
+  computeEconomicBenefit,
+  computePaybackMetrics,
   DEFAULT_MONTHLY_BUDGET_SEK,
-  filterStatsForMonth,
   forecastMonthCost,
   resolveSiteInvestmentSek,
   type EconomyDisplayMetrics,
+  type PaybackMetrics,
 } from "./economyDashboardHelpers";
+import {
+  comparisonPeriodLabel,
+  filterStatsByDateRange,
+  filterStatsForPeriod,
+  resolveComparisonRange,
+  resolvePeriodRange,
+  type EconomyCompareMode,
+  type EconomyPeriodId,
+} from "./economyPeriods";
 
-export function useEconomyDashboardData(siteSlug: string) {
+export function useEconomyDashboardData(
+  siteSlug: string,
+  period: EconomyPeriodId = "this-month",
+  compareMode: EconomyCompareMode = "previous-period",
+) {
+  const shared = useOptionalSiteData();
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
-  const previousMonthDate = new Date(currentYear, currentMonth - 2, 1);
-  const previousYear = previousMonthDate.getFullYear();
-  const previousMonth = previousMonthDate.getMonth() + 1;
 
-  const [dashboard, setDashboard] = useState<SiteDashboard | null>(null);
+  const [dashboard, setDashboard] = useState<SiteDashboard | null>(shared?.dashboard ?? null);
   const [dailyStats, setDailyStats] = useState<FinancialStatsResponse | null>(null);
   const [forecast, setForecast] = useState<YearForecastResponse | null>(null);
   const [marketPrices, setMarketPrices] = useState<MarketPricesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (shared?.dashboard) {
+      setDashboard(shared.dashboard);
+    }
+  }, [shared?.dashboard]);
+
   const reload = useCallback(async () => {
     setLoading(true);
+    const dashboardPromise = shared?.dashboard
+      ? Promise.resolve(shared.dashboard)
+      : fetchSiteDashboard(siteSlug).catch(() => null);
+
     try {
-      const [dash, stats, yearForecast, prices] = await Promise.all([
-        fetchSiteDashboard(siteSlug).catch(() => null),
-        fetchFinancialStats(siteSlug, "day", currentYear),
+      const dash = await dashboardPromise;
+      const timezone = dash?.site.timezone ?? "Europe/Stockholm";
+      const [stats, yearForecast, prices] = await Promise.all([
+        fetchFinancialStats(siteSlug, "day"),
         fetchYearForecast(siteSlug, currentYear).catch(() => null),
-        fetchMarketPrices(siteSlug, 24 * 31).catch(() => null),
+        fetchMarketPrices(siteSlug, 24, timezone).catch(() => null),
       ]);
       setDashboard(dash);
       setDailyStats(stats);
@@ -62,63 +88,107 @@ export function useEconomyDashboardData(siteSlug: string) {
     } finally {
       setLoading(false);
     }
-  }, [currentYear, siteSlug]);
+  }, [currentYear, shared?.dashboard, siteSlug]);
 
   useEffect(() => {
     reload();
   }, [reload]);
 
-  const currentMonthStats = useMemo(
-    () => filterStatsForMonth(dailyStats?.stats ?? [], currentYear, currentMonth),
-    [currentMonth, currentYear, dailyStats],
+  const allStats = dailyStats?.stats ?? [];
+  const periodRange = useMemo(() => resolvePeriodRange(period, now), [period, now]);
+  const comparisonRange = useMemo(
+    () => resolveComparisonRange(period, compareMode, now),
+    [compareMode, period, now],
   );
-  const previousMonthStats = useMemo(
-    () => filterStatsForMonth(dailyStats?.stats ?? [], previousYear, previousMonth),
-    [dailyStats, previousMonth, previousYear],
+  const comparisonLabel = useMemo(
+    () => comparisonPeriodLabel(period, compareMode),
+    [compareMode, period],
   );
 
-  const currentTotals = useMemo(() => aggregateFinancialStats(currentMonthStats), [currentMonthStats]);
-  const previousTotals = useMemo(() => aggregateFinancialStats(previousMonthStats), [previousMonthStats]);
+  const periodStats = useMemo(
+    () => filterStatsForPeriod(allStats, period, now),
+    [allStats, period, now],
+  );
+  const comparisonStats = useMemo(() => {
+    if (!comparisonRange) return [];
+    return filterStatsByDateRange(allStats, comparisonRange.from, comparisonRange.to);
+  }, [allStats, comparisonRange]);
+
+  const currentTotals = useMemo(() => aggregateFinancialStats(periodStats), [periodStats]);
+  const previousTotals = useMemo(() => aggregateFinancialStats(comparisonStats), [comparisonStats]);
 
   const ytdStats = useMemo(
-    () => filterStatsForMonth(dailyStats?.stats ?? [], currentYear, 1).concat(currentMonthStats),
-    [currentMonthStats, currentYear, dailyStats],
+    () => filterStatsForPeriod(allStats, "ytd", now),
+    [allStats, now],
   );
-  const ytdTotals = useMemo(() => {
-    const allYtd = (dailyStats?.stats ?? []).filter((s) => s.period_start.startsWith(String(currentYear)));
-    return aggregateFinancialStats(allYtd);
-  }, [currentYear, dailyStats]);
+  const ytdTotals = useMemo(() => aggregateFinancialStats(ytdStats), [ytdStats]);
+  const lifetimeTotals = useMemo(() => aggregateFinancialStats(allStats), [allStats]);
+  const trailing12mStats = useMemo(
+    () => filterStatsForPeriod(allStats, "12m", now),
+    [allStats, now],
+  );
+  const trailing12mTotals = useMemo(
+    () => aggregateFinancialStats(trailing12mStats),
+    [trailing12mStats],
+  );
 
   const smartChargingSek = 0;
+  const investmentSek = resolveSiteInvestmentSek(siteSlug);
 
   const metrics: EconomyDisplayMetrics = useMemo(
     () =>
       buildEconomyMetrics(
         currentTotals,
         previousTotals,
-        ytdTotals.solarSavingsSek + ytdTotals.batterySavingsSek,
+        ytdTotals,
+        lifetimeTotals,
+        investmentSek,
         smartChargingSek,
       ),
-    [currentTotals, previousTotals, smartChargingSek, ytdTotals],
+    [currentTotals, investmentSek, lifetimeTotals, previousTotals, smartChargingSek, ytdTotals],
+  );
+
+  const payback: PaybackMetrics = useMemo(
+    () =>
+      computePaybackMetrics(
+        metrics.lifetimeEconomicBenefitSek,
+        computeEconomicBenefit(trailing12mTotals, smartChargingSek),
+        investmentSek,
+      ),
+    [investmentSek, metrics.lifetimeEconomicBenefitSek, smartChargingSek, trailing12mTotals],
   );
 
   const costBreakdown = useMemo(
     () => buildCostBreakdown(currentTotals.gridImportCostSek),
     [currentTotals.gridImportCostSek],
   );
-  const dailySeries = useMemo(() => buildDailyCostSeries(currentMonthStats), [currentMonthStats]);
+  const dailySeries = useMemo(() => buildDailyCostSeries(periodStats), [periodStats]);
   const savingsBreakdown = useMemo(
     () => buildSavingsBreakdown(currentTotals, smartChargingSek),
     [currentTotals, smartChargingSek],
   );
-  const goals = useMemo(() => buildEconomyGoals(currentTotals), [currentTotals]);
+  const exportBreakdown = useMemo(
+    () =>
+      buildExportRevenueBreakdown(
+        currentTotals,
+        periodStats,
+        now,
+        dailyStats?.sell_pricing_mode ?? "spot",
+        dailyStats?.sell_contract_start_date ?? null,
+      ),
+    [currentTotals, dailyStats?.sell_contract_start_date, dailyStats?.sell_pricing_mode, periodStats, now],
+  );
+  const goals = useMemo(
+    () => buildEconomyGoals(currentTotals, comparisonRange ? previousTotals : null, comparisonLabel),
+    [comparisonLabel, comparisonRange, currentTotals, previousTotals],
+  );
   const insights = useMemo(
-    () => buildEconomyInsights(currentTotals, currentMonthStats, smartChargingSek),
-    [currentMonthStats, currentTotals, smartChargingSek],
+    () => buildEconomyInsights(currentTotals, periodStats, smartChargingSek),
+    [currentTotals, periodStats, smartChargingSek],
   );
   const extendedInsights = useMemo(
-    () => buildExtendedEconomyInsights(currentTotals, currentMonthStats, smartChargingSek),
-    [currentMonthStats, currentTotals, smartChargingSek],
+    () => buildExtendedEconomyInsights(currentTotals, periodStats, smartChargingSek),
+    [currentTotals, periodStats, smartChargingSek],
   );
 
   const purchasePrice = dailyStats?.fallback_purchase_price_sek_kwh ?? 0.58;
@@ -126,14 +196,8 @@ export function useEconomyDashboardData(siteSlug: string) {
   const timezone = dailyStats?.timezone ?? dashboard?.site.timezone ?? "Europe/Stockholm";
 
   const priceAnalysis = useMemo(
-    () =>
-      buildPriceAnalysis(
-        marketPrices?.points ?? [],
-        purchasePrice,
-        exportPrice,
-        timezone,
-      ),
-    [exportPrice, marketPrices, purchasePrice, timezone],
+    () => buildPriceAnalysis(marketPrices, exportPrice, timezone),
+    [exportPrice, marketPrices, timezone],
   );
 
   const monthlyBudgetSek = DEFAULT_MONTHLY_BUDGET_SEK;
@@ -145,14 +209,11 @@ export function useEconomyDashboardData(siteSlug: string) {
   const forecastDelta = forecastCost - monthlyBudgetSek;
   const forecastDeltaPct = monthlyBudgetSek > 0 ? (forecastDelta / monthlyBudgetSek) * 100 : 0;
 
-  const investmentSek = resolveSiteInvestmentSek(siteSlug);
-  const expectedAnnualSaving =
-    (forecast?.total.solar_savings_sek ?? 0) +
-    (forecast?.total.battery_savings_sek ?? 0) +
-    (forecast?.total.export_revenue_sek ?? 0);
-  const paybackYears = expectedAnnualSaving > 0 ? investmentSek / expectedAnnualSaving : 0;
-
-  const averagePriceOre = Math.round(purchasePrice * 100);
+  const averagePriceOre = priceAnalysis.purchaseOre ?? Math.round(purchasePrice * 100);
+  const avgMarketPricedFraction =
+    periodStats.length > 0
+      ? periodStats.reduce((sum, stat) => sum + stat.market_priced_fraction, 0) / periodStats.length
+      : 0;
 
   return {
     loading,
@@ -160,19 +221,26 @@ export function useEconomyDashboardData(siteSlug: string) {
     reload,
     dashboard,
     dailyStats,
-    currentMonthStats,
-    previousMonthStats,
+    allStats,
+    periodStats,
+    comparisonStats,
+    periodRange,
+    comparisonLabel,
     currentTotals,
+    previousTotals,
     metrics,
+    payback,
     costBreakdown,
     dailySeries,
     savingsBreakdown,
+    exportBreakdown,
     goals,
     insights,
     extendedInsights,
     priceAnalysis,
     marketPrices,
     averagePriceOre,
+    avgMarketPricedFraction,
     timezone,
     currentYear,
     currentMonth,
@@ -182,8 +250,6 @@ export function useEconomyDashboardData(siteSlug: string) {
     forecastDelta,
     forecastDeltaPct,
     investmentSek,
-    expectedAnnualSaving,
-    paybackYears,
     ytdReturnPct: metrics.ytdReturnPct,
     refreshSeconds: 60,
   };

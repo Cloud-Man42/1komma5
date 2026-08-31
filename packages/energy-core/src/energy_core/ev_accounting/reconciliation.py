@@ -43,6 +43,23 @@ class SessionReconciliationService:
             )
 
         delta = measured_kwh - attributed_kwh
+
+        # A Charge Amps connector's consumption register resets when the car
+        # unplugs, so stop-minus-start can read 0 for a session whose per-minute
+        # meter deltas measured tens of kWh. Scaling to that zero used to wipe
+        # the whole attribution — energy and source split — while the interval
+        # costs survived, leaving sessions showing 0 kWh for 151 kr. The meter
+        # only wins when it does not contradict positive measured intervals.
+        if measured_kwh <= 0 and attributed_kwh > ATTRIBUTION_TOLERANCE_KWH:
+            return ReconciliationResult(
+                attribution=attribution,
+                measured_kwh=measured_kwh,
+                attributed_kwh=attributed_kwh,
+                delta_kwh=delta,
+                note="meter_register_reset",
+                energy_quality="ESTIMATED",
+            )
+
         if abs(delta) <= ATTRIBUTION_TOLERANCE_KWH:
             return ReconciliationResult(
                 attribution=attribution,

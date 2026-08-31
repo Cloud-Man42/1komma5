@@ -11,7 +11,8 @@ from energy_core.config import Settings
 from energy_core.db.models import Base
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.db.solar_forecast_repo import SolarSiteConfigRepository
-from energy_core.solar_forecast.coordinator import SolarForecastCoordinator, _diurnal
+from energy_core.solar_forecast.constants import diurnal_solar_factor
+from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.solar_forecast.types import WeatherForecast, WeatherForecastPoint
 
 
@@ -33,9 +34,9 @@ async def sqlite_session():
 
 
 def test_diurnal_is_zero_outside_daylight():
-    assert _diurnal(3) == 0.0
-    assert _diurnal(22) == 0.0
-    assert _diurnal(13) > 0.9
+    assert diurnal_solar_factor(3) == 0.0
+    assert diurnal_solar_factor(22) == 0.0
+    assert diurnal_solar_factor(13) > 0.9
 
 
 def test_fallback_weather_generates_points():

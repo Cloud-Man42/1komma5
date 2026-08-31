@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Skeleton } from "@/components/dashboard";
-import { startVehicleCharging, stopVehicleCharging } from "@/lib/api";
+import { startVehicleCharging, stopVehicleCharging, syncVehicles } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
 import { VehicleActionsPanel } from "./VehicleActionsPanel";
 import { VehicleBatteryHero } from "./VehicleBatteryHero";
@@ -83,6 +83,7 @@ export function VehicleOverview({ siteSlug }: { siteSlug: string }) {
   const handleSync = async () => {
     setSyncing(true);
     try {
+      await syncVehicles(siteSlug);
       await data.reload();
     } finally {
       setSyncing(false);

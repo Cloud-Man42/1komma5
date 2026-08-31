@@ -180,8 +180,8 @@ async def get_widget_summary(
     latest_updated = None
     any_stale = False
 
-    for site in sites:
-        snapshot = await service.get_snapshot(site)
+    snapshots = await service.get_snapshots(sites)
+    for site, snapshot in zip(sites, snapshots):
         status_payload = snapshot_to_widget_status(snapshot)
         statuses.append(status_payload)
         if snapshot.solar_power_kw is not None:

@@ -115,6 +115,37 @@ async def test_controller_reasserts_current_when_charger_drifted_from_saved_stat
 
 
 @pytest.mark.asyncio
+async def test_controller_starts_idle_charger_whose_limit_already_matches():
+    """The live stuck-session shape: limit already 16 A, but the charger is idle.
+
+    Nothing about the current needs changing, so only the missing start command
+    separates this from a healthy session. The limit matching the saved state
+    must not be read as "already applied".
+    """
+    adapter = AsyncMock()
+    adapter.get_status.return_value = ChargerStatus(
+        connected=True,
+        vehicle_connected=True,
+        charging=False,
+        current_limit_a=16.0,
+    )
+    controller = ChargingCommandController(
+        adapter,
+        anti_flapping=AntiFlappingState(
+            last_applied_current_a=16.0,
+            last_command_current_a=16.0,
+        ),
+        anti_config=AntiFlappingConfig(min_change_interval_seconds=3600, current_hysteresis_a=1),
+    )
+
+    result = await controller.apply(_decision(16.0))
+
+    assert result.applied is True
+    adapter.set_current.assert_awaited_once_with(16.0)
+    adapter.start_charging.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_controller_reports_offline_charger():
     adapter = AsyncMock()
     adapter.get_status.return_value = ChargerStatus(

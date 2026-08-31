@@ -38,10 +38,12 @@ class Settings(BaseSettings):
     heartbeat_api_key: str = Field(default="", alias="HEARTBEAT_API_KEY")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO", alias="LOG_LEVEL")
     solar_forecast_horizon_hours: int = Field(default=48, ge=12, le=72, alias="SOLAR_FORECAST_HORIZON_HOURS")
+    solar_forecast_extended_days: int = Field(default=7, ge=0, le=16, alias="SOLAR_FORECAST_EXTENDED_DAYS")
     solar_forecast_refresh_minutes: int = Field(default=30, ge=5, alias="SOLAR_FORECAST_REFRESH_MINUTES")
     solar_weather_cache_minutes: int = Field(default=45, ge=15, alias="SOLAR_WEATHER_CACHE_MINUTES")
     solar_weather_stale_minutes: int = Field(default=90, ge=30, alias="SOLAR_WEATHER_STALE_MINUTES")
     solar_forecast_retention_days: int = Field(default=14, ge=1, alias="SOLAR_FORECAST_RETENTION_DAYS")
+    eur_to_sek_rate: float = Field(default=11.0, gt=0.0, alias="EUR_TO_SEK_RATE")
     open_meteo_base_url: str = Field(
         default="https://api.open-meteo.com/v1/forecast",
         alias="OPEN_METEO_BASE_URL",
@@ -113,7 +115,6 @@ class Settings(BaseSettings):
 
     widget_stale_seconds: int = Field(default=120, ge=30, alias="WIDGET_STALE_SECONDS")
     widget_snapshot_cache_seconds: int = Field(default=15, ge=0, alias="WIDGET_SNAPSHOT_CACHE_SECONDS")
-    widget_savings_cache_seconds: int = Field(default=300, ge=0, alias="WIDGET_SAVINGS_CACHE_SECONDS")
     widget_rate_limit_per_minute: int = Field(default=60, ge=1, alias="WIDGET_RATE_LIMIT_PER_MINUTE")
     enable_timescaledb: bool = Field(default=False, alias="ENABLE_TIMESCALEDB")
 

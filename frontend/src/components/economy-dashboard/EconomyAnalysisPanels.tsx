@@ -1,6 +1,7 @@
 "use client";
 
 import type { CostBreakdownSlice, EconomyGoal, EconomyInsight, SavingsBreakdownItem } from "./economyDashboardHelpers";
+import type { PaybackMetrics } from "./economyDashboardHelpers";
 import { formatEconomyKr } from "./economyDashboardHelpers";
 import { navigateEconomySection } from "./economySection";
 
@@ -186,24 +187,53 @@ export function EconomyBudgetPanel({
 }
 
 export function EconomyInvestmentPanel({
-  investmentSek,
-  expectedAnnualSaving,
-  paybackYears,
+  payback,
   ytdReturnPct,
-  return12mPct,
+  ytdBenefitSek,
+  lifetimeBenefitSek,
 }: {
-  investmentSek: number;
-  expectedAnnualSaving: number;
-  paybackYears: number;
-  ytdReturnPct: number;
-  return12mPct: number;
+  payback: PaybackMetrics;
+  ytdReturnPct: number | null;
+  ytdBenefitSek: number;
+  lifetimeBenefitSek: number;
 }) {
   const rows = [
-    { label: "Total investering", value: formatEconomyKr(investmentSek) },
-    { label: "Förväntad årlig besparing", value: formatEconomyKr(expectedAnnualSaving) },
-    { label: "Återbetalningstid", value: `${paybackYears.toFixed(1)} år` },
-    { label: "Avkastning YTD", value: `${ytdReturnPct.toFixed(1)}%` },
-    { label: "Avkastning 12 mån", value: `${return12mPct.toFixed(1)}%` },
+    {
+      label: "Investerat",
+      value: payback.investmentSek != null ? formatEconomyKr(payback.investmentSek) : "Investering ej angiven",
+    },
+    {
+      label: "Återbetalat",
+      value: payback.investmentSek != null ? formatEconomyKr(payback.repaidSek) : formatEconomyKr(lifetimeBenefitSek),
+    },
+    {
+      label: "Kvar",
+      value:
+        payback.remainingSek != null ? formatEconomyKr(payback.remainingSek) : "—",
+    },
+    {
+      label: "Återbetalt",
+      value: payback.repaidPct != null ? `${Math.round(payback.repaidPct)} %` : "—",
+    },
+    {
+      label: "Beräknad återbetalningstid",
+      value:
+        payback.paybackYears != null
+          ? `${payback.paybackYears.toFixed(1)} år${payback.isForecast ? " (Prognos)" : ""}`
+          : "Beräknas när mer historik finns",
+    },
+    {
+      label: "Avkastning YTD",
+      value: ytdReturnPct != null ? `${ytdReturnPct.toFixed(1)} %` : "Investering ej angiven",
+    },
+    {
+      label: "Besparing YTD",
+      value: formatEconomyKr(ytdBenefitSek),
+    },
+    {
+      label: "Besparing sedan installation",
+      value: formatEconomyKr(lifetimeBenefitSek),
+    },
   ];
   return (
     <article className="edash-panel edash-panel-investment" data-testid="economy-investment">

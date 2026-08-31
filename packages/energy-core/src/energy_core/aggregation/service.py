@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from itertools import pairwise
 from zoneinfo import ZoneInfo
 
 from energy_core.db.models import EnergyDailyModel, EnergyHourlyModel, EnergyReadingModel
+from energy_core.energy.integration import integrate_site_energy, iter_energy_segments
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -39,25 +39,14 @@ class EnergyAggregationService:
 
         zone = ZoneInfo(site.timezone)
         hourly: dict[datetime, list[tuple[float, float, float, float]]] = {}
-        for previous, current in pairwise(readings):
-            started_at = previous.recorded_at
-            ended_at = current.recorded_at
-            if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None:
-                ended_at = ended_at.replace(tzinfo=UTC)
-            seconds = (ended_at - started_at).total_seconds()
-            if seconds <= 0 or seconds > 300:
-                continue
-            hours = seconds / 3600.0
-            hour_key = started_at.astimezone(zone).replace(minute=0, second=0, microsecond=0).astimezone(UTC)
+        for segment in iter_energy_segments(readings):
+            hour_key = (
+                segment.started_at.astimezone(zone)
+                .replace(minute=0, second=0, microsecond=0)
+                .astimezone(UTC)
+            )
             hourly.setdefault(hour_key, []).append(
-                (
-                    max(0.0, float(previous.solar_production_w or 0.0)) * hours / 1000.0,
-                    max(0.0, float(previous.consumption_w or 0.0)) * hours / 1000.0,
-                    max(0.0, float(previous.grid_import_w or 0.0)) * hours / 1000.0,
-                    max(0.0, float(previous.grid_export_w or 0.0)) * hours / 1000.0,
-                )
+                (segment.solar_kwh, segment.consumption_kwh, segment.import_kwh, segment.export_kwh)
             )
 
         insert = sqlite_insert if self._is_sqlite else pg_insert
@@ -103,22 +92,11 @@ class EnergyAggregationService:
         readings = (await session.scalars(stmt)).all()
         if len(readings) < 2:
             return
-        solar = consumption = import_kwh = export_kwh = 0.0
-        for previous, current in pairwise(readings):
-            started_at = previous.recorded_at
-            ended_at = current.recorded_at
-            if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None:
-                ended_at = ended_at.replace(tzinfo=UTC)
-            seconds = (ended_at - started_at).total_seconds()
-            if seconds <= 0 or seconds > 300:
-                continue
-            hours = seconds / 3600.0
-            solar += max(0.0, float(previous.solar_production_w or 0.0)) * hours / 1000.0
-            consumption += max(0.0, float(previous.consumption_w or 0.0)) * hours / 1000.0
-            import_kwh += max(0.0, float(previous.grid_import_w or 0.0)) * hours / 1000.0
-            export_kwh += max(0.0, float(previous.grid_export_w or 0.0)) * hours / 1000.0
+        totals = integrate_site_energy(readings)
+        solar = totals.solar_kwh
+        consumption = totals.consumption_kwh
+        import_kwh = totals.import_kwh
+        export_kwh = totals.export_kwh
 
         insert = sqlite_insert if self._is_sqlite else pg_insert
         stmt = insert(EnergyDailyModel).values(

@@ -103,6 +103,116 @@ async def test_resume_authorization_reuses_login_client():
     assert seen_cookies
 
 
+def _mock_httpx(monkeypatch, handler):
+    """Route every AsyncClient the login flow builds through `handler`."""
+    requests: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return handler(request)
+
+    real_client = httpx.AsyncClient
+
+    def factory(**kwargs):
+        kwargs.pop("timeout", None)
+        return real_client(transport=httpx.MockTransport(record), **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    return requests
+
+
+def _token_response(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={"access_token": "fresh-access", "refresh_token": "fresh-refresh", "expires_in": 3600},
+        request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_returns_a_new_access_token(monkeypatch):
+    flow = MercedesLoginFlow(region="Europe", device_guid="device-123")
+    requests = _mock_httpx(monkeypatch, _token_response)
+
+    token_info = await flow.refresh_access_token("old-refresh")
+
+    assert token_info["access_token"] == "fresh-access"
+    assert token_info["refresh_token"] == "fresh-refresh"
+    assert token_info["expires_at"] > 0
+    assert [r.url.path for r in requests] == ["/as/token.oauth2"]
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_does_not_fetch_the_app_version(monkeypatch):
+    """/v1/config needs the very Bearer token we are refreshing, so stay away."""
+    flow = MercedesLoginFlow(region="Europe", device_guid="device-123")
+    called = False
+
+    async def explode(*args, **kwargs):
+        nonlocal called
+        called = True
+        return False
+
+    monkeypatch.setattr(flow._app_version, "refresh", explode)
+    requests = _mock_httpx(monkeypatch, _token_response)
+
+    await flow.refresh_access_token("old-refresh")
+
+    assert called is False
+    assert all("config" not in r.url.path for r in requests)
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_keeps_the_old_refresh_token_when_mercedes_omits_it(monkeypatch):
+    flow = MercedesLoginFlow(region="Europe", device_guid="device-123")
+    _mock_httpx(
+        monkeypatch,
+        lambda request: httpx.Response(
+            200,
+            json={"access_token": "fresh-access", "expires_in": 3600},
+            request=request,
+        ),
+    )
+
+    token_info = await flow.refresh_access_token("old-refresh")
+
+    assert token_info["refresh_token"] == "old-refresh"
+
+
+@pytest.mark.asyncio
+async def test_token_refresh_raises_when_mercedes_rejects_the_refresh_token(monkeypatch):
+    flow = MercedesLoginFlow(region="Europe", device_guid="device-123")
+    _mock_httpx(monkeypatch, lambda request: httpx.Response(400, json={}, request=request))
+
+    with pytest.raises(MercedesAuthError, match="Token refresh failed: 400"):
+        await flow.refresh_access_token("old-refresh")
+
+
+@pytest.mark.asyncio
+async def test_an_expired_store_refreshes_instead_of_failing(monkeypatch):
+    """The whole integration stalled here: every call went through this path."""
+    from energy_core.vehicles.mercedes.auth.token_store import (
+        MercedesTokenBundle,
+        MercedesTokenStore,
+    )
+
+    flow = MercedesLoginFlow(region="Europe", device_guid="device-123")
+    store = MercedesTokenStore(login_flow=flow)
+    store.load(
+        MercedesTokenBundle(
+            access_token="stale-access",
+            refresh_token="old-refresh",
+            expires_at=1,
+            device_guid="device-123",
+            session_id="SESSION-1",
+        )
+    )
+    _mock_httpx(monkeypatch, _token_response)
+
+    assert await store.get_valid_access_token() == "fresh-access"
+    assert store.session_id == "SESSION-1"
+
+
 def test_auth_modules_do_not_log_sensitive_names():
     root = Path(__file__).resolve().parents[2] / "src" / "energy_core" / "vehicles" / "mercedes"
     forbidden = {"access_token", "refresh_token", "password", "code_verifier"}

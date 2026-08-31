@@ -10,16 +10,37 @@ const PERIODS = [
   { id: "year", label: "År" },
 ];
 
-export function SpaEconomicsPanel({ siteSlug }: { siteSlug: string }) {
-  const [period, setPeriod] = useState("today");
-  const [data, setData] = useState<SpaEconomics | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function SpaEconomicsPanel({
+  siteSlug,
+  period: externalPeriod,
+  data: externalData,
+  error: externalError,
+}: {
+  siteSlug: string;
+  period?: string;
+  data?: SpaEconomics | null;
+  error?: string | null;
+}) {
+  const [period, setPeriod] = useState(externalPeriod ?? "today");
+  const [data, setData] = useState<SpaEconomics | null>(externalData ?? null);
+  const [error, setError] = useState<string | null>(externalError ?? null);
 
   useEffect(() => {
+    if (externalPeriod !== undefined) {
+      setPeriod(externalPeriod);
+    }
+  }, [externalPeriod]);
+
+  useEffect(() => {
+    if (externalData !== undefined || externalError !== undefined) {
+      setData(externalData ?? null);
+      setError(externalError ?? null);
+      return;
+    }
     fetchSpaEconomics(siteSlug, period)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Kunde inte ladda ekonomi"));
-  }, [siteSlug, period]);
+  }, [siteSlug, period, externalData, externalError]);
 
   const qualityLabel = data?.data_quality === "MEASURED" ? "Mätt" : "Beräknad";
 
@@ -33,6 +54,7 @@ export function SpaEconomicsPanel({ siteSlug }: { siteSlug: string }) {
             type="button"
             className={period === p.id ? "spa-tab active" : "spa-tab"}
             onClick={() => setPeriod(p.id)}
+            disabled={externalPeriod !== undefined}
           >
             {p.label}
           </button>

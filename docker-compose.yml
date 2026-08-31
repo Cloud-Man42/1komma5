@@ -11,8 +11,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -23,8 +25,16 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
     environment:
       - NODE_ENV=production
+      - HOSTNAME=0.0.0.0
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   backend:
@@ -37,13 +47,13 @@ services:
       EMIC_SECRET_KEY: ${EMIC_SECRET_KEY:-}
       EMIC_SECRET_KEY_PATH: /var/lib/emic/secret.key
       APP_ENV: production
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-energy}
       HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
       HEARTBEAT_POLL_INTERVAL: ${HEARTBEAT_POLL_INTERVAL:-60}
       HEARTBEAT_API_URL: ${HEARTBEAT_API_URL:-}
       HEARTBEAT_API_KEY: ${HEARTBEAT_API_KEY:-}
       CHARGEAMPS_PROVIDER: ${CHARGEAMPS_PROVIDER:-}
-      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-true}
+      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-false}
       CHARGEAMPS_API_KEY: ${CHARGEAMPS_API_KEY:-}
       CHARGEAMPS_EMAIL: ${CHARGEAMPS_EMAIL:-}
       CHARGEAMPS_PASSWORD: ${CHARGEAMPS_PASSWORD:-}
@@ -62,6 +72,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     restart: unless-stopped
 
   collector:
@@ -74,13 +90,13 @@ services:
       EMIC_SECRET_KEY: ${EMIC_SECRET_KEY:-}
       EMIC_SECRET_KEY_PATH: /var/lib/emic/secret.key
       APP_ENV: production
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:-energy}@postgres:5432/${POSTGRES_DB:-energy}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-energy}
       HEARTBEAT_PROVIDER: ${HEARTBEAT_PROVIDER:-mock}
       HEARTBEAT_POLL_INTERVAL: ${HEARTBEAT_POLL_INTERVAL:-60}
       HEARTBEAT_API_URL: ${HEARTBEAT_API_URL:-}
       HEARTBEAT_API_KEY: ${HEARTBEAT_API_KEY:-}
       CHARGEAMPS_PROVIDER: ${CHARGEAMPS_PROVIDER:-}
-      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-true}
+      CHARGEAMPS_MOCK: ${CHARGEAMPS_MOCK:-false}
       CHARGEAMPS_API_KEY: ${CHARGEAMPS_API_KEY:-}
       CHARGEAMPS_EMAIL: ${CHARGEAMPS_EMAIL:-}
       CHARGEAMPS_PASSWORD: ${CHARGEAMPS_PASSWORD:-}
@@ -96,14 +112,20 @@ services:
       postgres:
         condition: service_healthy
       backend:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python -m app' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   postgres:
     image: timescale/timescaledb:latest-pg16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-energy}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-energy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-energy}
     volumes:
       - postgres_data:/var/lib/postgresql/data

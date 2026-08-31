@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from app.api import apple_devices, chargers_catalog, dashboard, energy_orchestration, ev_chargers, ev_sessions, heartbeat_bridge, prices, readings, semp, sites, snapshot, solar_forecast, solar_intelligence, spa, system, vehicles, widget
+from app.api import apple_devices, chargers_catalog, dashboard, display, energy_orchestration, ev_chargers, ev_sessions, heartbeat_bridge, prices, readings, semp, sites, snapshot, solar_forecast, solar_intelligence, spa, system, vehicles, widget
 from app.deps import set_session_factory
 from app.widget_service import configure_snapshot_cache
 from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
@@ -21,10 +21,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings: Settings = app.state.settings
-    try:
-        assert_chargeamps_production_safe(app_env=settings.app_env.value)
-    except RuntimeError as exc:
-        logger.warning("Charge Amps production guard: %s", exc)
+    assert_chargeamps_production_safe(app_env=settings.app_env.value)
     engine: AsyncEngine = create_engine(settings)
     session_factory: async_sessionmaker[AsyncSession] = create_session_factory(engine)
     app.state.engine = engine
@@ -69,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(energy_orchestration.router, prefix="/api")
     app.include_router(vehicles.router, prefix="/api")
     app.include_router(widget.router, prefix="/api")
+    app.include_router(display.router, prefix="/api")
     app.include_router(apple_devices.router, prefix="/api")
     app.include_router(heartbeat_bridge.router, prefix="/api")
     app.include_router(semp.router)

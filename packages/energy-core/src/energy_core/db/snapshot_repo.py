@@ -45,6 +45,24 @@ class SiteLiveSnapshotRepository:
         )
         await self._session.execute(stmt)
 
+    async def list_snapshot_ages(self) -> list[dict[str, Any]]:
+        rows = (
+            await self._session.scalars(select(SiteLiveSnapshotModel).order_by(SiteLiveSnapshotModel.site_id))
+        ).all()
+        now = datetime.now(UTC)
+        ages: list[dict[str, Any]] = []
+        for row in rows:
+            generated_at = row.generated_at.astimezone(UTC)
+            ages.append(
+                {
+                    "site_id": row.site_id,
+                    "generated_at": generated_at.isoformat(),
+                    "age_seconds": max(0, int((now - generated_at).total_seconds())),
+                    "freshness": row.freshness,
+                }
+            )
+        return ages
+
     async def get_for_site(self, site_id: int) -> dict[str, Any] | None:
         row = await self._session.scalar(
             select(SiteLiveSnapshotModel).where(SiteLiveSnapshotModel.site_id == site_id)

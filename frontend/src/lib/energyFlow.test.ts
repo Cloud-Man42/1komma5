@@ -7,10 +7,35 @@ import {
   computeWireFlows,
   EMPTY_STICKY_WIRE_STATE,
   flowAnimationDuration,
+  gridFlowState,
   isFlowActive,
   resolveGridMeter,
   stabilizeWireAnimations,
 } from "./energyFlow";
+
+describe("gridFlowState", () => {
+  it("labels grid import when buying from the grid", () => {
+    const state = gridFlowState(857, 0);
+    expect(state.mode).toBe("import");
+    expect(state.title).toBe("NÄT IMPORT");
+    expect(state.signedW).toBe(857);
+    expect(state.accent).toBe("#f87171");
+  });
+
+  it("labels grid export when selling to the grid", () => {
+    const state = gridFlowState(0, 1240);
+    expect(state.mode).toBe("export");
+    expect(state.title).toBe("EXPORT TILL NÄT");
+    expect(state.signedW).toBe(-1240);
+    expect(state.accent).toBe("#4ade80");
+  });
+
+  it("nets import and export when both directions are briefly reported", () => {
+    const state = gridFlowState(900, 500);
+    expect(state.mode).toBe("import");
+    expect(state.signedW).toBe(400);
+  });
+});
 
 describe("batteryFlowState", () => {
   it("detects charging and discharging from signed power", () => {

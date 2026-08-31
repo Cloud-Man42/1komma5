@@ -42,7 +42,7 @@ const FLOW_SLOT_EXIT_W = 15;
 const FLOW_SLOT_FLIP_W = 80;
 /** Normalized path length for SVG flow animation (pathLength attribute). */
 export const FLOW_PATH_LENGTH = 100;
-/** Bright segment length along normalized path (matches WireFlowPulse). */
+/** Bright segment length along normalized SVG flow path. */
 export const FLOW_DASH_ON = 14;
 export const FLOW_DASH_OFF = FLOW_PATH_LENGTH - FLOW_DASH_ON;
 
@@ -87,6 +87,70 @@ export function computeWireFlows(values: EnergyFlowValues): WireFlowValues {
     // Grid cable: import OR export from net meter, never both; idle when neither.
     gridImportW: normalized.gridImportW,
     gridExportW: normalized.gridExportW,
+  };
+}
+
+export type GridFlowMode = "import" | "export" | "idle";
+
+export interface GridFlowState {
+  importW: number;
+  exportW: number;
+  /** Positive = importing from grid, negative = exporting to grid. */
+  signedW: number;
+  mode: GridFlowMode;
+  title: string;
+  directionLabel: string;
+  accent: string;
+  accentGlow: string;
+}
+
+const GRID_IMPORT_ACCENT = "#f87171";
+const GRID_IMPORT_GLOW = "#fca5a5";
+const GRID_EXPORT_ACCENT = "#4ade80";
+const GRID_EXPORT_GLOW = "#86efac";
+const GRID_IDLE_ACCENT = "#94a3b8";
+const GRID_IDLE_GLOW = "#cbd5e1";
+
+/** Canonical grid meter direction for gauges and labels across EMIC. */
+export function gridFlowState(gridImportW: number, gridExportW: number): GridFlowState {
+  const { importW, exportW } = resolveGridMeter(gridImportW, gridExportW);
+  const signedW = importW > 0 ? importW : exportW > 0 ? -exportW : 0;
+
+  if (signedW > 0) {
+    return {
+      importW,
+      exportW: 0,
+      signedW,
+      mode: "import",
+      title: "NÄT IMPORT",
+      directionLabel: "Import från nät",
+      accent: GRID_IMPORT_ACCENT,
+      accentGlow: GRID_IMPORT_GLOW,
+    };
+  }
+
+  if (signedW < 0) {
+    return {
+      importW: 0,
+      exportW,
+      signedW,
+      mode: "export",
+      title: "EXPORT TILL NÄT",
+      directionLabel: "Export till nät",
+      accent: GRID_EXPORT_ACCENT,
+      accentGlow: GRID_EXPORT_GLOW,
+    };
+  }
+
+  return {
+    importW: 0,
+    exportW: 0,
+    signedW: 0,
+    mode: "idle",
+    title: "NÄT",
+    directionLabel: "Vila",
+    accent: GRID_IDLE_ACCENT,
+    accentGlow: GRID_IDLE_GLOW,
   };
 }
 

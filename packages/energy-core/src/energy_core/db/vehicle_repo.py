@@ -25,6 +25,45 @@ from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
 
 HISTORY_MIN_INTERVAL = timedelta(minutes=5)
 
+_TELEMETRY_FIELDS = (
+    "state_of_charge_percent",
+    "target_soc_percent",
+    "electric_range_km",
+    "latitude",
+    "longitude",
+    "is_plugged_in",
+    "is_charging",
+    "charging_power_kw",
+    "charging_power_limit_kw",
+    "estimated_charge_complete_at",
+    "departure_time",
+)
+
+
+def _carries_telemetry(state: VehicleState) -> bool:
+    """True when the state says anything about the car itself, not just the link."""
+    return any(getattr(state, field) is not None for field in _TELEMETRY_FIELDS)
+
+
+def _merge_last_known_good(
+    latest: VehicleStateLatestModel | None,
+    incoming: dict,
+) -> dict:
+    if latest is None:
+        return incoming
+    merged = dict(incoming)
+    for field in _TELEMETRY_FIELDS:
+        if merged.get(field) is None:
+            existing = getattr(latest, field, None)
+            if existing is not None:
+                merged[field] = existing
+    for ts_field in ("soc_updated_at", "charging_updated_at", "range_updated_at", "location_updated_at"):
+        if merged.get(ts_field) is None:
+            existing = getattr(latest, ts_field, None)
+            if existing is not None:
+                merged[ts_field] = existing
+    return merged
+
 
 @dataclass(frozen=True, slots=True)
 class VehicleConnectionRecord:
@@ -47,6 +86,13 @@ class VehicleConnectionRecord:
     reconnect_count: int
     http_429_count: int
     decode_failure_count: int
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_token_refresh_at: datetime | None = None
+    consecutive_failures: int = 0
+    last_error_code: str | None = None
+    last_latency_ms: int | None = None
+    current_polling_interval_seconds: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +176,13 @@ class VehicleProviderRepository:
             reconnect_count=row.reconnect_count,
             http_429_count=row.http_429_count,
             decode_failure_count=row.decode_failure_count,
+            last_success_at=getattr(row, "last_success_at", None),
+            last_failure_at=getattr(row, "last_failure_at", None),
+            last_token_refresh_at=getattr(row, "last_token_refresh_at", None),
+            consecutive_failures=getattr(row, "consecutive_failures", 0) or 0,
+            last_error_code=getattr(row, "last_error_code", None),
+            last_latency_ms=getattr(row, "last_latency_ms", None),
+            current_polling_interval_seconds=getattr(row, "current_polling_interval_seconds", None),
         )
 
     async def update_config(
@@ -181,6 +234,15 @@ class VehicleProviderRepository:
         row.session_id = bundle.session_id
         await self._session.flush()
 
+    async def load_token_bundle_for_update(
+        self,
+        row: VehicleProviderConnectionModel,
+    ) -> MercedesTokenBundle | None:
+        locked = await self._session.get(VehicleProviderConnectionModel, row.id, with_for_update=True)
+        if locked is None:
+            return None
+        return self.load_token_bundle(locked)
+
     async def update_runtime_status(
         self,
         row: VehicleProviderConnectionModel,
@@ -192,6 +254,14 @@ class VehicleProviderRepository:
         reconnect_count: int | None = None,
         http_429_count: int | None = None,
         decode_failure_count: int | None = None,
+        last_success_at: datetime | None = None,
+        last_failure_at: datetime | None = None,
+        last_token_refresh_at: datetime | None = None,
+        consecutive_failures: int | None = None,
+        last_error_code: str | None = None,
+        last_latency_ms: int | None = None,
+        current_polling_interval_seconds: int | None = None,
+        reset_consecutive_failures: bool = False,
     ) -> None:
         if connection_state is not None:
             row.connection_state = connection_state
@@ -208,6 +278,22 @@ class VehicleProviderRepository:
             row.http_429_count = http_429_count
         if decode_failure_count is not None:
             row.decode_failure_count = decode_failure_count
+        if last_success_at is not None:
+            row.last_success_at = last_success_at
+        if last_failure_at is not None:
+            row.last_failure_at = last_failure_at
+        if last_token_refresh_at is not None:
+            row.last_token_refresh_at = last_token_refresh_at
+        if consecutive_failures is not None:
+            row.consecutive_failures = consecutive_failures
+        if reset_consecutive_failures:
+            row.consecutive_failures = 0
+        if last_error_code is not None:
+            row.last_error_code = last_error_code[:64] if last_error_code else None
+        if last_latency_ms is not None:
+            row.last_latency_ms = last_latency_ms
+        if current_polling_interval_seconds is not None:
+            row.current_polling_interval_seconds = current_polling_interval_seconds
         await self._session.flush()
 
 
@@ -330,10 +416,12 @@ class VehicleRepository:
     async def persist_state(self, vehicle_id: int, state: VehicleState) -> None:
         now = datetime.now(UTC)
         latest = await self.get_latest_state(vehicle_id)
-        values = {
+        incoming = {
             "state_of_charge_percent": state.state_of_charge_percent,
             "target_soc_percent": state.target_soc_percent,
             "electric_range_km": state.electric_range_km,
+            "latitude": state.latitude,
+            "longitude": state.longitude,
             "is_plugged_in": state.is_plugged_in,
             "is_charging": state.is_charging,
             "charging_power_kw": state.charging_power_kw,
@@ -346,25 +434,40 @@ class VehicleRepository:
             "last_provider_update": state.last_provider_update,
             "updated_at": now,
         }
+        if state.state_of_charge_percent is not None:
+            incoming["soc_updated_at"] = now
+        if state.charging_power_kw is not None or state.is_charging is not None or state.is_plugged_in is not None:
+            incoming["charging_updated_at"] = now
+        if state.electric_range_km is not None:
+            incoming["range_updated_at"] = now
+        if state.latitude is not None and state.longitude is not None:
+            incoming["location_updated_at"] = now
+
+        values = _merge_last_known_good(latest, incoming)
+        telemetry_only_update = latest is not None and not _carries_telemetry(state)
+        if telemetry_only_update:
+            for field in (*_TELEMETRY_FIELDS, "data_quality", "last_vehicle_update"):
+                values.pop(field, None)
+                values.pop(f"{field}_updated_at", None)
         if latest is None:
             self._session.add(VehicleStateLatestModel(vehicle_id=vehicle_id, **values))
         else:
             for key, value in values.items():
                 setattr(latest, key, value)
-        should_history = self._should_write_history(latest, values)
+        should_history = not telemetry_only_update and self._should_write_history(latest, values)
         if should_history:
             self._session.add(
                 VehicleStateHistoryModel(
                     vehicle_id=vehicle_id,
                     recorded_at=now,
-                    state_of_charge_percent=values["state_of_charge_percent"],
-                    target_soc_percent=values["target_soc_percent"],
-                    electric_range_km=values["electric_range_km"],
-                    is_plugged_in=values["is_plugged_in"],
-                    is_charging=values["is_charging"],
-                    charging_power_kw=values["charging_power_kw"],
-                    connection_state=values["connection_state"],
-                    data_quality=values["data_quality"],
+                    state_of_charge_percent=values.get("state_of_charge_percent"),
+                    target_soc_percent=values.get("target_soc_percent"),
+                    electric_range_km=values.get("electric_range_km"),
+                    is_plugged_in=values.get("is_plugged_in"),
+                    is_charging=values.get("is_charging"),
+                    charging_power_kw=values.get("charging_power_kw"),
+                    connection_state=values.get("connection_state", VehicleConnectionState.DISCONNECTED.value),
+                    data_quality=values.get("data_quality", DataQuality.UNKNOWN.value),
                 )
             )
         await self._session.flush()

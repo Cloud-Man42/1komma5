@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
-from energy_core.solar_forecast.open_meteo import OpenMeteoWeatherProvider, WeatherProviderError
+from energy_core.solar_forecast.open_meteo import (
+    OpenMeteoWeatherProvider,
+    WeatherProviderError,
+    _parse_open_meteo_timestamp,
+)
 from energy_core.solar_forecast.types import SolarSiteConfiguration
 
 
@@ -27,13 +33,30 @@ def test_parse_minutely_15_response() -> None:
         }
     }
     site = SolarSiteConfiguration(
-        site_id=1, latitude=55.6, longitude=13.0, installed_peak_power_kw=8.0, enabled=True
+        site_id=1,
+        latitude=55.6,
+        longitude=13.0,
+        installed_peak_power_kw=8.0,
+        enabled=True,
+        timezone="Europe/Stockholm",
     )
     forecast = provider._parse_response(site, data, provider="open-meteo")
     assert len(forecast.points) == 2
     assert forecast.points[0].gti_wm2 == 95.0
     assert forecast.points[0].wind_speed_ms == 3.0
     assert forecast.points[0].relative_humidity_pct == 52.0
+    # 10:00 local CEST → 08:00 UTC
+    assert forecast.points[0].timestamp == datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
+
+
+def test_parse_open_meteo_timestamp_local_to_utc() -> None:
+    ts = _parse_open_meteo_timestamp("2026-06-15T10:00", "Europe/Stockholm")
+    assert ts == datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
+
+
+def test_parse_open_meteo_timestamp_z_suffix() -> None:
+    ts = _parse_open_meteo_timestamp("2026-06-15T08:00Z", "Europe/Stockholm")
+    assert ts == datetime(2026, 6, 15, 8, 0, tzinfo=UTC)
 
 
 def test_wind_and_humidity_default_to_none_when_absent() -> None:

@@ -26,6 +26,14 @@ class DataQuality(StrEnum):
     STALE = "STALE"
 
 
+class ValueQuality(StrEnum):
+    LIVE = "LIVE"
+    RECENT = "RECENT"
+    STALE = "STALE"
+    ESTIMATED = "ESTIMATED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
 @dataclass(frozen=True, slots=True)
 class VehicleCapabilities:
     can_read_soc: bool = False
@@ -40,6 +48,15 @@ class VehicleCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class TimedValue:
+    value: float | bool | str | None
+    source_timestamp: datetime | None
+    received_timestamp: datetime | None
+    age_seconds: float | None
+    quality: ValueQuality
+
+
+@dataclass(frozen=True, slots=True)
 class VehicleState:
     vehicle_id: str
     provider: str
@@ -49,12 +66,16 @@ class VehicleState:
     state_of_charge_percent: float | None = None
     target_soc_percent: float | None = None
     electric_range_km: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_timestamp: datetime | None = None
     is_plugged_in: bool | None = None
     is_charging: bool | None = None
     charging_power_kw: float | None = None
     charging_power_limit_kw: float | None = None
     estimated_charge_complete_at: datetime | None = None
     departure_time: datetime | None = None
+    odometer_km: float | None = None
     connection_state: VehicleConnectionState = VehicleConnectionState.DISCONNECTED
     data_quality: DataQuality = DataQuality.UNKNOWN
     last_vehicle_update: datetime | None = None

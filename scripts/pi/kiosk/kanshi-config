@@ -1,0 +1,12 @@
+# Pins the 7" panel to its native 1024x600 mode.
+#
+# The panel supplies no EDID (hdmi_force_hotplug=1, edid size 0), so wlroots
+# falls back to a generic mode list whose first entry is 1024x768 and picks that
+# as "preferred". Without this profile the kiosk renders letterboxed.
+#
+# Installed to ~/.config/kanshi/config; kanshi is started by
+# /etc/xdg/labwc/autostart on every labwc session.
+
+profile panel {
+	output HDMI-A-1 enable mode 1024x600@59.951Hz position 0,0 scale 1
+}

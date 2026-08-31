@@ -77,6 +77,23 @@ describe("energyDashboardHelpers", () => {
     expect(live.batteryDirection).toBe("charging");
   });
 
+  it("detects grid import in live metrics", () => {
+    const live = buildLiveMetrics({
+      solar_production_w: 540,
+      consumption_w: 5370,
+      grid_import_w: 857,
+      grid_export_w: 0,
+      battery_soc_pct: 58,
+      battery_power_w: -7130,
+      battery_direction: "discharging",
+      ev_power_w: 0,
+      status: "ok",
+      stale: false,
+    });
+    expect(live.gridImportW).toBe(857);
+    expect(live.gridNetW).toBe(-857);
+  });
+
   it("builds today metrics and balance slices", () => {
     const today = buildTodayMetrics(
       {

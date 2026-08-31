@@ -7,6 +7,7 @@ import { resolveGaugeScales } from "@/lib/analogGauge";
 import {
   batteryFlowState,
   computeWireFlows,
+  gridFlowState,
   normalizeFlowValues,
   readingToFlowValues,
 } from "@/lib/energyFlow";
@@ -41,18 +42,13 @@ export function LiveGaugeCards({
   const battery = batteryFlowState(values.batteryPowerW);
   const soc = Math.min(100, Math.max(0, values.batterySocPct));
 
-  const gridSignedW =
-    wires.gridImportW >= 25
-      ? wires.gridImportW
-      : wires.gridExportW >= 25
-        ? -wires.gridExportW
-        : 0;
+  const grid = gridFlowState(wires.gridImportW, wires.gridExportW);
 
   const scales = resolveGaugeScales({
     solarW: wires.solarInverterW,
     houseW: wires.houseFeedW,
     batteryW: values.batteryPowerW,
-    gridW: gridSignedW,
+    gridW: grid.signedW,
     solarPeakW: solar?.peak_power_w,
     inverterMaxKw: solar?.inverter_max_power_kw,
   });
@@ -101,16 +97,21 @@ export function LiveGaugeCards({
     },
     {
       key: "grid",
-      title: "EXPORT TILL NÄT",
-      accent: "#4ade80",
-      glow: "#86efac",
-      watts: gridSignedW,
+      title: grid.title,
+      accent: grid.accent,
+      glow: grid.accentGlow,
+      watts: grid.signedW,
       maxW: scales.gridMaxW,
       mode: "bidirectional" as const,
       subtitle: "Näteffekt just nu",
-      inset: gridSignedW < 0 ? `↑ ${formatWatts(Math.abs(gridSignedW))}` : formatWatts(Math.abs(gridSignedW)),
+      inset:
+        grid.mode === "export"
+          ? `↑ ${formatWatts(grid.exportW)}`
+          : grid.mode === "import"
+            ? `↓ ${formatWatts(grid.importW)}`
+            : formatWatts(0),
       spark: sparkGrid,
-      footer: <Sparkline values={sparkGrid} color="#4ade80" />,
+      footer: <Sparkline values={sparkGrid} color={grid.accent} />,
     },
   ];
 

@@ -23,6 +23,7 @@ from energy_core.flexible_load.orchestrator import OrchestratedLoadSpec
 from energy_core.flexible_load.types import EnergySource, FlexibleLoad, LoadPlan, LoadStrategy
 from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration, SpaPowerProfiles
 from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
+from energy_core.secrets import CredentialCipher
 from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
 from energy_core.spa_energy.actuator import SpaActuatorDecision, SpaCleaningActuator
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy, is_spa_filter_self_managed
@@ -371,7 +372,7 @@ class SmartSpaEnergyService:
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
             db_base_url=device_config.api_base_url,
-            db_api_key=device_config.api_key,
+            db_api_key=CredentialCipher().decrypt(device_config.api_key),
             db_spa_id=device_config.external_spa_id,
             db_poll_interval=device_config.poll_interval_seconds,
             db_energy_enabled=device_config.energy_collection_enabled,
@@ -421,7 +422,7 @@ class SmartSpaEnergyService:
         cfg = ArcticSpaConfiguration.merge(
             db_enabled=True,
             db_base_url=device_config.api_base_url,
-            db_api_key=device_config.api_key,
+            db_api_key=CredentialCipher().decrypt(device_config.api_key),
             db_spa_id=device_config.external_spa_id,
             db_poll_interval=device_config.poll_interval_seconds,
             db_energy_enabled=device_config.energy_collection_enabled,
@@ -528,14 +529,16 @@ class SmartSpaEnergyService:
         price_by_hour: dict[datetime, tuple[float | None, float | None]] = {}
         for p in prices:
             hour_key = p.recorded_at.replace(minute=0, second=0, microsecond=0)
-            price_by_hour[hour_key] = (p.spot_price_sek_kwh, p.all_in_price_sek_kwh)
+            price_by_hour[hour_key] = (p.spot_price_eur_kwh, p.all_in_price_eur_kwh)
 
         battery_soc = None
         if readings_raw:
             latest = readings_raw[-1]
             battery_soc = latest.battery_soc_pct
 
-        fallback_eur = site.fallback_purchase_price_sek_kwh / 11.0
+        from energy_core.market_prices.currency import sek_to_eur
+
+        fallback_eur = sek_to_eur(site.fallback_purchase_price_sek_kwh, self._settings)
         builder = EnergyHorizonBuilder()
         return builder.build(
             now=now,

@@ -5,7 +5,10 @@ import type {
   PeakReading,
   Reading,
 } from "@/lib/api";
-import { isAggregated } from "@/lib/api";
+import { gridFlowState, normalizeFlowValues, readingToFlowValues } from "@/lib/energyFlow";
+import { readingTimestamp } from "@/lib/chartTime";
+
+export { readingTimestamp } from "@/lib/chartTime";
 
 export type HistoryBucketMinutes = 5 | 15 | 60;
 
@@ -61,10 +64,6 @@ export function formatEnergyKw(value: number | null | undefined): string {
   return `${Math.round(value)} W`;
 }
 
-export function readingTimestamp(reading: Reading | AggregatedReading): string {
-  return isAggregated(reading) ? reading.bucket_start : reading.recorded_at;
-}
-
 export function integrateBatteryKwh(readings: (Reading | AggregatedReading)[]): {
   chargeKwh: number;
   dischargeKwh: number;
@@ -87,8 +86,18 @@ export function buildLiveMetrics(live: DashboardLiveSection | null | undefined):
   const solarW = live?.solar_production_w ?? 0;
   const consumptionW = live?.consumption_w ?? 0;
   const batteryW = live?.battery_power_w ?? 0;
-  const gridExportW = live?.grid_export_w ?? 0;
-  const gridImportW = live?.grid_import_w ?? 0;
+  const normalized = normalizeFlowValues(
+    readingToFlowValues({
+      recorded_at: "",
+      solar_production_w: solarW,
+      consumption_w: consumptionW,
+      grid_import_w: live?.grid_import_w ?? 0,
+      grid_export_w: live?.grid_export_w ?? 0,
+      battery_soc_pct: live?.battery_soc_pct ?? 0,
+      battery_power_w: batteryW,
+    }),
+  );
+  const grid = gridFlowState(normalized.gridImportW, normalized.gridExportW);
   const direction =
     live?.battery_direction ??
     (batteryW > 25 ? "charging" : batteryW < -25 ? "discharging" : "idle");
@@ -98,9 +107,9 @@ export function buildLiveMetrics(live: DashboardLiveSection | null | undefined):
     batteryW,
     batterySocPct: live?.battery_soc_pct ?? null,
     batteryDirection: direction,
-    gridNetW: gridExportW - gridImportW,
-    gridExportW,
-    gridImportW,
+    gridNetW: -grid.signedW,
+    gridExportW: grid.exportW,
+    gridImportW: grid.importW,
   };
 }
 

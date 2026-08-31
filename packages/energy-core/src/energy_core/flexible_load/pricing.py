@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from energy_core.config import Settings, get_settings
 from energy_core.flexible_load.types import EnergySource, HorizonBlock
 
-# Heartbeat market prices are stored in columns named _sek_kwh but contain EUR values.
-EUR_TO_SEK = 11.0
+
+def eur_to_sek(value_eur: float, settings: Settings | None = None) -> float:
+    cfg = settings or get_settings()
+    return value_eur * cfg.eur_to_sek_rate
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,10 +20,6 @@ class BlockLoadCost:
     solar_share: float
     battery_share: float
     grid_share: float
-
-
-def eur_to_sek(value_eur: float) -> float:
-    return value_eur * EUR_TO_SEK
 
 
 def price_eur_kwh(block: HorizonBlock) -> float | None:

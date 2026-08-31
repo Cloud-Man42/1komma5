@@ -36,3 +36,19 @@ class WidgetSnapshotService:
         snapshot = await self._energy.build_snapshot(site)
         _SNAPSHOT_CACHE.set(site.slug, snapshot)
         return snapshot
+
+    async def get_snapshots(self, sites: list[SiteModel]) -> list[EnergySiteSnapshot]:
+        snapshots: dict[str, EnergySiteSnapshot] = {}
+        uncached: list[SiteModel] = []
+        for site in sites:
+            cached = _SNAPSHOT_CACHE.get(site.slug)
+            if cached is not None:
+                snapshots[site.slug] = cached
+            else:
+                uncached.append(site)
+        if uncached:
+            built = await self._energy.build_snapshots_batch(uncached)
+            for site, snapshot in zip(uncached, built):
+                _SNAPSHOT_CACHE.set(site.slug, snapshot)
+                snapshots[site.slug] = snapshot
+        return [snapshots[site.slug] for site in sites]

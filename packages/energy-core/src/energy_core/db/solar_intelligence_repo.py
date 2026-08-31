@@ -6,6 +6,8 @@ import json
 from datetime import UTC, date, datetime
 
 from sqlalchemy import delete, desc, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import (
@@ -184,45 +186,55 @@ def _model_to_domain(row: SolarModelRecordModel) -> SolarModelRecord:
 class SolarTrainingSampleRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        dialect = session.bind.dialect.name if session.bind else "sqlite"
+        self._is_sqlite = dialect == "sqlite"
 
     async def upsert_samples(self, samples: list[TrainingSample]) -> int:
-        count = 0
-        for s in samples:
-            stmt = select(SolarTrainingSampleModel).where(
-                SolarTrainingSampleModel.site_id == s.site_id,
-                SolarTrainingSampleModel.sample_date == s.sample_date,
-                SolarTrainingSampleModel.hour_utc == s.hour_utc,
-            )
-            existing = await self._session.scalar(stmt)
-            if existing:
-                existing.actual_kwh = s.actual_kwh
-                existing.physical_kwh = s.physical_kwh
-                existing.quality = s.quality.value
-            else:
-                self._session.add(
-                    SolarTrainingSampleModel(
-                        site_id=s.site_id,
-                        sample_date=s.sample_date,
-                        hour_utc=s.hour_utc,
-                        actual_kwh=s.actual_kwh,
-                        physical_kwh=s.physical_kwh,
-                        ghi_wm2=s.ghi_wm2,
-                        dni_wm2=s.dni_wm2,
-                        dhi_wm2=s.dhi_wm2,
-                        poa_wm2=s.poa_wm2,
-                        solar_elevation_deg=s.solar_elevation_deg,
-                        cloud_cover_pct=s.cloud_cover_pct,
-                        temperature_c=s.temperature_c,
-                        quality=s.quality.value,
-                        provenance=s.provenance,
-                        created_at=datetime.now(UTC),
-                    )
-                )
-            count += 1
-        return count
+        if not samples:
+            return 0
+        insert = sqlite_insert if self._is_sqlite else pg_insert
+        now = datetime.now(UTC)
+        values = [
+            {
+                "site_id": s.site_id,
+                "sample_date": s.sample_date,
+                "hour_utc": s.hour_utc,
+                "actual_kwh": s.actual_kwh,
+                "physical_kwh": s.physical_kwh,
+                "ghi_wm2": s.ghi_wm2,
+                "dni_wm2": s.dni_wm2,
+                "dhi_wm2": s.dhi_wm2,
+                "poa_wm2": s.poa_wm2,
+                "solar_elevation_deg": s.solar_elevation_deg,
+                "cloud_cover_pct": s.cloud_cover_pct,
+                "temperature_c": s.temperature_c,
+                "quality": s.quality.value,
+                "provenance": s.provenance,
+                "created_at": now,
+            }
+            for s in samples
+        ]
+        stmt = insert(SolarTrainingSampleModel).values(values)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["site_id", "sample_date", "hour_utc"],
+            set_={
+                "actual_kwh": stmt.excluded.actual_kwh,
+                "physical_kwh": stmt.excluded.physical_kwh,
+                "quality": stmt.excluded.quality,
+            },
+        )
+        await self._session.execute(stmt)
+        return len(samples)
 
-    async def list_for_site(self, site_id: int, *, days: int = 90) -> list[TrainingSample]:
-        since = date.today().fromordinal(date.today().toordinal() - days)
+    async def list_for_site(
+        self,
+        site_id: int,
+        *,
+        days: int = 90,
+        reference_date: date | None = None,
+    ) -> list[TrainingSample]:
+        anchor = reference_date or datetime.now(UTC).date()
+        since = anchor.fromordinal(anchor.toordinal() - days)
         stmt = (
             select(SolarTrainingSampleModel)
             .where(SolarTrainingSampleModel.site_id == site_id, SolarTrainingSampleModel.sample_date >= since)
@@ -325,8 +337,15 @@ class SolarPerformanceDailyRepository:
             row.anomaly_flag = perf.anomaly_flag
             row.updated_at = now
 
-    async def list_for_site(self, site_id: int, *, days: int = 90) -> list[PerformanceDaily]:
-        since = date.today().fromordinal(date.today().toordinal() - days)
+    async def list_for_site(
+        self,
+        site_id: int,
+        *,
+        days: int = 90,
+        reference_date: date | None = None,
+    ) -> list[PerformanceDaily]:
+        anchor = reference_date or datetime.now(UTC).date()
+        since = anchor.fromordinal(anchor.toordinal() - days)
         stmt = (
             select(SolarPerformanceDailyModel)
             .where(SolarPerformanceDailyModel.site_id == site_id, SolarPerformanceDailyModel.performance_date >= since)

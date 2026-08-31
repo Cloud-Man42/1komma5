@@ -53,8 +53,10 @@ class ConsumerSampler:
         hour = end_time.replace(minute=0, second=0, microsecond=0)
         price = site_sample.electricity_price_sek_kwh if site_sample else None
         if price is None:
+            from energy_core.market_prices.currency import effective_price_sek_kwh
+
             mp = await price_repo.get_at(site.id, hour)
-            price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+            price = effective_price_sek_kwh(mp) or site.fallback_purchase_price_sek_kwh
 
         ledger_repo = BatteryEnergyLedgerRepository(db)
         ledger_row = await ledger_repo.get_latest(site.id)

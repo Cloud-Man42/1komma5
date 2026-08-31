@@ -182,7 +182,7 @@ describe("EvOverview", () => {
     render(<EvOverview siteSlug="akarp" />);
     expect(await screen.findByTestId("ev-overview")).toBeTruthy();
     expect(screen.getByText(/LADDBOX – CHARGEAMPS HALO/i)).toBeTruthy();
-    expect(screen.getByTestId("ev-power-panel")).toBeTruthy();
+    expect(await screen.findByTestId("ev-power-panel")).toBeTruthy();
     expect(screen.getByTestId("ev-waiting-panel")).toBeTruthy();
     expect(screen.getByTestId("ev-mini-stats")).toBeTruthy();
     expect(screen.getByTestId("ev-sessions-table")).toBeTruthy();

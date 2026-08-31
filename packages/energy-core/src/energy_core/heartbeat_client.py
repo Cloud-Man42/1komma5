@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -15,6 +16,35 @@ logger = logging.getLogger(__name__)
 
 CHARGING_MODES = ("SMART_CHARGE", "PRICE_CHARGE", "QUICK_CHARGE", "SOLAR_CHARGE", "PAUSED")
 TokenRefreshCallback = Callable[[], Awaitable[str]]
+
+_breakers: dict[str, Any] = {}
+_lkg_store: Any = None
+_http_clients: dict[float, httpx.AsyncClient] = {}
+
+
+def _breaker_for(api_url: str) -> Any:
+    from energy_core.providers.resilience import CircuitBreaker
+
+    if api_url not in _breakers:
+        _breakers[api_url] = CircuitBreaker()
+    return _breakers[api_url]
+
+
+def _lkg() -> Any:
+    global _lkg_store
+    if _lkg_store is None:
+        from energy_core.providers.resilience import LastKnownGoodStore
+
+        _lkg_store = LastKnownGoodStore()
+    return _lkg_store
+
+
+def _http_client(timeout: float) -> httpx.AsyncClient:
+    client = _http_clients.get(timeout)
+    if client is None:
+        client = httpx.AsyncClient(timeout=timeout)
+        _http_clients[timeout] = client
+    return client
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +90,8 @@ class HeartbeatClient:
         json: dict[str, Any] | None = None,
     ) -> Any:
         url = f"{self._credentials.api_url.rstrip('/')}{path}"
-        for attempt in range(2):
+        max_attempts = 3
+        for attempt in range(max_attempts):
             token = self._api_token
             if not token:
                 raise RuntimeError(
@@ -68,12 +99,16 @@ class HeartbeatClient:
                 )
 
             headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.request(method, url, headers=headers, json=json)
+            client = _http_client(self._timeout)
+            response = await client.request(method, url, headers=headers, json=json)
 
             if response.status_code == 401 and attempt == 0 and self._refresh_token is not None:
                 logger.info("HeartBeat token rejected, refreshing from credentials")
                 self._api_token = await self._refresh_token()
+                continue
+
+            if response.status_code >= 500 and attempt < max_attempts - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
                 continue
 
             response.raise_for_status()
@@ -82,9 +117,55 @@ class HeartbeatClient:
             return None
         return None
 
+    async def _resilient_dict(
+        self,
+        key: str,
+        fetch: Callable[[], Awaitable[Any]],
+        *,
+        max_age_seconds: float = 120.0,
+    ) -> dict[str, Any]:
+        from energy_core.providers.resilience import resilient_call
+
+        async def call() -> dict[str, Any]:
+            data = await fetch()
+            if not isinstance(data, dict) or not data:
+                raise RuntimeError(f"{key} returned empty payload")
+            return data
+
+        try:
+            return await resilient_call(
+                breaker=_breaker_for(self._credentials.api_url),
+                lkg=_lkg(),
+                key=key,
+                call=call,
+                max_age_seconds=max_age_seconds,
+                should_cache=lambda payload: isinstance(payload, dict) and bool(payload),
+            )
+        except Exception:
+            cached = _lkg().get(key, max_age_seconds=max_age_seconds)
+            return cached if isinstance(cached, dict) else {}
+
     async def list_evs(self, system_id: str) -> list[dict[str, Any]]:
-        data = await self._request("GET", f"/v1/systems/{system_id}/devices/evs")
-        return data if isinstance(data, list) else []
+        key = f"evs:{system_id}"
+
+        async def call() -> list[dict[str, Any]]:
+            data = await self._request("GET", f"/v1/systems/{system_id}/devices/evs")
+            return data if isinstance(data, list) else []
+
+        from energy_core.providers.resilience import resilient_call
+
+        try:
+            return await resilient_call(
+                breaker=_breaker_for(self._credentials.api_url),
+                lkg=_lkg(),
+                key=key,
+                call=call,
+                max_age_seconds=120.0,
+                should_cache=lambda payload: isinstance(payload, list),
+            )
+        except Exception:
+            cached = _lkg().get(key, max_age_seconds=120.0)
+            return cached if isinstance(cached, list) else []
 
     async def list_wallboxes(self, system_id: str) -> list[dict[str, Any]]:
         data = await self._request("GET", f"/v1/systems/{system_id}/devices/ev-chargers")
@@ -116,12 +197,30 @@ class HeartbeatClient:
         return None
 
     async def fetch_live_overview(self, system_id: str) -> dict[str, Any]:
-        data = await self._request("GET", f"/v3/systems/{system_id}/live-overview")
-        return data if isinstance(data, dict) else {}
+        from energy_core.providers.resilience import resilient_call
+
+        key = f"live-overview:{system_id}"
+
+        async def call() -> dict[str, Any]:
+            data = await self._request("GET", f"/v3/systems/{system_id}/live-overview")
+            if not isinstance(data, dict) or not data:
+                raise RuntimeError("HeartBeat live-overview returned empty payload")
+            return data
+
+        return await resilient_call(
+            breaker=_breaker_for(self._credentials.api_url),
+            lkg=_lkg(),
+            key=key,
+            call=call,
+            max_age_seconds=120.0,
+            should_cache=lambda payload: isinstance(payload, dict) and bool(payload),
+        )
 
     async def fetch_ems_settings(self, system_id: str) -> dict[str, Any]:
-        data = await self._request("GET", f"/v1/systems/{system_id}/ems/actions/get-settings")
-        return data if isinstance(data, dict) else {}
+        return await self._resilient_dict(
+            f"ems-settings:{system_id}",
+            lambda: self._request("GET", f"/v1/systems/{system_id}/ems/actions/get-settings"),
+        )
 
     async def fetch_market_prices(
         self,
@@ -131,11 +230,22 @@ class HeartbeatClient:
         to_iso: str,
         resolution: str = "1h",
     ) -> dict[str, Any]:
-        data = await self._request(
-            "GET",
-            f"/v4/systems/{system_id}/charts/market-prices?from={from_iso}&to={to_iso}&resolution={resolution}",
+        return await self._resilient_dict(
+            f"market-prices:{system_id}:{from_iso}:{to_iso}:{resolution}",
+            lambda: self._request(
+                "GET",
+                f"/v4/systems/{system_id}/charts/market-prices?from={from_iso}&to={to_iso}&resolution={resolution}",
+            ),
+            max_age_seconds=300.0,
         )
-        return data if isinstance(data, dict) else {}
+
+    async def fetch_heartbeat_prices(self, system_id: str) -> dict[str, Any]:
+        """Contractual feed-in and heartbeat tariffs for the site."""
+        return await self._resilient_dict(
+            f"heartbeat-prices:{system_id}",
+            lambda: self._request("GET", f"/v3/heartbeat-prices?siteId={system_id}"),
+            max_age_seconds=3600.0,
+        )
 
     async def fetch_optimizations(
         self,

@@ -358,18 +358,6 @@ export function SolarProductionChartPanel({
 
             <ComposedChart data={series} margin={{ top: 8, right: hasBattery ? 36 : 8, left: 0, bottom: 0 }}>
 
-              <defs>
-
-                <linearGradient id="sdashActualFill" x1="0" y1="0" x2="0" y2="1">
-
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.4} />
-
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.02} />
-
-                </linearGradient>
-
-              </defs>
-
               <CartesianGrid stroke="rgba(148,163,184,0.1)" strokeDasharray="4 4" vertical={false} />
 
               <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 10 }} interval="preserveStartEnd" />
@@ -424,28 +412,6 @@ export function SolarProductionChartPanel({
 
               <Legend wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
 
-              <Area
-
-                yAxisId="power"
-
-                type="monotone"
-
-                dataKey="actualKw"
-
-                name="Verklig"
-
-                stroke="#38bdf8"
-
-                fill="url(#sdashActualFill)"
-
-                strokeWidth={2}
-
-                dot={false}
-
-                connectNulls
-
-              />
-
               <Line
 
                 yAxisId="power"
@@ -464,7 +430,31 @@ export function SolarProductionChartPanel({
 
                 dot={false}
 
-                connectNulls
+                connectNulls={false}
+
+                isAnimationActive={false}
+
+              />
+
+              <Line
+
+                yAxisId="power"
+
+                type="monotone"
+
+                dataKey="actualKw"
+
+                name="Verklig"
+
+                stroke="#38bdf8"
+
+                strokeWidth={2.5}
+
+                dot={false}
+
+                connectNulls={false}
+
+                isAnimationActive={false}
 
               />
 

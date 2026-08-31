@@ -67,13 +67,14 @@ async def _price_at(
     is_sqlite: bool,
     when: datetime,
 ) -> float:
+    from energy_core.market_prices.currency import effective_price_sek_kwh
+
     price_repo = MarketPriceRepository(session, is_sqlite=is_sqlite)
     hour = when.replace(minute=0, second=0, microsecond=0)
     market_price = await price_repo.get_at(site.id, hour)
-    if market_price and market_price.all_in_price_sek_kwh:
-        return market_price.all_in_price_sek_kwh
-    if market_price:
-        return market_price.spot_price_sek_kwh
+    price_sek = effective_price_sek_kwh(market_price)
+    if price_sek is not None:
+        return price_sek
     return site.fallback_purchase_price_sek_kwh
 
 

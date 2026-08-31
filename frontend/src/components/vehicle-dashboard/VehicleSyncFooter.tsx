@@ -42,7 +42,7 @@ export function VehicleSyncFooter({
       <div className="vdash-sync-right">
         <span className="vdash-sync-refresh-label">Datauppdatering {refreshIntervalSec} sek intervall</span>
         <button type="button" className="vdash-sync-btn" onClick={onSync} disabled={syncing}>
-          {syncing ? "Synkar…" : "Synchronisera nu"}
+          {syncing ? "Synkar…" : "Synkronisera nu"}
         </button>
       </div>
     </footer>

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 import httpx
 
+from energy_core.vehicles.mercedes.api_client import MercedesApiClient
 from energy_core.vehicles.mercedes.auth.app_version import MercedesAppVersionManager
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenStore
-from energy_core.vehicles.mercedes.constants import rest_api_base
+from energy_core.vehicles.mercedes.constants import rest_api_base, widget_api_base
 
 logger = logging.getLogger(__name__)
 
@@ -23,26 +23,43 @@ class MercedesRestClient:
         token_store: MercedesTokenStore,
         app_version: MercedesAppVersionManager,
         timeout: float = 30.0,
+        api_client: MercedesApiClient | None = None,
     ) -> None:
         self._region = region
         self._token_store = token_store
         self._app_version = app_version
         self._timeout = timeout
+        self._api = api_client or MercedesApiClient(
+            token_store=token_store,
+            request_headers=lambda: self._app_version.webapi_headers(token_store.session_id),
+            base_url=rest_api_base(region),
+            timeout=timeout,
+        )
+
+    @property
+    def api_client(self) -> MercedesApiClient:
+        return self._api
 
     async def get_config(self) -> dict[str, Any]:
-        return await self._request("GET", "/v1/config")
+        payload = await self._api.get_json("/v1/config")
+        if isinstance(payload, dict):
+            self._app_version.apply_config(payload)
+        return payload if isinstance(payload, dict) else {}
 
     async def list_vehicles(self) -> list[dict[str, Any]]:
         vehicles: list[dict[str, Any]] = []
         try:
-            vehicles = self._extract_vehicle_list(await self._request("GET", "/v2/vehicles"))
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code not in {404, 405}:
+            vehicles = self._extract_vehicle_list(await self._api.get_json("/v2/vehicles"))
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as exc:
+            if "404" in str(exc) or "405" in str(exc):
+                logger.info("Mercedes /v2/vehicles unavailable, falling back to masterdata")
+            else:
                 raise
-            logger.info("Mercedes /v2/vehicles unavailable (%s), falling back to masterdata", exc.response.status_code)
         if vehicles:
             return vehicles
-        masterdata = await self._request("GET", "/v1/vehicle/self/masterdata")
+        masterdata = await self._api.get_json("/v1/vehicle/self/masterdata")
         assigned = self._extract_vehicle_list(masterdata)
         if assigned:
             logger.info("Mercedes vehicle list loaded from masterdata (%d)", len(assigned))
@@ -61,38 +78,16 @@ class MercedesRestClient:
         return []
 
     async def get_capabilities(self, vin: str) -> dict[str, Any]:
-        payload = await self._request("GET", f"/v1/vehicle/{vin}/capabilities")
+        payload = await self._api.get_json(f"/v1/vehicle/{vin}/capabilities")
         return payload if isinstance(payload, dict) else {}
 
     async def get_command_capabilities(self, vin: str) -> dict[str, Any]:
-        payload = await self._request("GET", f"/v1/vehicle/{vin}/capabilities/commands")
+        payload = await self._api.get_json(f"/v1/vehicle/{vin}/capabilities/commands")
         return payload if isinstance(payload, dict) else {}
 
     async def get_vehicle_attributes(self, vin: str) -> bytes:
-        access_token = await self._token_store.get_valid_access_token()
-        headers = self._app_version.webapi_headers(self._token_store.session_id)
-        headers["Authorization"] = f"Bearer {access_token}"
-        from energy_core.vehicles.mercedes.constants import widget_api_base
-
+        headers = dict(self._app_version.webapi_headers(self._token_store.session_id))
+        headers["OUTPUT-FORMAT"] = "PROTO"
         url = f"{widget_api_base(self._region)}/v1/vehicle/{vin}/vehicleattributes"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.get(url, headers=headers)
-            if response.status_code == 429:
-                raise httpx.HTTPStatusError("rate limited", request=response.request, response=response)
-            response.raise_for_status()
-            return response.content
-
-    async def _request(self, method: str, endpoint: str) -> Any:
-        access_token = await self._token_store.get_valid_access_token()
-        headers = self._app_version.webapi_headers(self._token_store.session_id)
-        headers["Authorization"] = f"Bearer {access_token}"
-        url = f"{rest_api_base(self._region)}{endpoint}"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
-            response = await client.request(method, url, headers=headers)
-            if response.status_code == 429:
-                raise httpx.HTTPStatusError("rate limited", request=response.request, response=response)
-            response.raise_for_status()
-            payload = response.json()
-        if endpoint == "/v1/config" and isinstance(payload, dict):
-            self._app_version.apply_config(payload)
-        return payload
+        content = await self._api.get_bytes(url, extra_headers=headers)
+        return content if isinstance(content, bytes) else bytes(content)

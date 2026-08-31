@@ -1,0 +1,28 @@
+{
+  "_comment": "EMIC kiosk policy. Installed to /etc/chromium/policies/managed/emic-kiosk.json. Command-line --disable-features=Translate is not honoured by recent Chromium builds, so the translate bubble is suppressed by policy instead; it otherwise covers the dashboard header.",
+
+  "TranslateEnabled": false,
+  "SpellcheckEnabled": false,
+
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "MetricsReportingEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "WelcomePageOnOSUpgradeEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+
+  "PasswordManagerEnabled": false,
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+
+  "DefaultNotificationsSetting": 2,
+  "DefaultGeolocationSetting": 2,
+  "DefaultPopupsSetting": 2,
+
+  "BookmarkBarEnabled": false,
+  "ShowHomeButton": false,
+  "PrintingEnabled": false,
+
+  "ComponentUpdatesEnabled": false,
+  "BackgroundModeEnabled": false
+}

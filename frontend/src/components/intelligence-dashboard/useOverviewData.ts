@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { gridFlowState, normalizeFlowValues, readingToFlowValues } from "@/lib/energyFlow";
+import { useSolarLayoutData } from "@/lib/SolarLayoutContext";
 import {
   fetchSiteHistory,
   fetchSolarConfig,
@@ -26,25 +28,32 @@ export interface OverviewExtraData {
 }
 
 export function useOverviewExtraData(slug: string): OverviewExtraData {
+  const layoutSolar = useSolarLayoutData();
   const [forecast, setForecast] = useState<SolarForecast | null>(null);
-  const [config, setConfig] = useState<SolarSiteConfig | null>(null);
+  const [config, setConfig] = useState<SolarSiteConfig | null>(layoutSolar?.config ?? null);
   const [readings, setReadings] = useState<Reading[]>([]);
   const [performance, setPerformance] = useState<SolarPerformance | null>(null);
-  const [weather, setWeather] = useState<SolarWeather | null>(null);
+  const [weather, setWeather] = useState<SolarWeather | null>(layoutSolar?.weather ?? null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setConfig(layoutSolar?.config ?? null);
+    setWeather(layoutSolar?.weather ?? null);
+  }, [layoutSolar?.config, layoutSolar?.weather]);
 
   useEffect(() => {
     let active = true;
 
     const load = async () => {
       try {
-        const [cfg, hist] = await Promise.all([
-          fetchSolarConfig(slug).catch(() => null),
-          fetchSiteHistory(slug, 5, 24).catch(() => null),
-        ]);
+        const cfg =
+          layoutSolar?.config ?? (await fetchSolarConfig(slug).catch(() => null));
         if (!active) return;
         setConfig(cfg);
+
+        const hist = await fetchSiteHistory(slug, 5, 24).catch(() => null);
+        if (!active) return;
         setReadings(hist?.readings ?? []);
 
         const forecastPromise = cfg?.complete
@@ -53,18 +62,24 @@ export function useOverviewExtraData(slug: string): OverviewExtraData {
         const perfPromise = cfg?.enabled
           ? fetchSolarPerformance(slug).catch(() => null)
           : Promise.resolve(null);
-        const weatherPromise = cfg?.enabled
-          ? fetchSolarWeather(slug).then(
-              (data) => ({ data, error: null as string | null }),
-              (e: unknown) => ({
-                data: null,
-                error: e instanceof Error ? e.message : "Väderdata otillgänglig",
-              }),
-            )
-          : Promise.resolve({
+
+        let weatherPromise: Promise<{ data: SolarWeather | null; error: string | null }>;
+        if (layoutSolar?.weather) {
+          weatherPromise = Promise.resolve({ data: layoutSolar.weather, error: null });
+        } else if (cfg?.enabled) {
+          weatherPromise = fetchSolarWeather(slug).then(
+            (data) => ({ data, error: null as string | null }),
+            (e: unknown) => ({
               data: null,
-              error: "Aktivera solprognosen för att visa väder.",
-            });
+              error: e instanceof Error ? e.message : "Väderdata otillgänglig",
+            }),
+          );
+        } else {
+          weatherPromise = Promise.resolve({
+            data: null,
+            error: "Aktivera solprognosen för att visa väder.",
+          });
+        }
 
         const [fc, perf, wx] = await Promise.all([forecastPromise, perfPromise, weatherPromise]);
         if (!active) return;
@@ -83,7 +98,7 @@ export function useOverviewExtraData(slug: string): OverviewExtraData {
       active = false;
       clearInterval(interval);
     };
-  }, [slug]);
+  }, [slug, layoutSolar?.config, layoutSolar?.weather]);
 
   return { forecast, config, readings, performance, weather, weatherError, loading };
 }
@@ -91,7 +106,10 @@ export function useOverviewExtraData(slug: string): OverviewExtraData {
 export function extractSparklines(readings: Reading[]) {
   const solar = readings.map((r) => r.solar_production_w ?? 0);
   const house = readings.map((r) => r.consumption_w ?? 0);
-  const grid = readings.map((r) => Math.max(r.grid_export_w ?? 0, r.grid_import_w ?? 0));
+  const grid = readings.map((r) => {
+    const normalized = normalizeFlowValues(readingToFlowValues(r));
+    return Math.abs(gridFlowState(normalized.gridImportW, normalized.gridExportW).signedW);
+  });
   return { solar, house, grid };
 }
 

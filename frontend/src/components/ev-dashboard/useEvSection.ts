@@ -1,21 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createUseSectionFromHash } from "@/lib/useSectionFromHash";
 import { readEvSectionFromLocation, type EvSectionId } from "./evSection";
 
-export function useEvSection(): { section: EvSectionId } {
-  const [section, setSection] = useState<EvSectionId>("overview");
-
-  useEffect(() => {
-    const update = () => setSection(readEvSectionFromLocation());
-    update();
-    window.addEventListener("hashchange", update);
-    window.addEventListener("popstate", update);
-    return () => {
-      window.removeEventListener("hashchange", update);
-      window.removeEventListener("popstate", update);
-    };
-  }, []);
-
-  return { section };
-}
+export const useEvSection = createUseSectionFromHash<EvSectionId>(readEvSectionFromLocation);

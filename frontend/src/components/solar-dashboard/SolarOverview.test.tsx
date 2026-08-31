@@ -360,9 +360,9 @@ describe("SolarOverview", () => {
 
     expect(screen.getByText(/SOLPROGNOS/i)).toBeTruthy();
 
-    expect(screen.getByTestId("solar-kpi-strip")).toBeTruthy();
+    expect(await screen.findByTestId("solar-kpi-strip")).toBeTruthy();
 
-    expect(screen.getByTestId("solar-production-chart")).toBeTruthy();
+    expect(await screen.findByTestId("solar-production-chart")).toBeTruthy();
 
     expect(screen.getByTestId("solar-day-stats")).toBeTruthy();
 

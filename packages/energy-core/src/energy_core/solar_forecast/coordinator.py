@@ -46,36 +46,25 @@ from energy_core.solar_forecast.accuracy import EvaluationInput, evaluate_point
 
 from energy_core.solar_forecast.correction import build_profile
 
+from energy_core.solar_forecast.rollup_queries import (
+    actual_kwh_for_day_resolved,
+    load_performance_sample_buckets,
+)
 from energy_core.solar_forecast.daily_evaluation import (
-
-    actual_kwh_for_day,
-
     build_forecast_observation_stub,
-
     build_observation_from_day,
-
     days_in_evaluation_window,
-
     forecast_kwh_for_day,
-
     recompute_profile_from_observations,
-
 )
 
 from energy_core.solar_forecast.engine import SolarForecastEngine
 
 from energy_core.solar_forecast.historical import (
-
     actual_energy_kwh,
-
-    aggregate_buckets_from_readings,
-
     build_performance_sample,
-
     coverage_fraction,
-
     floor_15min,
-
 )
 
 from energy_core.solar_forecast.open_meteo import (
@@ -451,14 +440,6 @@ class SolarForecastCoordinator:
 
         window_days = self._settings.solar_forecast_rolling_window_days
 
-        since = now - timedelta(days=window_days + 2)
-
-        readings = await reading_repo.list_readings(site.id, from_time=since, to_time=now, limit=100000)
-
-        raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
-
-
-
         forecast_repo = SolarForecastRepository(session)
 
         latest_forecast = await forecast_repo.get_latest(site.id)
@@ -507,7 +488,12 @@ class SolarForecastCoordinator:
 
         for day in pending_days:
 
-            actual_kwh, completeness = actual_kwh_for_day(raw, day, site.timezone)
+            actual_kwh, completeness = await actual_kwh_for_day_resolved(
+                reading_repo,
+                site.id,
+                day,
+                timezone=site.timezone,
+            )
 
             if completeness <= 0 and actual_kwh <= 0:
 
@@ -725,19 +711,23 @@ class SolarForecastCoordinator:
 
         """Minimal diurnal fallback when API unavailable."""
 
+        from energy_core.solar_forecast.constants import diurnal_solar_factor
         from energy_core.solar_forecast.types import WeatherForecastPoint
+        from zoneinfo import ZoneInfo
 
 
 
         points = []
 
+        tz = ZoneInfo(getattr(site_config, "timezone", "UTC"))
+
         for i in range(self._settings.solar_forecast_horizon_hours * 4):
 
             ts = now + timedelta(minutes=15 * i)
 
-            hour = ts.hour
+            local_hour = ts.astimezone(tz).hour + ts.astimezone(tz).minute / 60.0
 
-            ghi = max(0.0, 800.0 * _diurnal(hour))
+            ghi = max(0.0, 800.0 * diurnal_solar_factor(local_hour))
 
             points.append(
 
@@ -777,19 +767,14 @@ class SolarForecastCoordinator:
 
         reading_repo = EnergyReadingRepository(session, is_sqlite=self._settings.is_sqlite)
 
-        since = now - timedelta(days=30)
-
-        readings = await reading_repo.list_readings(site.id, from_time=since, to_time=now, limit=50000)
-
-        if not readings:
-
+        buckets = await load_performance_sample_buckets(
+            reading_repo,
+            site.id,
+            days=30,
+            now=now,
+        )
+        if not buckets:
             return []
-
-
-
-        raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
-
-        buckets = aggregate_buckets_from_readings(raw)
 
         samples: list[PerformanceSample] = []
 
@@ -926,21 +911,5 @@ class SolarForecastCoordinator:
         self._last_eval[site.id] = now
 
 
-
-
-
-def _diurnal(hour: int) -> float:
-
-    if hour < 6 or hour > 20:
-
-        return 0.0
-
-    x = (hour - 13) / 4.0
-
-    import math
-
-
-
-    return math.exp(-0.5 * x * x)
 
 

@@ -26,6 +26,7 @@ class SiteResponse(BaseModel):
     export_compensation_sek_kwh: float
     main_fuse_a: float | None = None
     safety_margin_a: float = 2.0
+    sell_contract_start_date: date | None = None
     latest_reading: ReadingResponse | None = None
 
 
@@ -61,6 +62,7 @@ class SiteUpdateRequest(BaseModel):
     export_compensation_sek_kwh: float | None = Field(default=None, ge=0, le=20)
     main_fuse_a: float | None = Field(default=None, gt=0, le=200)
     safety_margin_a: float | None = Field(default=None, ge=0, le=50)
+    sell_contract_start_date: date | None = None
 
 
 class SiteEnergyConfigResponse(BaseModel):
@@ -472,6 +474,12 @@ class FinancialStatResponse(BaseModel):
     export_revenue_sek: float
     grid_import_cost_sek: float
     market_priced_fraction: float
+    energy_sale_revenue_sek: float = 0.0
+    grid_benefit_revenue_sek: float = 0.0
+    tax_credit_sek: float = 0.0
+    effective_sell_price_sek_kwh: float | None = None
+    export_spot_priced_fraction: float = 0.0
+    uncontracted_exported_kwh: float = 0.0
 
 
 class FinancialStatsResponse(BaseModel):
@@ -480,6 +488,8 @@ class FinancialStatsResponse(BaseModel):
     period: str
     fallback_purchase_price_sek_kwh: float
     export_compensation_sek_kwh: float
+    sell_pricing_mode: str = "spot"
+    sell_contract_start_date: date | None = None
     stats: list[FinancialStatResponse] = Field(default_factory=list)
 
 
@@ -1425,6 +1435,22 @@ class DashboardOptimizationSection(DashboardSectionMeta):
     battery_soc_pct: float | None = None
 
 
+class DashboardVehicleSection(DashboardSectionMeta):
+    available: bool = False
+    display_name: str | None = None
+    mode: str = "parked"
+    state_of_charge_percent: float | None = None
+    electric_range_km: float | None = None
+    is_plugged_in: bool | None = None
+    is_charging: bool | None = None
+    charging_power_kw: float | None = None
+    location_name: str | None = None
+    charging_type: str | None = None
+    session_energy_kwh: float | None = None
+    data_quality: str | None = None
+    freshness_label: str | None = None
+
+
 class DashboardAlert(BaseModel):
     severity: str
     message_sv: str
@@ -1436,6 +1462,7 @@ class DashboardResponse(BaseModel):
     live: DashboardLiveSection | None = None
     today: DashboardTodaySection | None = None
     ev: DashboardEvSection | None = None
+    vehicle: DashboardVehicleSection | None = None
     solar: DashboardSolarSection | None = None
     price: DashboardPriceSection | None = None
     optimization: DashboardOptimizationSection | None = None
@@ -1488,6 +1515,14 @@ class VehicleHaloCorrelationResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class VehicleValueResponse(BaseModel):
+    value: float | bool | str | None = None
+    source_timestamp: datetime | None = None
+    received_timestamp: datetime | None = None
+    age_seconds: float | None = None
+    quality: str
+
+
 class VehicleListItemResponse(BaseModel):
     id: int
     site_id: int
@@ -1509,11 +1544,19 @@ class VehicleListItemResponse(BaseModel):
     last_vehicle_update: datetime | None = None
     capabilities: VehicleCapabilitiesResponse
     halo_correlation: VehicleHaloCorrelationResponse | None = None
+    state_of_charge: VehicleValueResponse | None = None
+    charging_power: VehicleValueResponse | None = None
+    electric_range: VehicleValueResponse | None = None
 
 
 class VehicleListResponse(BaseModel):
     site_slug: str
     vehicles: list[VehicleListItemResponse] = Field(default_factory=list)
+
+
+class VehicleSyncResponse(VehicleListResponse):
+    synced_at: datetime
+    vehicles_updated: int = 0
 
 
 class VehicleDetailResponse(VehicleListItemResponse):
@@ -1568,6 +1611,54 @@ class VehicleIntegrationLoginResponse(BaseModel):
     message: str
 
 
+class VehicleAttributeObservationResponse(BaseModel):
+    attribute_name: str
+    source: str
+    value_type: str
+    masked_sample: str
+    first_seen_at: datetime
+    last_seen_at: datetime
+    sample_count: int
+
+
+class VehicleRawAttributesResponse(BaseModel):
+    site_slug: str
+    vehicle_id: int | None = None
+    observations: list[VehicleAttributeObservationResponse] = Field(default_factory=list)
+
+
+class VehicleApiEventResponse(BaseModel):
+    endpoint: str
+    method: str
+    http_status: int | None = None
+    duration_ms: int
+    error_code: str | None = None
+    retry_count: int = 0
+    recorded_at: datetime
+
+
+class VehicleIntegrationDiagnosticsResponse(BaseModel):
+    site_slug: str
+    health_status: str
+    connection_state: str
+    last_success_at: datetime | None = None
+    last_failure_at: datetime | None = None
+    last_vehicle_update: datetime | None = None
+    last_token_refresh_at: datetime | None = None
+    consecutive_failures: int = 0
+    last_error_code: str | None = None
+    last_latency_ms: int | None = None
+    current_polling_interval_seconds: int | None = None
+    vehicle_data_age_seconds: float | None = None
+    api_data_age_seconds: float | None = None
+    recent_events: list[VehicleApiEventResponse] = Field(default_factory=list)
+
+
+class VehicleIntegrationActionResponse(BaseModel):
+    success: bool
+    message: str
+
+
 class VehicleSetTargetSocRequest(BaseModel):
     target_soc_percent: int = Field(ge=30, le=100)
 
@@ -1588,7 +1679,7 @@ class VehicleReadinessResponse(BaseModel):
 class VehicleChargeSessionResponse(BaseModel):
     id: int
     vehicle_id: int
-    charger_id: int
+    charger_id: int | None = None
     connected_at: datetime
     disconnected_at: datetime | None = None
     charging_started_at: datetime | None = None
@@ -1609,6 +1700,46 @@ class VehicleChargeSessionResponse(BaseModel):
     energy_quality: str | None = None
     cost_quality: str | None = None
     attribution_quality: str | None = None
+    location_name: str | None = None
+    charger_operator: str | None = None
+    charging_type: str | None = None
+    home_charging: bool | None = None
+    energy_source: str | None = None
+    estimated_energy_kwh: float | None = None
+    charging_cost_sek: float | None = None
+    cost_source: str | None = None
+    detection_confidence: str | None = None
+    identification_method: str | None = None
+    vehicle_data_quality: str | None = None
+    charging_power_avg_kw: float | None = None
+    charging_power_max_kw: float | None = None
+
+
+class VehicleChargeSessionPatchRequest(BaseModel):
+    location_name: str | None = None
+    charger_operator: str | None = None
+    charging_type: str | None = None
+    charging_cost_sek: float | None = None
+    home_charging: bool | None = None
+
+
+class VehicleChargingStatsResponse(BaseModel):
+    site_slug: str
+    vehicle_id: int | None = None
+    period: str
+    total_energy_kwh: float
+    home_energy_kwh: float
+    away_energy_kwh: float
+    ac_energy_kwh: float
+    dc_energy_kwh: float
+    free_energy_kwh: float
+    paid_energy_kwh: float
+    avg_price_sek_kwh: float | None = None
+    total_cost_sek: float
+    savings_vs_public_sek: float | None = None
+    solar_share_pct: float | None = None
+    grid_share_pct: float | None = None
+    session_count: int
 
 
 class VehicleChargeSessionListResponse(BaseModel):

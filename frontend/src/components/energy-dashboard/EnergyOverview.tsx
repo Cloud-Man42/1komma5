@@ -1,11 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/dashboard";
 import { formatRelativeTime } from "@/lib/format";
 import {
   EnergyBatteryPanel,
-  EnergyFlowChartPanel,
   EnergyMetricStrip,
   EnergyPeaksPanel,
   EnergyPlaceholderSection,
@@ -15,6 +15,11 @@ import { exportEnergyCsv, todayDateLabel, type HistoryBucketMinutes } from "./en
 import { ENERGY_SECTION_LABELS } from "./energySection";
 import { useEnergyDashboardData } from "./useEnergyDashboardData";
 import { useEnergySection } from "./useEnergySection";
+
+const EnergyFlowChartPanel = dynamic(
+  () => import("./EnergyPanels").then((mod) => ({ default: mod.EnergyFlowChartPanel })),
+  { ssr: false, loading: () => <Skeleton lines={8} /> },
+);
 
 export function EnergyOverview({ siteSlug }: { siteSlug: string }) {
   const [bucketMinutes, setBucketMinutes] = useState<HistoryBucketMinutes>(15);

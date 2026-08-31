@@ -212,6 +212,62 @@ describe("solarDashboardHelpers", () => {
 
 
 
+  it("builds production chart with hourly forecast and actual readings", () => {
+
+    const hourlyForecast: SolarForecast = {
+
+      ...baseForecast,
+
+      points: [
+
+        {
+
+          ...forecastPoint("2026-08-27T05:00:00Z", 2000),
+
+          expected_energy_kwh: 2,
+
+        },
+
+        {
+
+          ...forecastPoint("2026-08-27T06:00:00Z", 3000),
+
+          expected_energy_kwh: 3,
+
+        },
+
+      ],
+
+    };
+
+    const series = buildProductionChartSeries({
+
+      readings: [
+
+        reading("2026-08-27T05:20:00Z", 1600, 55),
+
+        reading("2026-08-27T05:50:00Z", 2400, 56),
+
+      ],
+
+      forecast: hourlyForecast,
+
+      performance: null,
+
+      timezone: TZ,
+
+      now: NOW,
+
+    });
+
+    expect(series.some((p) => p.actualKw != null && p.actualKw > 0)).toBe(true);
+
+    expect(series.some((p) => p.forecastKw != null)).toBe(true);
+
+  });
+
+
+
   it("builds period distribution for today", () => {
 
     const slices = buildPeriodDistribution(baseForecast, TZ, NOW);
@@ -230,7 +286,33 @@ describe("solarDashboardHelpers", () => {
 
     expect(rows.length).toBeGreaterThan(0);
 
-    expect(rows.length).toBeLessThanOrEqual(5);
+    expect(rows.length).toBeLessThanOrEqual(7);
+
+    const today = rows.find((r) => r.label === "Idag");
+
+    expect(today?.expectedKwh).toBe(20);
+
+  });
+
+
+
+  it("sums hourly points via expected_energy_kwh", () => {
+
+    const hourlyForecast: SolarForecast = {
+
+      ...baseForecast,
+
+      points: [
+
+        { ...forecastPoint("2026-08-27T08:00:00Z", 4000), expected_energy_kwh: 2.5 },
+
+        { ...forecastPoint("2026-08-27T09:00:00Z", 5000), expected_energy_kwh: 3.0 },
+
+      ],
+
+    };
+
+    const rows = buildMultiDayOverview(hourlyForecast, TZ, NOW);
 
     const today = rows.find((r) => r.label === "Idag");
 

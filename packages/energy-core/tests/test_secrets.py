@@ -5,7 +5,7 @@ import os
 import pytest
 from cryptography.fernet import Fernet
 
-from energy_core.secrets import SecretBox, SecretBoxError
+from energy_core.secrets import CredentialCipher, SecretBox, SecretBoxError
 
 
 def test_encrypt_decrypt_round_trip(monkeypatch):
@@ -14,6 +14,14 @@ def test_encrypt_decrypt_round_trip(monkeypatch):
     encrypted = box.encrypt("super-secret-password")
     assert encrypted != "super-secret-password"
     assert box.decrypt(encrypted) == "super-secret-password"
+
+
+def test_credential_cipher_round_trip(monkeypatch):
+    monkeypatch.setenv("EMIC_SECRET_KEY", Fernet.generate_key().decode("ascii"))
+    cipher = CredentialCipher()
+    encrypted = cipher.encrypt("integration-secret")
+    assert encrypted != "integration-secret"
+    assert cipher.decrypt(encrypted) == "integration-secret"
 
 
 def test_empty_string_stays_empty(monkeypatch):

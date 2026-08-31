@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -71,6 +72,32 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
         data = await self._fetch(self._historical_url, params)
         return self._parse_response(site, data, provider="open-meteo-historical")
 
+    async def get_extended_hourly_forecast(
+        self,
+        site: SolarSiteConfiguration,
+        *,
+        forecast_days: int = 7,
+    ) -> WeatherForecast:
+        """Fetch up to 16 calendar days of hourly irradiance (beyond 48h minutely cap)."""
+        tilt = site.tilt_deg if site.tilt_deg is not None else DEFAULT_TILT_DEG
+        azimuth = site.azimuth_deg if site.azimuth_deg is not None else DEFAULT_AZIMUTH_DEG
+        om_azimuth = emic_azimuth_to_open_meteo(azimuth)
+
+        params: dict[str, str | float] = {
+            "latitude": site.latitude,
+            "longitude": site.longitude,
+            "timezone": site.timezone,
+            "forecast_days": min(max(forecast_days, 1), 16),
+            "hourly": ",".join(MINUTELY_15_VARS),
+            "tilt": tilt,
+            "azimuth": om_azimuth,
+        }
+        if self._api_key:
+            params["apikey"] = self._api_key
+
+        data = await self._fetch(self._base_url, params)
+        return self._parse_response(site, data, provider="open-meteo-extended")
+
     def _build_params(
         self,
         site: SolarSiteConfiguration,
@@ -99,9 +126,14 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
             params["end_date"] = end
             params["hourly"] = ",".join(MINUTELY_15_VARS)
         else:
-            # Compute forecast hours needed
-            hours = max(1, int((to_ts - from_ts).total_seconds() / 3600) + 2)
-            params["forecast_minutely_15"] = min(hours * 4, 192)  # up to 48h in 15-min steps
+            start_local = from_ts.astimezone(ZoneInfo(site.timezone)).replace(second=0, microsecond=0)
+            end_local = to_ts.astimezone(ZoneInfo(site.timezone)).replace(second=0, microsecond=0)
+            start_minute = (start_local.minute // 15) * 15
+            end_minute = (end_local.minute // 15) * 15
+            start_local = start_local.replace(minute=start_minute)
+            end_local = end_local.replace(minute=end_minute)
+            params["start_minutely_15"] = start_local.strftime("%Y-%m-%dT%H:%M")
+            params["end_minutely_15"] = end_local.strftime("%Y-%m-%dT%H:%M")
             params["minutely_15"] = ",".join(MINUTELY_15_VARS)
 
         if self._api_key:
@@ -159,9 +191,7 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
 
         points: list[WeatherForecastPoint] = []
         for i, time_str in enumerate(times):
-            ts = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=UTC)
+            ts = _parse_open_meteo_timestamp(time_str, site.timezone)
             points.append(
                 WeatherForecastPoint(
                     timestamp=ts,
@@ -186,6 +216,15 @@ class OpenMeteoWeatherProvider(WeatherForecastProvider):
             points=tuple(points),
             source="live",
         )
+
+
+def _parse_open_meteo_timestamp(time_str: str, timezone: str) -> datetime:
+    """Open-Meteo returns local wall-clock times when timezone= is set — not UTC."""
+    normalized = time_str.replace("Z", "+00:00")
+    ts = datetime.fromisoformat(normalized)
+    if ts.tzinfo is not None:
+        return ts.astimezone(UTC)
+    return ts.replace(tzinfo=ZoneInfo(timezone)).astimezone(UTC)
 
 
 def _safe_float(value: float | None) -> float | None:

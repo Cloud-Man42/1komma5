@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,8 +16,43 @@ from energy_core.ev_accounting.models import SiteEnergySample
 from energy_core.ev_accounting.sampler import EVSessionSampler
 from energy_core.ev_accounting.session_service import EVSessionService
 from energy_core.heartbeat.live_overview import parse_live_overview
+from energy_core.secrets import CredentialCipher
 
 logger = logging.getLogger(__name__)
+
+_CORE_OVERVIEW_FIELDS = (
+    "pv_power_w",
+    "home_consumption_w",
+    "grid_import_w",
+    "grid_export_w",
+    "battery_charge_power_w",
+    "battery_discharge_power_w",
+)
+
+
+def _overview_has_measurements(parsed: dict[str, Any]) -> bool:
+    return any(parsed.get(field) is not None for field in _CORE_OVERVIEW_FIELDS)
+
+
+def _sample_from_parsed(
+    parsed: dict[str, Any],
+    *,
+    price_sek_kwh: float,
+    duration_hours: float,
+) -> SiteEnergySample | None:
+    if not _overview_has_measurements(parsed):
+        return None
+    return SiteEnergySample(
+        pv_power_w=float(parsed.get("pv_power_w") or 0.0),
+        house_consumption_w=float(parsed.get("home_consumption_w") or 0.0),
+        grid_import_w=float(parsed.get("grid_import_w") or 0.0),
+        grid_export_w=float(parsed.get("grid_export_w") or 0.0),
+        battery_charge_w=float(parsed.get("battery_charge_power_w") or 0.0),
+        battery_discharge_w=float(parsed.get("battery_discharge_power_w") or 0.0),
+        ev_power_w=float(parsed.get("ev_actual_power_w") or 0.0),
+        electricity_price_sek_kwh=price_sek_kwh,
+        duration_hours=duration_hours,
+    )
 
 
 class EVAccountingCoordinator:
@@ -46,18 +82,9 @@ class EVAccountingCoordinator:
             parsed = parse_live_overview(live_overview)
             duration_hours = 60.0 / 3600.0  # ~1 min aligned to collector
             price = await self._current_price(db, site.id, is_sqlite, site.fallback_purchase_price_sek_kwh)
-            sample = SiteEnergySample(
-                pv_power_w=parsed.get("pv_power_w") or 0.0,
-                house_consumption_w=parsed.get("home_consumption_w") or 0.0,
-                grid_import_w=parsed.get("grid_import_w") or 0.0,
-                grid_export_w=parsed.get("grid_export_w") or 0.0,
-                battery_charge_w=parsed.get("battery_charge_power_w") or 0.0,
-                battery_discharge_w=parsed.get("battery_discharge_power_w") or 0.0,
-                ev_power_w=parsed.get("ev_actual_power_w") or 0.0,
-                electricity_price_sek_kwh=price,
-                duration_hours=duration_hours,
-            )
-            await self._sampler.sample_site_ledger(db, site=site, sample=sample, is_sqlite=is_sqlite)
+            sample = _sample_from_parsed(parsed, price_sek_kwh=price, duration_hours=duration_hours)
+            if sample is not None:
+                await self._sampler.sample_site_ledger(db, site=site, sample=sample, is_sqlite=is_sqlite)
 
         charger_repo = EvChargerRepository(db)
         chargers = await charger_repo.list_for_site(site.id)
@@ -78,7 +105,8 @@ class EVAccountingCoordinator:
         live_overview: dict | None,
         is_sqlite: bool,
     ) -> int:
-        api_key = charger.chargeamps_api_key or os.getenv("CHARGEAMPS_API_KEY", "")
+        cipher = CredentialCipher()
+        api_key = cipher.decrypt(charger.chargeamps_api_key) or os.getenv("CHARGEAMPS_API_KEY", "")
         meter_adapter = ChargeAmpsMeterAdapter.build(
             charger.chargeamp_charger_id,
             api_key=api_key,
@@ -89,14 +117,15 @@ class EVAccountingCoordinator:
 
         energy_sample = self._energy_sample_from_overview(live_overview, site, db, is_sqlite)
         await self._session_service.process_charger(db, charger=charger, site=site, meter=meter)
-        await self._sampler.sample_active_session(
-            db,
-            charger=charger,
-            site=site,
-            meter=meter,
-            energy_sample=energy_sample,
-            is_sqlite=is_sqlite,
-        )
+        if energy_sample is not None:
+            await self._sampler.sample_active_session(
+                db,
+                charger=charger,
+                site=site,
+                meter=meter,
+                energy_sample=energy_sample,
+                is_sqlite=is_sqlite,
+            )
         return 1
 
     def _energy_sample_from_overview(
@@ -105,29 +134,13 @@ class EVAccountingCoordinator:
         site: SiteModel,
         db: AsyncSession,
         is_sqlite: bool,
-    ) -> SiteEnergySample:
+    ) -> SiteEnergySample | None:
         if not live_overview:
-            return SiteEnergySample(
-                pv_power_w=0,
-                house_consumption_w=0,
-                grid_import_w=0,
-                grid_export_w=0,
-                battery_charge_w=0,
-                battery_discharge_w=0,
-                ev_power_w=0,
-                electricity_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
-                duration_hours=60.0 / 3600.0,
-            )
+            return None
         parsed = parse_live_overview(live_overview)
-        return SiteEnergySample(
-            pv_power_w=parsed.get("pv_power_w") or 0.0,
-            house_consumption_w=parsed.get("home_consumption_w") or 0.0,
-            grid_import_w=parsed.get("grid_import_w") or 0.0,
-            grid_export_w=parsed.get("grid_export_w") or 0.0,
-            battery_charge_w=parsed.get("battery_charge_power_w") or 0.0,
-            battery_discharge_w=parsed.get("battery_discharge_power_w") or 0.0,
-            ev_power_w=parsed.get("ev_actual_power_w") or 0.0,
-            electricity_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+        return _sample_from_parsed(
+            parsed,
+            price_sek_kwh=site.fallback_purchase_price_sek_kwh,
             duration_hours=60.0 / 3600.0,
         )
 
@@ -140,11 +153,12 @@ class EVAccountingCoordinator:
     ) -> float:
         from datetime import UTC, datetime
 
+        from energy_core.market_prices.currency import effective_price_sek_kwh
+
         repo = MarketPriceRepository(db, is_sqlite=is_sqlite)
         hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
         row = await repo.get_at(site_id, hour)
-        if row and row.all_in_price_sek_kwh:
-            return row.all_in_price_sek_kwh
-        if row:
-            return row.spot_price_sek_kwh
+        price_sek = effective_price_sek_kwh(row)
+        if price_sek is not None:
+            return price_sek
         return fallback

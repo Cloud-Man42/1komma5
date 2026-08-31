@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -18,6 +18,14 @@ class SiteModel(Base):
     external_system_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fallback_purchase_price_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
     export_compensation_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
+    energy_economics_country: Mapped[str] = mapped_column(String(8), nullable=False, default="SE")
+    sell_pricing_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="spot")
+    sell_provider: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    sell_adjustment_ore_per_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    sell_deduction_ore_per_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    grid_benefit_ore_per_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    historical_tax_credit_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sell_contract_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     main_fuse_a: Mapped[float | None] = mapped_column(Float, nullable=True)
     safety_margin_a: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
 
@@ -73,7 +81,7 @@ class EvChargerModel(Base):
     min_change_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     current_hysteresis_a: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     stale_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=120)
-    chargeamps_api_key: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    chargeamps_api_key: Mapped[str] = mapped_column("encrypted_chargeamps_api_key", Text, nullable=False, default="")
     last_applied_current_a: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_bridge_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_heartbeat_data_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -244,8 +252,9 @@ class MarketPriceModel(Base):
 
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    spot_price_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False)
-    all_in_price_sek_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spot_price_eur_kwh: Mapped[float] = mapped_column(Float, nullable=False)
+    all_in_price_eur_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feed_in_price_eur_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     site: Mapped[SiteModel] = relationship(back_populates="market_prices")
 
@@ -507,6 +516,9 @@ class SolarWeatherSnapshotModel(Base):
 
 class SolarTrainingSampleModel(Base):
     __tablename__ = "solar_training_samples"
+    __table_args__ = (
+        UniqueConstraint("site_id", "sample_date", "hour_utc", name="uq_solar_training_sample"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -627,8 +639,8 @@ class HeartbeatSettingsModel(Base):
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     dashboard_refresh_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     username: Mapped[str] = mapped_column(String(255), nullable=False, default="")
-    password: Mapped[str] = mapped_column(String(512), nullable=False, default="")
-    api_token: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    password: Mapped[str] = mapped_column("encrypted_password", Text, nullable=False, default="")
+    api_token: Mapped[str] = mapped_column("encrypted_api_token", Text, nullable=False, default="")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -657,7 +669,7 @@ class SpaDeviceConfigModel(Base):
     )
     integration_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     api_base_url: Mapped[str] = mapped_column(String(255), nullable=False, default="https://api.myarcticspa.com")
-    api_key: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    api_key: Mapped[str] = mapped_column("encrypted_api_key", Text, nullable=False, default="")
     external_spa_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     energy_collection_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -733,6 +745,10 @@ class ConsumerIntervalModel(Base):
 class ConsumerAggregateModel(Base):
     __tablename__ = "consumer_aggregates"
 
+    __table_args__ = (
+        UniqueConstraint("consumer_id", "granularity", "period_start", name="uq_consumer_aggregates_period"),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     consumer_id: Mapped[int] = mapped_column(ForeignKey("energy_consumers.id", ondelete="CASCADE"), nullable=False)
     granularity: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -754,6 +770,7 @@ class ConsumerAggregateModel(Base):
     measured_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     calculated_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    missing_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class SpaControlConfigModel(Base):
@@ -899,6 +916,13 @@ class VehicleProviderConnectionModel(Base):
     reconnect_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     http_429_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     decode_failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_token_refresh_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_polling_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -920,6 +944,7 @@ class VehicleModel(Base):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     charger_id: Mapped[int | None] = mapped_column(ForeignKey("ev_chargers.id", ondelete="SET NULL"), nullable=True)
+    usable_battery_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
@@ -946,6 +971,12 @@ class VehicleStateLatestModel(Base):
     charging_power_limit_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_charge_complete_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     departure_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    soc_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    charging_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    range_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     connection_state: Mapped[str] = mapped_column(String(32), nullable=False, default="DISCONNECTED")
     data_quality: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
     last_vehicle_update: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -989,8 +1020,9 @@ class VehicleChargeSessionModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
-    charger_id: Mapped[int] = mapped_column(ForeignKey("ev_chargers.id", ondelete="CASCADE"), nullable=False, index=True)
+    charger_id: Mapped[int | None] = mapped_column(ForeignKey("ev_chargers.id", ondelete="CASCADE"), nullable=True, index=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    ev_charging_session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     connected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     disconnected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     charging_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1020,6 +1052,25 @@ class VehicleChargeSessionModel(Base):
     calculation_version: Mapped[str] = mapped_column(String(32), nullable=False, default="vehicle-charge-v1")
     reconciliation_delta_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     reconciliation_note: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    location_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    charger_operator: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    charger_network: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    charging_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    connector_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    home_charging: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    energy_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    estimated_energy_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    charging_power_avg_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    charging_power_max_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    charging_cost_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    detection_confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    identification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vehicle_data_quality: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    charging_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     intervals: Mapped[list["VehicleChargingIntervalModel"]] = relationship(
         back_populates="session",
@@ -1058,6 +1109,81 @@ class VehicleChargingIntervalModel(Base):
     session: Mapped[VehicleChargeSessionModel] = relationship(back_populates="intervals")
 
 
+class VehicleAttributeObservationModel(Base):
+    __tablename__ = "vehicle_attribute_observations"
+    __table_args__ = (
+        UniqueConstraint(
+            "vehicle_id",
+            "attribute_name",
+            "source",
+            name="uq_vehicle_attribute_obs_vehicle_name_source",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vehicle_id: Mapped[int] = mapped_column(ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    attribute_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, default="WS")
+    value_type: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    masked_sample: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class VehicleApiEventModel(Base):
+    __tablename__ = "vehicle_api_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    connection_id: Mapped[int] = mapped_column(
+        ForeignKey("vehicle_provider_connections.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    endpoint: Mapped[str] = mapped_column(String(512), nullable=False)
+    method: Mapped[str] = mapped_column(String(16), nullable=False, default="GET")
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ChargingLocationModel(Base):
+    __tablename__ = "charging_locations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    classification: Mapped[str] = mapped_column(String(32), nullable=False, default="UNKNOWN")
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    expected_operator: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    expected_network: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    expected_charging_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    charger_id: Mapped[int | None] = mapped_column(ForeignKey("ev_chargers.id", ondelete="SET NULL"), nullable=True)
+    price_model: Mapped[str] = mapped_column(String(32), nullable=False, default="UNKNOWN")
+    price_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class ChargingLocationObservationModel(Base):
+    __tablename__ = "charging_location_observations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    location_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    charger_operator: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    charging_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    hit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class HeartbeatDiscoveryRunModel(Base):
     __tablename__ = "heartbeat_discovery_runs"
 
@@ -1094,6 +1220,9 @@ class HeartbeatApiObservationModel(Base):
 
 class HeartbeatEvMappingModel(Base):
     __tablename__ = "heartbeat_ev_mappings"
+    __table_args__ = (
+        UniqueConstraint("site_id", "heartbeat_ev_id", name="uq_heartbeat_ev_mappings_site_ev"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)

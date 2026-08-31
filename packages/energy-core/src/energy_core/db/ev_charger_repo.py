@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import EvChargerModel, SiteModel
+from energy_core.secrets import CredentialCipher
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,8 +86,9 @@ class EvChargerRecord:
 
 
 class EvChargerRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, credential_cipher: CredentialCipher | None = None) -> None:
         self._session = session
+        self._credentials = credential_cipher or CredentialCipher()
 
     async def list_for_site(self, site_id: int) -> list[EvChargerModel]:
         result = await self._session.scalars(
@@ -172,7 +174,7 @@ class EvChargerRepository:
             min_change_interval_seconds=min_change_interval_seconds,
             current_hysteresis_a=current_hysteresis_a,
             stale_timeout_seconds=stale_timeout_seconds,
-            chargeamps_api_key=chargeamps_api_key or "",
+            chargeamps_api_key=self._credentials.encrypt(chargeamps_api_key) if chargeamps_api_key else "",
             charging_mode=charging_mode,
             departure_time=departure_time.strip() if departure_time else None,
             target_soc_pct=target_soc_pct,
@@ -315,7 +317,7 @@ class EvChargerRepository:
         if stale_timeout_seconds is not None:
             charger.stale_timeout_seconds = stale_timeout_seconds
         if chargeamps_api_key is not None:
-            charger.chargeamps_api_key = chargeamps_api_key
+            charger.chargeamps_api_key = self._credentials.encrypt(chargeamps_api_key)
         elif clear_chargeamps_api_key:
             charger.chargeamps_api_key = ""
         if override_until is not None:
@@ -424,6 +426,9 @@ class EvChargerRepository:
     async def delete(self, charger: EvChargerModel) -> None:
         await self._session.delete(charger)
 
+    def decrypt_chargeamps_api_key(self, charger: EvChargerModel) -> str:
+        return self._credentials.decrypt(charger.chargeamps_api_key)
+
     @staticmethod
     def to_record(charger: EvChargerModel, site_slug: str) -> EvChargerRecord:
         return EvChargerRecord(
@@ -447,7 +452,7 @@ class EvChargerRepository:
             min_change_interval_seconds=charger.min_change_interval_seconds,
             current_hysteresis_a=charger.current_hysteresis_a,
             stale_timeout_seconds=charger.stale_timeout_seconds,
-            chargeamps_api_key_configured=bool(charger.chargeamps_api_key),
+            chargeamps_api_key_configured=CredentialCipher.is_configured(charger.chargeamps_api_key),
             last_applied_current_a=charger.last_applied_current_a,
             last_bridge_run_at=charger.last_bridge_run_at,
             last_heartbeat_data_at=charger.last_heartbeat_data_at,

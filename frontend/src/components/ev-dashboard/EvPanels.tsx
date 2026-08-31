@@ -30,7 +30,6 @@ import { formatSekAmount } from "@/lib/prices";
 import { EV_HALO_PRODUCT } from "@/lib/evScenePhoto";
 import { Sparkline } from "@/components/intelligence-dashboard/Sparkline";
 import {
-  averagePowerTodayKw,
   averageSessionCostOre,
   buildPlanWindows,
   deadlineHeaderLabel,
@@ -44,6 +43,7 @@ import {
   modeLabel,
   nextChargeWindowLabel,
   priceTierDisplay,
+  sessionAveragePowerW,
   sessionSourceLabel,
   totalChargeMinutesToday,
   uplinkLabel,
@@ -410,16 +410,17 @@ export function EvEnergyMixPanel({ slices, totalKwh }: { slices: EvEnergyMixSlic
 
 export function EvQuickOverviewPanel({
   maxPowerKw,
+  avgPowerKw,
   sessions,
   charger,
   bridge,
 }: {
   maxPowerKw: number;
+  avgPowerKw: number;
   sessions: EvChargingSession[];
   charger: EvCharger;
   bridge: EvBridgeStatus | null;
 }) {
-  const avgKw = averagePowerTodayKw(sessions, maxPowerKw);
   const minutes = totalChargeMinutesToday(sessions);
   const latest = sessions[0];
   return (
@@ -427,7 +428,7 @@ export function EvQuickOverviewPanel({
       <h2 className="evdash-panel-title">SNABBÖVERSIKT</h2>
       <ul className="evdash-quick-list">
         <li><span>Max effekt idag</span><strong>{maxPowerKw.toFixed(1)} kW</strong></li>
-        <li><span>Genomsnitt effekt</span><strong>{avgKw.toFixed(1)} kW</strong></li>
+        <li><span>Genomsnitt effekt</span><strong>{avgPowerKw.toFixed(1)} kW</strong></li>
         <li><span>Total laddtid idag</span><strong>{minutes} min</strong></li>
         <li><span>Senaste session</span><strong>{latest ? formatEvSessionTime(latest.started_at) : "—"}</strong></li>
         <li><span>Kabel låst</span><strong>{bridge?.vehicle_connected ? "Ja" : "Nej"}</strong></li>
@@ -460,12 +461,7 @@ export function EvSessionsTable({ sessions }: { sessions: EvChargingSession[] })
             <tbody>
               {sessions.slice(0, 8).map((session) => {
                 const source = sessionSourceLabel(session);
-                const avgW =
-                  session.intervals?.[0]?.average_charging_power_w ??
-                  (session.total_energy_kwh && session.ended_at
-                    ? (session.total_energy_kwh * 3_600_000) /
-                      Math.max(1, new Date(session.ended_at).getTime() - new Date(session.started_at).getTime())
-                    : null);
+                const avgW = sessionAveragePowerW(session);
                 return (
                   <tr key={session.id}>
                     <td>{formatEvSessionTime(session.started_at)}</td>
@@ -473,7 +469,14 @@ export function EvSessionsTable({ sessions }: { sessions: EvChargingSession[] })
                     <td>{formatEvDuration(session.started_at, session.ended_at)}</td>
                     <td>{formatEvKwh(session.total_energy_kwh)}</td>
                     <td>{session.actual_cost_sek != null ? formatSekAmount(session.actual_cost_sek).label : "—"}</td>
-                    <td><span className={`evdash-source-pill evdash-source-${source.tone}`}>{source.label}</span></td>
+                    <td>
+                      <span
+                        className={`evdash-source-pill evdash-source-${source.tone}`}
+                        title={source.detail}
+                      >
+                        {source.label}
+                      </span>
+                    </td>
                     <td>{avgW != null ? formatWatts(avgW) : "—"}</td>
                   </tr>
                 );

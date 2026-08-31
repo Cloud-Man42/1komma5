@@ -122,19 +122,68 @@ export function computeCo2SavedKg(stats: EvChargingStats | null): number | null 
   return renewableKwh * CO2_SAVED_KG_PER_RENEWABLE_KWH;
 }
 
-export function sessionSourceLabel(session: EvChargingSession): { label: string; tone: string } {
+/** Below this the source is rounding noise rather than a real contribution. */
+const SOURCE_NOISE_KWH = 0.01;
+/** Above this share the runner-up is not worth naming in a table cell. */
+const SOURCE_DOMINANT_SHARE = 0.9;
+
+export type SessionSource = { label: string; tone: string; detail: string };
+
+/**
+ * Name the delivery paths a session actually drew from, largest first.
+ *
+ * The three groups partition the four stored buckets, so nothing is counted
+ * twice: solar straight off the roof, anything routed via the battery, and
+ * grid import. Shares decide the label — a session that was 90 % grid with a
+ * trace of sun is grid, not "Sol + Batteri" as it once read. With no split at
+ * all the honest answer is that we do not know, never a guess of "Nät".
+ */
+export function sessionSourceLabel(session: EvChargingSession): SessionSource {
   const s = session.energy_sources;
-  const solar = renewableKwhFromSources(s);
-  const grid = s.grid_direct_kwh + s.grid_battery_kwh;
-  const battery = s.solar_battery_kwh + s.grid_battery_kwh;
-  if (solar > 0 && battery > 0) return { label: "Sol + Batteri", tone: "mixed" };
-  if (solar > 0 && grid <= 0.01) return { label: "Sol", tone: "solar" };
-  if (grid > 0 && solar <= 0.01) {
-    const avg = session.average_cost_sek_per_kwh;
-    return { label: avg != null && avg < 1.5 ? "Nät (lågpris)" : "Nät (dyrt)", tone: "grid" };
+  const groups = [
+    { key: "solar", label: "Sol", tone: "solar", kwh: s.solar_direct_kwh ?? 0 },
+    { key: "battery", label: "Batteri", tone: "battery", kwh: batteryKwhFromSources(s) },
+    { key: "grid", label: "Nät", tone: "grid", kwh: s.grid_direct_kwh ?? 0 },
+  ];
+  const total = groups.reduce((sum, g) => sum + g.kwh, 0);
+  if (total <= SOURCE_NOISE_KWH) {
+    return session.ended_at
+      ? { label: "Okänd", tone: "unknown", detail: "Ingen källfördelning registrerad" }
+      : { label: "Pågår", tone: "unknown", detail: "Fördelningen summeras när sessionen avslutas" };
   }
-  if (solar > 0) return { label: "Sol + Nät", tone: "mixed" };
-  return { label: "Nät", tone: "grid" };
+
+  const detail = groups
+    .filter((g) => g.kwh > SOURCE_NOISE_KWH)
+    .map((g) => {
+      const share = (g.kwh / total) * 100;
+      const kwh = g.kwh < 1 ? g.kwh.toFixed(2) : g.kwh.toFixed(1);
+      return `${g.label} ${kwh} kWh (${share < 1 ? "<1" : Math.round(share)} %)`;
+    })
+    .join(" · ");
+
+  const ranked = [...groups].sort((a, b) => b.kwh - a.kwh);
+  const [top, second] = ranked;
+
+  if (top.kwh / total >= SOURCE_DOMINANT_SHARE) {
+    if (top.key === "grid") {
+      const avg = session.average_cost_sek_per_kwh;
+      return {
+        label: avg != null ? (avg < 1.5 ? "Nät (lågpris)" : "Nät (dyrt)") : "Nät",
+        tone: "grid",
+        detail,
+      };
+    }
+    return { label: top.label, tone: top.tone, detail };
+  }
+
+  if (second.kwh <= SOURCE_NOISE_KWH) {
+    return { label: top.label, tone: top.tone, detail };
+  }
+  return {
+    label: `${top.label} ${Math.round((top.kwh / total) * 100)} % + ${second.label}`,
+    tone: "mixed",
+    detail,
+  };
 }
 
 export function buildPowerChartFromHistory(items: EnergyBalanceSnapshot[]): EvPowerChartPoint[] {
@@ -153,6 +202,38 @@ export function buildPowerChartFromHistory(items: EnergyBalanceSnapshot[]): EvPo
 
 export function maxPowerTodayKw(items: EnergyBalanceSnapshot[]): number {
   return Math.max(0, ...items.map((i) => (i.halo_power_w ?? 0) / 1000));
+}
+
+/**
+ * A session's energy spread over its elapsed time, in watts.
+ *
+ * The previous inline version divided kWh by milliseconds with a 3.6e6 factor,
+ * which is a thousand short, so a 2 kW session was labelled "2 W".
+ */
+export function sessionAveragePowerW(session: EvChargingSession): number | null {
+  if (!session.total_energy_kwh) return null;
+  const endedAt = session.ended_at ? new Date(session.ended_at).getTime() : Date.now();
+  const elapsedMs = endedAt - new Date(session.started_at).getTime();
+  if (elapsedMs <= 0) return null;
+  return (session.total_energy_kwh * 3_600_000_000) / elapsedMs;
+}
+
+/** Idle samples would drag the mean towards zero, so only count real draw. */
+const CHARGING_POWER_FLOOR_W = 50;
+
+/**
+ * Mean charging power across the samples that show the car actually drawing.
+ *
+ * Read from the same power history as the maximum. The previous version summed
+ * `session.intervals`, which the session *list* endpoint never returns, so it
+ * reported 0.0 kW even while the charger delivered 13 kW.
+ */
+export function averageChargingPowerKw(items: EnergyBalanceSnapshot[]): number {
+  const charging = items
+    .map((i) => i.halo_power_w ?? i.virtual_evse_reported_power_w ?? 0)
+    .filter((w) => w > CHARGING_POWER_FLOOR_W);
+  if (charging.length === 0) return 0;
+  return charging.reduce((sum, w) => sum + w, 0) / charging.length / 1000;
 }
 
 export function buildEnergyMixSlices(stats: EvChargingStats | null): EvEnergyMixSlice[] {
@@ -325,23 +406,6 @@ export function totalChargeMinutesToday(sessions: EvChargingSession[]): number {
     const end = session.ended_at ? new Date(session.ended_at).getTime() : Date.now();
     minutes += Math.max(0, (end - start) / 60_000);
   }
-  return minutes;
+  return Math.round(minutes);
 }
 
-export function averagePowerTodayKw(sessions: EvChargingSession[], historyMaxKw: number): number {
-  const todaySessions = sessions.filter((s) => s.started_at.startsWith(new Date().toISOString().slice(0, 10)));
-  if (todaySessions.length === 0) return historyMaxKw > 0 ? 0 : 0;
-  let weighted = 0;
-  let hours = 0;
-  for (const session of todaySessions) {
-    for (const interval of session.intervals ?? []) {
-      const durationH =
-        (new Date(interval.end_time).getTime() - new Date(interval.start_time).getTime()) / 3_600_000;
-      if (durationH > 0 && interval.average_charging_power_w) {
-        weighted += (interval.average_charging_power_w / 1000) * durationH;
-        hours += durationH;
-      }
-    }
-  }
-  return hours > 0 ? weighted / hours : 0;
-}

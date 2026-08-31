@@ -1,0 +1,31 @@
+[Unit]
+Description=EMIC Chromium kiosk dashboard
+After=network-online.target emic-caddy.service graphical.target
+Wants=emic-caddy.service
+Requires=emic-caddy.service
+
+[Service]
+Type=simple
+User=hm
+# Display settings only (URL, mode, colour). The bearer token lives in
+# /etc/emic/kiosk.env and is loaded by emic-caddy.service alone, so it never
+# enters Chromium's environment.
+EnvironmentFile=-/etc/emic/display.env
+# labwc session (Wayland). The socket lives in the user runtime dir; the helper
+# scripts resolve WAYLAND_DISPLAY themselves and wait for the compositor.
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
+# Without the session bus Chromium floods the log with DBus connect failures.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+ExecStartPre=/home/hm/emic-kiosk/set-display-mode.sh
+ExecStartPre=/home/hm/emic-kiosk/disable-blanking.sh
+# Idle/sleep is prevented by masked sleep targets plus logind IdleAction=ignore
+# (see setup-kiosk.sh). systemd-inhibit is not used here: as a system unit with
+# no logind session it gets "Interactive authentication required" from polkit.
+ExecStart=/home/hm/emic-kiosk/chromium-kiosk.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

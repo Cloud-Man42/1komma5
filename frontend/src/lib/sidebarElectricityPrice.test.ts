@@ -42,6 +42,8 @@ describe("sidebarElectricityPrice", () => {
     expect(model?.lowestOre).toBe(22);
     expect(model?.highestOre).toBe(187);
     expect(model?.currentOre).toBe(84);
+    expect(model?.yMax).toBeGreaterThan(model!.highestOre);
+    expect(model?.yMin).toBeLessThanOrEqual(model!.lowestOre);
   });
 
   it("builds falling trend toward cheaper hour", () => {

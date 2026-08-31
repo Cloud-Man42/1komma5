@@ -296,6 +296,94 @@ def test_quick_charge_starts_immediately():
     assert runtime.state == SmartChargingState.CHARGING_STABLE
 
 
+def test_stable_state_reissues_current_when_the_charger_is_not_charging():
+    """The stuck-session case: EMIC believed it was mid-session while the Halo was idle.
+
+    The runtime sits in CHARGING_STABLE at the current the optimizer still wants,
+    so the ramp has nothing to change. Returning "no change needed" there left
+    the decision at ``none`` on every cycle, so no command ever reached the
+    charger and "Starta laddning nu" could not restart it.
+    """
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime(
+        state=SmartChargingState.CHARGING_STABLE,
+        requested_current_a=16.0,
+        last_start_at=now - timedelta(seconds=3600),
+    )
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="override",
+        slow_signals=_signals(grid_import_w=4900.0, grid_export_w=0.0),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=False,
+        fault_code=None,
+        now=now,
+        override_active=True,
+    )
+    assert decision.action == "set_current"
+    assert decision.skip_apply is False
+    # Re-issued at the same current: this is a restart, not a new ramp target.
+    assert decision.requested_current_a == 16.0
+    assert runtime.state == SmartChargingState.CHARGING_STABLE
+
+
+def test_stable_state_stays_quiet_while_the_charger_is_charging():
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime(
+        state=SmartChargingState.CHARGING_STABLE,
+        requested_current_a=16.0,
+        last_start_at=now - timedelta(seconds=3600),
+    )
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="override",
+        slow_signals=_signals(grid_import_w=4900.0, grid_export_w=0.0),
+        vehicle_connected=True,
+        halo_connected=True,
+        is_charging=True,
+        fault_code=None,
+        now=now,
+        override_active=True,
+    )
+    assert decision.action == "none"
+    assert decision.skip_apply is True
+    assert runtime.state == SmartChargingState.CHARGING_STABLE
+
+
+def test_idle_charger_without_a_vehicle_is_not_restarted():
+    """Guard on the restart above: an unplugged charger must not be commanded."""
+    now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
+    runtime = SmartChargingRuntime(
+        state=SmartChargingState.CHARGING_STABLE,
+        requested_current_a=16.0,
+        last_start_at=now - timedelta(seconds=3600),
+    )
+    runtime, decision = evaluate_smart_charging(
+        runtime=runtime,
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        optimizer_target_a=16.0,
+        optimizer_reason="override",
+        slow_signals=_signals(),
+        vehicle_connected=False,
+        halo_connected=True,
+        is_charging=False,
+        fault_code=None,
+        now=now,
+        override_active=True,
+    )
+    assert decision.action == "none"
+    assert decision.reason == "no_vehicle_connected"
+    assert runtime.state == SmartChargingState.WAITING_TO_START
+
+
 def test_override_bypasses_paused_state():
     now = datetime(2026, 8, 20, 10, 0, tzinfo=UTC)
     runtime = SmartChargingRuntime(state=SmartChargingState.PAUSED)

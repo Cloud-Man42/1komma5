@@ -36,4 +36,5 @@ def normalize_reading(raw: RawEnergyReading) -> NormalizedEnergyReading:
         ev_power_w=raw.ev_power_w,
         battery_charge_w=raw.battery_charge_w,
         battery_discharge_w=raw.battery_discharge_w,
+        present_fields=raw.present_fields,
     )

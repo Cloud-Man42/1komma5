@@ -9,14 +9,26 @@ function formatKwh(value: number): string {
   return `${value.toFixed(1)} kWh`;
 }
 
-export function SpaEnergyAnalysis({ siteSlug, period }: { siteSlug: string; period: string }) {
-  const [data, setData] = useState<SpaEnergyPeriod | null>(null);
+export function SpaEnergyAnalysis({
+  siteSlug,
+  period,
+  data: externalData,
+}: {
+  siteSlug: string;
+  period: string;
+  data?: SpaEnergyPeriod | null;
+}) {
+  const [data, setData] = useState<SpaEnergyPeriod | null>(externalData ?? null);
 
   useEffect(() => {
+    if (externalData !== undefined) {
+      setData(externalData);
+      return;
+    }
     fetchSpaEnergyPeriod(siteSlug, period)
       .then(setData)
       .catch(() => setData(null));
-  }, [siteSlug, period]);
+  }, [siteSlug, period, externalData]);
 
   if (!data?.has_data) {
     return <p className="muted">Ingen energidata för vald period.</p>;

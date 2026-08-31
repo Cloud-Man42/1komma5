@@ -125,6 +125,10 @@ describe("EconomyOverview", () => {
       expect(screen.getByTestId("economy-overview")).toBeInTheDocument();
     });
 
+    await waitFor(() => {
+      expect(screen.getByLabelText("Period")).toBeInTheDocument();
+    });
+
     expect(screen.getByText("EKONOMI")).toBeInTheDocument();
     expect(screen.getByTestId("economy-metric-strip")).toBeInTheDocument();
     expect(screen.getByTestId("economy-cost-chart")).toBeInTheDocument();

@@ -139,6 +139,56 @@ async def test_site_peaks_rejects_invalid_period_and_range(client):
 
 
 @pytest.mark.asyncio
+async def test_site_financial_stats_respects_export_contract_start(client):
+    from datetime import date
+
+    ac, session_factory, settings = client
+    async with session_factory() as session:
+        site = await SiteRepository(session).get_by_slug("akarp")
+        assert site is not None
+        site.sell_contract_start_date = date(2026, 8, 25)
+        reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+        for minute in (0, 5):
+            await reading_repo.upsert_reading(
+                site.id,
+                NormalizedEnergyReading(
+                    site_slug="akarp",
+                    recorded_at=datetime(2026, 8, 18, 10, minute, tzinfo=UTC),
+                    solar_production_w=1000,
+                    consumption_w=1000,
+                    grid_import_w=250,
+                    grid_export_w=500,
+                    battery_soc_pct=50,
+                    battery_power_w=0,
+                ),
+            )
+        await session.commit()
+
+    response = await ac.get(
+        "/api/sites/akarp/financial-stats",
+        params={"period": "day", "year": 2026},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sell_contract_start_date"] == "2026-08-25"
+    day = next(stat for stat in body["stats"] if stat["period_start"] == "2026-08-18")
+    assert day["export_revenue_sek"] == 0.0
+    assert day["uncontracted_exported_kwh"] > 0
+
+
+@pytest.mark.asyncio
+async def test_update_site_can_set_export_contract_start(client):
+    ac, _, _ = client
+    res = await ac.put(
+        "/api/sites/akarp",
+        json={"sell_contract_start_date": "2026-08-25"},
+    )
+    assert res.status_code == 200
+    assert res.json()["sell_contract_start_date"] == "2026-08-25"
+
+
+@pytest.mark.asyncio
 async def test_site_financial_stats_returns_savings_and_export_revenue(client):
     ac, session_factory, settings = client
     async with session_factory() as session:

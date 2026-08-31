@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SpaEnergyAnalysis } from "@/components/SpaEnergyAnalysis";
 import { SpaEnergyBreakdown } from "@/components/SpaEnergyBreakdown";
 import { SpaEconomicsPanel } from "@/components/spa/SpaEconomicsPanel";
+import { useSpaDetailedAnalysisData } from "./useSpaDetailedAnalysisData";
 
 const PERIOD_TABS = [
   { id: "today", label: "Idag" },
@@ -13,8 +14,16 @@ const PERIOD_TABS = [
   { id: "total", label: "Totalt" },
 ] as const;
 
+function economicsPeriodForAnalysis(period: string): string {
+  if (period === "today") return "today";
+  if (period === "month" || period === "week") return "month";
+  return "year";
+}
+
 export function SpaDetailedAnalysisPanel({ siteSlug }: { siteSlug: string }) {
   const [period, setPeriod] = useState<string>("month");
+  const { energy, breakdown, economics, breakdownError, economicsError, loading } =
+    useSpaDetailedAnalysisData(siteSlug, period);
 
   return (
     <div className="sdash-analysis-panel" data-testid="spa-detailed-analysis">
@@ -32,9 +41,20 @@ export function SpaDetailedAnalysisPanel({ siteSlug }: { siteSlug: string }) {
           </button>
         ))}
       </div>
-      <SpaEnergyAnalysis siteSlug={siteSlug} period={period} />
-      <SpaEnergyBreakdown siteSlug={siteSlug} period={period} />
-      <SpaEconomicsPanel siteSlug={siteSlug} />
+      {loading ? <p className="muted">Laddar analys…</p> : null}
+      <SpaEnergyAnalysis siteSlug={siteSlug} period={period} data={energy} />
+      <SpaEnergyBreakdown
+        siteSlug={siteSlug}
+        period={period}
+        data={breakdown}
+        error={breakdownError}
+      />
+      <SpaEconomicsPanel
+        siteSlug={siteSlug}
+        period={economicsPeriodForAnalysis(period)}
+        data={economics}
+        error={economicsError}
+      />
     </div>
   );
 }

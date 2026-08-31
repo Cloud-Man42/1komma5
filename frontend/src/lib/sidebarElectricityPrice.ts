@@ -23,6 +23,7 @@ export interface SidebarElectricityPriceModel {
   highestOre: number;
   currentIndex: number;
   yMax: number;
+  yMin: number;
   trend: PriceTrendMessage | null;
   segmentCount: number;
 }
@@ -151,7 +152,9 @@ export function buildSidebarElectricityPriceModel(
     );
   }
   const currentOre = filled[currentIndex]?.ore ?? lowestOre;
-  const yMax = Math.max(200, Math.ceil(highestOre / 50) * 50);
+  const padding = Math.max(4, Math.round((highestOre - lowestOre) * 0.12));
+  const yMin = Math.max(0, lowestOre - padding);
+  const yMax = Math.max(highestOre + padding, lowestOre + 8);
 
   return {
     timezone,
@@ -160,6 +163,7 @@ export function buildSidebarElectricityPriceModel(
     lowestOre,
     highestOre,
     currentIndex,
+    yMin,
     yMax,
     trend: buildPriceTrend(filled, currentIndex, timezone),
     segmentCount: Math.max(0, filled.length - 1),

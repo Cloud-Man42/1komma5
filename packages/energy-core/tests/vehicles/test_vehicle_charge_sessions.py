@@ -9,11 +9,13 @@ import pytest
 
 from energy_core.chargers.meter_adapter import MeterSnapshot
 from energy_core.db.models import VehicleStateLatestModel
-from energy_core.vehicles.sessions.constants import SOC_TO_KWH_FACTOR
-from energy_core.vehicles.sessions.session_service import (
-    VehicleChargeSessionService,
-    estimate_battery_delta_kwh,
-)
+from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
+from energy_core.vehicles.sessions.constants import SOC_TO_KWH_FACTOR, estimate_battery_delta_kwh
+from energy_core.vehicles.sessions.session_service import VehicleChargeSessionService
+
+
+def _csi() -> ChargingSessionService:
+    return ChargingSessionService()
 
 
 def _latest(*, plugged: bool, charging: bool, soc: float = 50.0) -> VehicleStateLatestModel:
@@ -25,6 +27,7 @@ def _latest(*, plugged: bool, charging: bool, soc: float = 50.0) -> VehicleState
         is_charging=charging,
         connection_state="CONNECTED",
         data_quality="MEASURED",
+        last_vehicle_update=datetime(2026, 8, 23, 12, 0, tzinfo=UTC),
     )
 
 
@@ -65,6 +68,8 @@ async def test_session_start_on_plug_in(monkeypatch):
     repo.get_active_for_vehicle = AsyncMock(return_value=None)
     created = MagicMock(id=10)
     repo.create = AsyncMock(return_value=created)
+    ev_repo = AsyncMock()
+    ev_repo.get_active_for_charger = AsyncMock(return_value=None)
 
     vehicle = MagicMock(id=1)
     charger = MagicMock(id=2)
@@ -74,6 +79,10 @@ async def test_session_start_on_plug_in(monkeypatch):
         "energy_core.vehicles.sessions.session_service.VehicleChargeSessionRepository",
         lambda _session: repo,
     )
+    monkeypatch.setattr(
+        "energy_core.vehicles.sessions.session_service.EvChargingSessionRepository",
+        lambda _session: ev_repo,
+    )
     session_id = await service.process_vehicle(
         db,
         vehicle=vehicle,
@@ -82,6 +91,7 @@ async def test_session_start_on_plug_in(monkeypatch):
         latest=_latest(plugged=True, charging=False, soc=42.0),
         meter=_meter(kwh=100.0),
         identification_confidence=0.9,
+        csi=_csi(),
     )
 
     assert session_id == 10
@@ -102,10 +112,12 @@ async def test_session_complete_on_unplug(monkeypatch):
         start_soc=40.0,
         charging_started_at=datetime(2026, 8, 23, 11, 0, tzinfo=UTC),
         charging_stopped_at=None,
+        ev_charging_session_id=None,
     )
     repo = AsyncMock()
     repo.get_active_for_vehicle = AsyncMock(return_value=active)
     repo.update_charging_timestamps = AsyncMock()
+    repo.update_csi_fields = AsyncMock()
     repo.complete = AsyncMock()
     interval_repo = AsyncMock()
     interval_repo.list_for_session = AsyncMock(return_value=[])
@@ -131,6 +143,7 @@ async def test_session_complete_on_unplug(monkeypatch):
         latest=_latest(plugged=False, charging=False, soc=55.0),
         meter=_meter(kwh=112.5, connected=False),
         identification_confidence=0.9,
+        csi=_csi(),
     )
 
     assert session_id == 10
@@ -138,3 +151,37 @@ async def test_session_complete_on_unplug(monkeypatch):
     kwargs = repo.complete.await_args.kwargs
     assert kwargs["end_soc"] == 55.0
     assert kwargs["estimated_battery_energy_delta_kwh"] == pytest.approx(15.0 * SOC_TO_KWH_FACTOR)
+
+
+@pytest.mark.asyncio
+async def test_sampler_skips_when_ev_session_linked():
+    from energy_core.vehicles.sessions.sampler import VehicleChargeSessionSampler
+
+    service = AsyncMock()
+    service.get_runtime_state = MagicMock(return_value=MagicMock(last_sample_at=None, last_meter_kwh=None))
+    sampler = VehicleChargeSessionSampler(service)
+    session_repo = AsyncMock()
+    session_repo.get_active_for_vehicle = AsyncMock(
+        return_value=MagicMock(id=1, connected_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC), ev_charging_session_id=99)
+    )
+
+    db = AsyncMock()
+    import energy_core.vehicles.sessions.sampler as sampler_mod
+
+    original = sampler_mod.VehicleChargeSessionRepository
+    sampler_mod.VehicleChargeSessionRepository = lambda _s: session_repo
+    try:
+        await sampler.sample_active_session(
+            db,
+            vehicle=MagicMock(id=1),
+            charger=MagicMock(id=2),
+            site=MagicMock(id=3),
+            meter=_meter(kwh=10.0),
+            energy_sample=MagicMock(ev_power_w=7000),
+            is_sqlite=True,
+            is_charging=True,
+        )
+    finally:
+        sampler_mod.VehicleChargeSessionRepository = original
+
+    session_repo.get_active_for_vehicle.assert_awaited_once()

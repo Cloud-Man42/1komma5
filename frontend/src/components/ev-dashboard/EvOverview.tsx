@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton } from "@/components/dashboard";
@@ -12,17 +13,25 @@ import {
   EvMiniStatsRow,
   EvPlaceholderSection,
   EvPlanPanel,
-  EvPowerPanel,
   EvQuickOverviewPanel,
   EvSavingsPanel,
   EvSessionsTable,
-  EvStatisticsPanel,
   EvWaitingPanel,
 } from "./EvPanels";
 import type { EvStatsPeriod } from "./evDashboardHelpers";
 import { EV_SECTION_LABELS } from "./evSection";
 import { useEvDashboardData } from "./useEvDashboardData";
 import { useEvSection } from "./useEvSection";
+
+const EvPowerPanel = dynamic(
+  () => import("./EvPanels").then((mod) => ({ default: mod.EvPowerPanel })),
+  { ssr: false, loading: () => <Skeleton lines={6} /> },
+);
+
+const EvStatisticsPanel = dynamic(
+  () => import("./EvPanels").then((mod) => ({ default: mod.EvStatisticsPanel })),
+  { ssr: false, loading: () => <Skeleton lines={6} /> },
+);
 
 export function EvOverview({ siteSlug }: { siteSlug: string }) {
   const [statsPeriod, setStatsPeriod] = useState<EvStatsPeriod>("day");
@@ -79,6 +88,7 @@ export function EvOverview({ siteSlug }: { siteSlug: string }) {
         <EvEnergyMixPanel slices={data.energyMix} totalKwh={data.dayStats?.total_energy_kwh ?? 0} />
         <EvQuickOverviewPanel
           maxPowerKw={data.maxPowerKw}
+          avgPowerKw={data.avgPowerKw}
           sessions={data.sessions}
           charger={charger}
           bridge={data.bridge}

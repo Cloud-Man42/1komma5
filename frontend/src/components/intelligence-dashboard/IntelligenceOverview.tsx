@@ -4,6 +4,7 @@ import { AlertBannerList, ErrorState, Skeleton } from "@/components/dashboard";
 import type { SiteDashboard } from "@/lib/api";
 import { BestSolarWindowPanel, computeBestSolarWindow } from "./BestSolarWindow";
 import { ConfidencePanel } from "./ConfidencePanel";
+import { VehicleChargingWidget } from "@/components/dashboard/VehicleChargingWidget";
 import {
   confidenceTierSv,
   forecastConfidencePct,
@@ -105,6 +106,9 @@ export function IntelligenceOverview({
                 />
               )}
               <BestSolarWindowPanel window={solarWindow} />
+              {dashboard.vehicle_integration_enabled ? (
+                <VehicleChargingWidget vehicle={dashboard.vehicle} />
+              ) : null}
               <ConfidencePanel
                 score={forecastConfidence}
                 label={confidenceLabel}

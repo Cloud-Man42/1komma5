@@ -3,6 +3,12 @@
 import { useEffect, useState } from "react";
 import { fetchPerformanceMetrics, type PerformanceCenterMetrics } from "@/lib/api";
 
+function formatAge(seconds: number | null | undefined): string {
+  if (seconds == null) return "—";
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.round(seconds / 60)} min`;
+}
+
 export default function PerformanceCenterPage() {
   const [metrics, setMetrics] = useState<PerformanceCenterMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +39,30 @@ export default function PerformanceCenterPage() {
       <h1>Performance Center</h1>
       <p>API-anrop: {metrics.request_count}</p>
       <p>
-        Cache hit rate: {metrics.cache.hit_rate_pct}% ({metrics.cache.hits}/{metrics.cache.hits + metrics.cache.misses})
+        Cache hit rate: {metrics.cache.hit_rate_pct}% ({metrics.cache.hits}/
+        {metrics.cache.hits + metrics.cache.misses})
       </p>
+
+      <h2>Snapshot per site</h2>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Site</th>
+            <th>Ålder</th>
+            <th>Freshness</th>
+          </tr>
+        </thead>
+        <tbody>
+          {metrics.site_snapshots.map((row) => (
+            <tr key={row.site_slug}>
+              <td>{row.site_name}</td>
+              <td>{formatAge(row.age_seconds)}</td>
+              <td>{row.freshness}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
       <h2>Långsammaste routes</h2>
       <ul>
         {metrics.slowest_routes.map((row) => (

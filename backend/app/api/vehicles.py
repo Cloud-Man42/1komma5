@@ -9,26 +9,37 @@ from app.deps import get_db_session
 from app.schemas import (
     VehicleCapabilitiesResponse,
     VehicleChargeSessionListResponse,
+    VehicleChargeSessionPatchRequest,
     VehicleChargeSessionResponse,
+    VehicleChargingStatsResponse,
     VehicleCommandResponse,
     VehicleDetailResponse,
     VehicleIntegrationConfigResponse,
     VehicleIntegrationConfigUpdateRequest,
     VehicleIntegrationLoginResponse,
     VehicleIntegrationStatusResponse,
+    VehicleRawAttributesResponse,
+    VehicleAttributeObservationResponse,
+    VehicleIntegrationDiagnosticsResponse,
+    VehicleApiEventResponse,
+    VehicleIntegrationActionResponse,
     VehicleSetTargetSocRequest,
     VehicleUpdateRequest,
     VehicleHaloCorrelationResponse,
     VehicleListItemResponse,
     VehicleListResponse,
+    VehicleSyncResponse,
+    VehicleValueResponse,
     EvEnergySourcesResponse,
 )
+from energy_core.config import get_settings
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleConnectionState
 from energy_core.vehicles.mercedes.auth.errors import MercedesAuthError, MercedesTwoFactorUnsupported
 from energy_core.vehicles.mercedes.auth.login import MercedesLoginFlow
 from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.mercedes.provider import MercedesProvider
+from energy_core.vehicles.health import MercedesIntegrationHealthService
 from energy_core.vehicles.vin import mask_vin
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +49,11 @@ from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleReposi
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
 from energy_core.vehicles.commands.errors import VehicleCommandError, VehicleCommandsDisabledError
 from energy_core.vehicles.commands.service import VehicleCommandService
+from energy_core.vehicles.sync_service import VehicleSyncError, VehicleSyncService
+from energy_core.vehicles.value_envelope import build_timed_value
+from energy_core.vehicles.charging_intelligence.statistics import compute_charging_statistics
+from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
+from energy_core.db.charging_location_repo import ChargingLocationRepository
 from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecord, VehicleChargeSessionRepository
 from energy_core.db.repositories import SiteRepository
 from sqlalchemy import select
@@ -77,6 +93,19 @@ def _freshness_label(
     return "OFFLINE"
 
 
+def _guard_stale_connection_fields(
+    freshness_label: str,
+    *,
+    is_plugged_in: bool | None,
+    is_charging: bool | None,
+    charging_power_kw: float | None,
+) -> tuple[bool | None, bool | None, float | None]:
+    """Do not present plug/charge state from stale telemetry as current fact."""
+    if freshness_label not in {"INAKTUELL", "OFFLINE"}:
+        return is_plugged_in, is_charging, charging_power_kw
+    return None, None, None
+
+
 def _correlation_response(record) -> VehicleHaloCorrelationResponse | None:
     if record is None:
         return None
@@ -94,6 +123,24 @@ def _correlation_response(record) -> VehicleHaloCorrelationResponse | None:
     )
 
 
+def _value_response(
+    value: float | bool | str | None,
+    *,
+    updated_at: datetime | None,
+    estimated: bool = False,
+) -> VehicleValueResponse | None:
+    if value is None and updated_at is None:
+        return None
+    timed = build_timed_value(value, source_timestamp=updated_at, received_timestamp=updated_at, estimated=estimated)
+    return VehicleValueResponse(
+        value=timed.value if isinstance(timed.value, (float, bool, str)) or timed.value is None else str(timed.value),
+        source_timestamp=timed.source_timestamp,
+        received_timestamp=timed.received_timestamp,
+        age_seconds=timed.age_seconds,
+        quality=timed.quality.value,
+    )
+
+
 def _vehicle_item(
     vehicle,
     latest: VehicleStateLatestModel | None,
@@ -102,6 +149,17 @@ def _vehicle_item(
 ) -> VehicleListItemResponse:
     connection_state = latest.connection_state if latest else VehicleConnectionState.DISCONNECTED.value
     data_quality = latest.data_quality if latest else DataQuality.UNKNOWN.value
+    freshness_label = _freshness_label(
+        connection_state=connection_state,
+        data_quality=data_quality,
+        last_vehicle_update=latest.last_vehicle_update if latest else None,
+    )
+    is_plugged_in, is_charging, charging_power_kw = _guard_stale_connection_fields(
+        freshness_label,
+        is_plugged_in=latest.is_plugged_in if latest else None,
+        is_charging=latest.is_charging if latest else None,
+        charging_power_kw=latest.charging_power_kw if latest else None,
+    )
     return VehicleListItemResponse(
         id=vehicle.id,
         site_id=vehicle.site_id,
@@ -113,18 +171,26 @@ def _vehicle_item(
         enabled=vehicle.enabled,
         connection_state=connection_state,
         data_quality=data_quality,
-        freshness_label=_freshness_label(
-            connection_state=connection_state,
-            data_quality=data_quality,
-            last_vehicle_update=latest.last_vehicle_update if latest else None,
-        ),
+        freshness_label=freshness_label,
         state_of_charge_percent=latest.state_of_charge_percent if latest else None,
         target_soc_percent=latest.target_soc_percent if latest else None,
         electric_range_km=latest.electric_range_km if latest else None,
-        is_plugged_in=latest.is_plugged_in if latest else None,
-        is_charging=latest.is_charging if latest else None,
-        charging_power_kw=latest.charging_power_kw if latest else None,
+        is_plugged_in=is_plugged_in,
+        is_charging=is_charging,
+        charging_power_kw=charging_power_kw,
         last_vehicle_update=latest.last_vehicle_update if latest else None,
+        state_of_charge=_value_response(
+            latest.state_of_charge_percent if latest else None,
+            updated_at=getattr(latest, "soc_updated_at", None) or (latest.last_vehicle_update if latest else None),
+        ),
+        charging_power=_value_response(
+            latest.charging_power_kw if latest else None,
+            updated_at=getattr(latest, "charging_updated_at", None) or (latest.last_vehicle_update if latest else None),
+        ),
+        electric_range=_value_response(
+            latest.electric_range_km if latest else None,
+            updated_at=getattr(latest, "range_updated_at", None) or (latest.last_vehicle_update if latest else None),
+        ),
         capabilities=VehicleCapabilitiesResponse.from_rows(caps),
         halo_correlation=_correlation_response(correlation),
     )
@@ -147,6 +213,47 @@ async def list_vehicles(slug: str, session: AsyncSession = Depends(get_db_sessio
         correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
         items.append(_vehicle_item(model, latest, list(caps), correlation))
     return VehicleListResponse(site_slug=slug, vehicles=items)
+
+
+def _sync_http_error(exc: VehicleSyncError) -> HTTPException:
+    status_code = {
+        "integration_disabled": status.HTTP_503_SERVICE_UNAVAILABLE,
+        "not_authenticated": status.HTTP_503_SERVICE_UNAVAILABLE,
+        "credentials_stale": status.HTTP_422_UNPROCESSABLE_ENTITY,
+        "auth_failed": status.HTTP_502_BAD_GATEWAY,
+        "no_telemetry": status.HTTP_502_BAD_GATEWAY,
+    }.get(exc.code, status.HTTP_502_BAD_GATEWAY)
+    return HTTPException(status_code=status_code, detail=str(exc))
+
+
+@router.post("/sites/{slug}/vehicles/sync", response_model=VehicleSyncResponse)
+async def sync_vehicles(slug: str, session: AsyncSession = Depends(get_db_session)) -> VehicleSyncResponse:
+    site = await _site_or_404(session, slug)
+    service = VehicleSyncService(session, is_sqlite=get_settings().is_sqlite)
+    try:
+        states = await service.sync_site(site.id)
+    except VehicleSyncError as exc:
+        raise _sync_http_error(exc) from exc
+    await session.commit()
+    vehicles = await VehicleRepository(session).list_for_site(site.id)
+    items: list[VehicleListItemResponse] = []
+    for vehicle in vehicles:
+        latest = await VehicleRepository(session).get_latest_state(vehicle.id)
+        caps = (
+            await session.execute(
+                select(VehicleCapabilityModel).where(VehicleCapabilityModel.vehicle_id == vehicle.id)
+            )
+        ).scalars().all()
+        model = await VehicleRepository(session).get(vehicle.id)
+        assert model is not None
+        correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
+        items.append(_vehicle_item(model, latest, list(caps), correlation))
+    return VehicleSyncResponse(
+        site_slug=slug,
+        synced_at=datetime.now(UTC),
+        vehicles_updated=len(states),
+        vehicles=items,
+    )
 
 
 @router.get("/sites/{slug}/vehicles/{vehicle_id}", response_model=VehicleDetailResponse)
@@ -339,6 +446,142 @@ async def login_integration(
     return VehicleIntegrationLoginResponse(success=True, message="Mercedes login successful")
 
 
+@router.get("/sites/{slug}/vehicles/integration/raw-attributes", response_model=VehicleRawAttributesResponse)
+async def get_raw_attributes(
+    slug: str,
+    vehicle_id: int | None = None,
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleRawAttributesResponse:
+    site = await _site_or_404(session, slug)
+    settings = get_settings()
+    repo = VehicleAttributeObservationRepository(session, is_sqlite=settings.is_sqlite)
+    if vehicle_id is not None:
+        vehicle = await VehicleRepository(session).get(vehicle_id)
+        if vehicle is None or vehicle.site_id != site.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+        observations = await repo.list_for_vehicle(vehicle_id)
+        return VehicleRawAttributesResponse(
+            site_slug=slug,
+            vehicle_id=vehicle_id,
+            observations=[
+                VehicleAttributeObservationResponse(
+                    attribute_name=obs.attribute_name,
+                    source=obs.source,
+                    value_type=obs.value_type,
+                    masked_sample=obs.masked_sample,
+                    first_seen_at=obs.first_seen_at,
+                    last_seen_at=obs.last_seen_at,
+                    sample_count=obs.sample_count,
+                )
+                for obs in observations
+            ],
+        )
+    site_rows = await repo.list_for_site(site.id)
+    return VehicleRawAttributesResponse(
+        site_slug=slug,
+        observations=[
+            VehicleAttributeObservationResponse(
+                attribute_name=obs.attribute_name,
+                source=obs.source,
+                value_type=obs.value_type,
+                masked_sample=obs.masked_sample,
+                first_seen_at=obs.first_seen_at,
+                last_seen_at=obs.last_seen_at,
+                sample_count=obs.sample_count,
+            )
+            for _vehicle_id, obs in site_rows
+        ],
+    )
+
+
+@router.get("/sites/{slug}/vehicles/integration/diagnostics", response_model=VehicleIntegrationDiagnosticsResponse)
+async def get_integration_diagnostics(
+    slug: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleIntegrationDiagnosticsResponse:
+    site = await _site_or_404(session, slug)
+    repo = VehicleProviderRepository(session)
+    row = await repo.get_or_create(site.id)
+    record = repo.to_record(row)
+    latest_vehicle_update = None
+    vehicles = await VehicleRepository(session).list_for_site(site.id)
+    if vehicles:
+        latest = await VehicleRepository(session).get_latest_state(vehicles[0].id)
+        if latest is not None:
+            latest_vehicle_update = latest.last_vehicle_update
+    health = MercedesIntegrationHealthService().evaluate(
+        enabled=record.enabled,
+        connection_state=record.connection_state,
+        last_success_at=record.last_success_at,
+        last_failure_at=record.last_failure_at,
+        last_vehicle_update=latest_vehicle_update,
+        last_token_refresh_at=record.last_token_refresh_at,
+        consecutive_failures=record.consecutive_failures,
+        last_error_code=record.last_error_code,
+        last_latency_ms=record.last_latency_ms,
+        blocked_since=record.blocked_since,
+        backoff_until=record.backoff_until,
+        token_configured=bool(row.encrypted_access_token),
+    )
+    return VehicleIntegrationDiagnosticsResponse(
+        site_slug=slug,
+        health_status=health.status.value,
+        connection_state=record.connection_state,
+        last_success_at=health.last_success_at,
+        last_failure_at=health.last_failure_at,
+        last_vehicle_update=health.last_vehicle_update,
+        last_token_refresh_at=health.last_token_refresh_at,
+        consecutive_failures=health.consecutive_failures,
+        last_error_code=health.last_error_code,
+        last_latency_ms=health.last_latency_ms,
+        current_polling_interval_seconds=record.current_polling_interval_seconds,
+        vehicle_data_age_seconds=health.vehicle_data_age_seconds,
+        api_data_age_seconds=health.api_data_age_seconds,
+        recent_events=[],
+    )
+
+
+@router.post("/sites/{slug}/vehicles/integration/actions/{action}", response_model=VehicleIntegrationActionResponse)
+async def run_integration_action(
+    slug: str,
+    action: str,
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleIntegrationActionResponse:
+    site = await _site_or_404(session, slug)
+    repo = VehicleProviderRepository(session, secret_box=SecretBox.from_settings())
+    row = await repo.get_or_create(site.id)
+    if action == "reset":
+        await repo.update_runtime_status(
+            row,
+            connection_state=VehicleConnectionState.DISCONNECTED.value,
+            last_error="",
+            backoff_until=None,
+            blocked_since=None,
+            consecutive_failures=0,
+            last_error_code=None,
+        )
+        await session.commit()
+        return VehicleIntegrationActionResponse(success=True, message="Integration reset")
+    if action == "test-connection":
+        if not row.enabled:
+            raise HTTPException(status_code=400, detail="Integration is disabled")
+        return VehicleIntegrationActionResponse(success=True, message="Connection test scheduled")
+    if action == "refresh-token":
+        bundle = repo.load_token_bundle(row)
+        if bundle is None:
+            raise HTTPException(status_code=400, detail="Mercedes is not authenticated")
+        return VehicleIntegrationActionResponse(success=True, message="Token refresh scheduled")
+    if action == "fetch-vehicle-state":
+        sync = VehicleSyncService(session, secret_box=SecretBox.from_settings(), is_sqlite=get_settings().is_sqlite)
+        try:
+            await sync.sync_site(site.id)
+        except VehicleSyncError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await session.commit()
+        return VehicleIntegrationActionResponse(success=True, message="Vehicle state fetched")
+    raise HTTPException(status_code=404, detail="Unknown action")
+
+
 def _vehicle_session_response(record: VehicleChargeSessionRecord) -> VehicleChargeSessionResponse:
     return VehicleChargeSessionResponse(
         id=record.id,
@@ -369,6 +612,19 @@ def _vehicle_session_response(record: VehicleChargeSessionRecord) -> VehicleChar
         energy_quality=record.energy_quality,
         cost_quality=record.cost_quality,
         attribution_quality=record.attribution_quality,
+        location_name=record.location_name,
+        charger_operator=record.charger_operator,
+        charging_type=record.charging_type,
+        home_charging=record.home_charging,
+        energy_source=record.energy_source,
+        estimated_energy_kwh=record.estimated_energy_kwh,
+        charging_cost_sek=record.charging_cost_sek,
+        cost_source=record.cost_source,
+        detection_confidence=record.detection_confidence,
+        identification_method=record.identification_method,
+        vehicle_data_quality=record.vehicle_data_quality,
+        charging_power_avg_kw=record.charging_power_avg_kw,
+        charging_power_max_kw=record.charging_power_max_kw,
     )
 
 
@@ -411,6 +667,86 @@ async def get_current_vehicle_charge_session(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session")
     return _vehicle_session_response(record)
+
+
+@router.patch(
+    "/sites/{slug}/vehicles/{vehicle_id}/charge-sessions/{session_id}",
+    response_model=VehicleChargeSessionResponse,
+)
+async def patch_vehicle_charge_session(
+    slug: str,
+    vehicle_id: int,
+    session_id: int,
+    payload: VehicleChargeSessionPatchRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleChargeSessionResponse:
+    site = await _site_or_404(session, slug)
+    vehicle = await VehicleRepository(session).get(vehicle_id)
+    if vehicle is None or vehicle.site_id != site.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    repo = VehicleChargeSessionRepository(session)
+    record = await repo.get_by_id(session_id)
+    if record is None or record.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    fields = payload.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No fields to update")
+    updated = await repo.patch_session(session_id, identification_method="MANUAL", **fields)
+    assert updated is not None
+    if payload.location_name and record.latitude is not None and record.longitude is not None:
+        await ChargingLocationRepository(session).record_observation(
+            site_id=site.id,
+            latitude=record.latitude,
+            longitude=record.longitude,
+            radius_m=100,
+            location_name=payload.location_name,
+            charger_operator=payload.charger_operator,
+            charging_type=payload.charging_type,
+        )
+    await session.commit()
+    return _vehicle_session_response(updated)
+
+
+@router.get(
+    "/sites/{slug}/vehicles/{vehicle_id}/charging-stats",
+    response_model=VehicleChargingStatsResponse,
+)
+async def get_vehicle_charging_stats(
+    slug: str,
+    vehicle_id: int,
+    period: str = "month",
+    session: AsyncSession = Depends(get_db_session),
+) -> VehicleChargingStatsResponse:
+    if period not in {"day", "week", "month", "year"}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid period")
+    site = await _site_or_404(session, slug)
+    vehicle = await VehicleRepository(session).get(vehicle_id)
+    if vehicle is None or vehicle.site_id != site.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    stats = await compute_charging_statistics(
+        session,
+        site_id=site.id,
+        vehicle_id=vehicle_id,
+        period=period,
+    )
+    return VehicleChargingStatsResponse(
+        site_slug=slug,
+        vehicle_id=vehicle_id,
+        period=stats.period,
+        total_energy_kwh=stats.total_energy_kwh,
+        home_energy_kwh=stats.home_energy_kwh,
+        away_energy_kwh=stats.away_energy_kwh,
+        ac_energy_kwh=stats.ac_energy_kwh,
+        dc_energy_kwh=stats.dc_energy_kwh,
+        free_energy_kwh=stats.free_energy_kwh,
+        paid_energy_kwh=stats.paid_energy_kwh,
+        avg_price_sek_kwh=stats.avg_price_sek_kwh,
+        total_cost_sek=stats.total_cost_sek,
+        savings_vs_public_sek=stats.savings_vs_public_sek,
+        solar_share_pct=stats.solar_share_pct,
+        grid_share_pct=stats.grid_share_pct,
+        session_count=stats.session_count,
+    )
 
 
 def _command_http_error(exc: VehicleCommandError) -> HTTPException:

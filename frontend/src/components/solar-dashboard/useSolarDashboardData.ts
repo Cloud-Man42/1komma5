@@ -36,6 +36,7 @@ import {
 
 } from "@/lib/api";
 
+import { useOptionalSiteData } from "@/lib/SiteDataProvider";
 import { useDashboardRefreshSeconds } from "@/lib/useDashboardRefresh";
 
 import {
@@ -83,8 +84,9 @@ import {
 export function useSolarDashboardData(siteSlug: string, resolution: SolarChartResolution = 15) {
 
   const refreshSeconds = useDashboardRefreshSeconds();
+  const shared = useOptionalSiteData();
 
-  const [dashboard, setDashboard] = useState<SiteDashboard | null>(null);
+  const [dashboard, setDashboard] = useState<SiteDashboard | null>(shared?.dashboard ?? null);
 
   const [config, setConfig] = useState<SolarSiteConfig | null>(null);
 
@@ -108,14 +110,21 @@ export function useSolarDashboardData(siteSlug: string, resolution: SolarChartRe
 
   const solarEnabled = config?.enabled !== false;
 
-
+  useEffect(() => {
+    if (shared?.dashboard) {
+      setDashboard(shared.dashboard);
+    }
+  }, [shared?.dashboard]);
 
   const reload = useCallback(async () => {
     const bucketMinutes = resolution === 60 ? 60 : 5;
+    const dashboardPromise = shared?.dashboard
+      ? Promise.resolve(shared.dashboard)
+      : fetchSiteDashboard(siteSlug).catch(() => null);
 
     try {
       const [dash, solarConfig, history] = await Promise.all([
-        fetchSiteDashboard(siteSlug).catch(() => null),
+        dashboardPromise,
         fetchSolarConfig(siteSlug).catch(() => null),
         fetchSiteHistory(siteSlug, bucketMinutes, 24).catch(() => ({ readings: [] as Reading[] })),
       ]);
@@ -142,7 +151,7 @@ export function useSolarDashboardData(siteSlug: string, resolution: SolarChartRe
       setError(reason instanceof Error ? reason.message : "Kunde inte ladda solprognos.");
       setLoading(false);
     }
-  }, [siteSlug, resolution]);
+  }, [shared?.dashboard, siteSlug, resolution]);
 
 
 

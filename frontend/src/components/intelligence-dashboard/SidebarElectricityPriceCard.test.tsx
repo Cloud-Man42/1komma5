@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SidebarElectricityPriceCard } from "@/components/intelligence-dashboard/SidebarElectricityPriceCard";
 import type { MarketPricesResponse } from "@/lib/api";
 
@@ -21,6 +21,10 @@ const prices: MarketPricesResponse = {
 };
 
 describe("SidebarElectricityPriceCard", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders empty state without prices", () => {
     render(<SidebarElectricityPriceCard prices={null} />);
     expect(screen.getByText("ELPRIS IDAG")).toBeTruthy();
@@ -28,6 +32,8 @@ describe("SidebarElectricityPriceCard", () => {
   });
 
   it("renders stats and trend for today prices", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T09:15:00+02:00"));
     render(<SidebarElectricityPriceCard prices={prices} />);
     expect(screen.getByText("22 öre")).toBeTruthy();
     expect(screen.getByText("187 öre")).toBeTruthy();

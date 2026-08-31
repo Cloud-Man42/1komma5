@@ -1,7 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EnergyFlowChartPanel } from "./EnergyPanels";
 import { EnergyOverview } from "./EnergyOverview";
+
+vi.mock("next/dynamic", () => ({
+  default: () => EnergyFlowChartPanel,
+}));
 
 const mockFetchSiteDashboard = vi.fn();
 const mockFetchSiteHistory = vi.fn();

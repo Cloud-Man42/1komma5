@@ -1,39 +1,12 @@
-import {
-  isVehicleSectionActive,
-  vehicleSectionHref,
+export {
+  isVehicleSidebarNavActive,
+  VEHICLE_SIDEBAR_SUBNAV,
   VEHICLE_SECTION_LABELS,
+  vehicleSectionHref,
   type VehicleSectionId,
+  type VehicleSidebarNavId,
+  type VehicleSidebarNavItem,
 } from "./vehicleSection";
 
-export type VehicleSidebarNavId = VehicleSectionId;
-
-export interface VehicleSidebarNavItem {
-  id: VehicleSidebarNavId;
-  label: string;
-  href: (slug: string) => string;
-}
-
-export const VEHICLE_SIDEBAR_NAV: VehicleSidebarNavItem[] = (
-  [
-    "overview",
-    "charging",
-    "history",
-    "status",
-    "costs",
-    "schedule",
-    "settings",
-  ] as VehicleSectionId[]
-).map((id) => ({
-  id,
-  label: VEHICLE_SECTION_LABELS[id],
-  href: (slug: string) => vehicleSectionHref(slug, id),
-}));
-
-export function isVehicleSidebarNavActive(
-  pathname: string,
-  slug: string,
-  item: VehicleSidebarNavItem,
-  hash = "",
-): boolean {
-  return isVehicleSectionActive(pathname, slug, item.id, hash);
-}
+/** @deprecated Use VEHICLE_SIDEBAR_SUBNAV */
+export { VEHICLE_SIDEBAR_SUBNAV as VEHICLE_SIDEBAR_NAV } from "./vehicleSection";

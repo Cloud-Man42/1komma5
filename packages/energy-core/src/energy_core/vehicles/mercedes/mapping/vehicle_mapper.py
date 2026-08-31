@@ -13,11 +13,16 @@ from energy_core.vehicles.mercedes.constants import (
     ATTRIBUTE_CHARGING_POWER_KW,
     ATTRIBUTE_CHARGING_STATUS,
     ATTRIBUTE_MAX_SOC,
+    ATTRIBUTE_ODOMETER,
+    ATTRIBUTE_POSITION_LAT,
+    ATTRIBUTE_POSITION_LONG,
     ATTRIBUTE_RANGE_ELECTRIC_KM,
     ATTRIBUTE_SOC,
     STALE_TELEMETRY_SECONDS,
 )
 from energy_core.vehicles.mercedes.commands.features import MercedesCommandFeatures
+from energy_core.vehicles.mercedes.mapping.observer import MercedesAttributeRecorder
+from energy_core.vehicles.mercedes.protocol.decoder import MercedesPushMessage
 from energy_core.vehicles.vin import mask_vin
 
 logger = logging.getLogger(__name__)
@@ -57,8 +62,13 @@ class MercedesCapabilityMapper:
 
 
 class MercedesVehicleMapper:
-    def __init__(self) -> None:
+    def __init__(self, *, attribute_recorder: MercedesAttributeRecorder | None = None) -> None:
         self._attributes: dict[str, dict[str, Any]] = {}
+        self._attribute_recorder = attribute_recorder or MercedesAttributeRecorder()
+
+    @property
+    def attribute_recorder(self) -> MercedesAttributeRecorder:
+        return self._attribute_recorder
 
     def apply_discovery(
         self,
@@ -82,15 +92,19 @@ class MercedesVehicleMapper:
             data_quality=DataQuality.UNKNOWN,
         )
 
-    def apply_push(self, base: VehicleState, message: MercedesPushMessage) -> VehicleState:
+    def apply_push(self, base: VehicleState, message: MercedesPushMessage, *, source: str = "WS") -> VehicleState:
         bucket = self._attributes.setdefault(base.vehicle_id, {})
         for attr in message.attributes:
+            self._attribute_recorder.observe(name=attr.name, value=attr.value, source=source)
             bucket[attr.name.lower()] = attr.value
         now = datetime.now(UTC)
         soc = _to_float(bucket.get(ATTRIBUTE_SOC))
         target_soc = _to_float(bucket.get(ATTRIBUTE_MAX_SOC))
         range_km = _to_float(bucket.get(ATTRIBUTE_RANGE_ELECTRIC_KM.lower()))
         power_kw = _to_float(bucket.get(ATTRIBUTE_CHARGING_POWER_KW.lower()))
+        latitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LAT)) or _to_float(bucket.get("positionlat"))
+        longitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LONG)) or _to_float(bucket.get("positionlong"))
+        odometer_km = _to_float(bucket.get(ATTRIBUTE_ODOMETER)) or _to_float(bucket.get("odometer"))
         charging_status = str(bucket.get(ATTRIBUTE_CHARGING_STATUS, "") or "").lower()
         charging_active = _to_bool(bucket.get(ATTRIBUTE_CHARGING_ACTIVE))
         is_charging = charging_active
@@ -98,7 +112,16 @@ class MercedesVehicleMapper:
             is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}
         is_plugged_in = None
         if charging_status:
-            is_plugged_in = charging_status not in {"unplugged", "none", "invalid"}
+            normalized = charging_status.lower().replace("_", "").replace("-", "").replace(" ", "")
+            is_plugged_in = normalized not in {
+                "unplugged",
+                "none",
+                "invalid",
+                "notplugged",
+                "disconnected",
+                "nocharging",
+                "notconnected",
+            }
         quality = DataQuality.MEASURED if soc is not None else DataQuality.UNKNOWN
         return VehicleState(
             vehicle_id=base.vehicle_id,
@@ -109,9 +132,13 @@ class MercedesVehicleMapper:
             state_of_charge_percent=soc,
             target_soc_percent=target_soc,
             electric_range_km=range_km,
+            latitude=latitude,
+            longitude=longitude,
+            location_timestamp=now if latitude is not None and longitude is not None else base.location_timestamp,
             is_plugged_in=is_plugged_in,
             is_charging=is_charging,
             charging_power_kw=power_kw,
+            odometer_km=odometer_km,
             connection_state=VehicleConnectionState.CONNECTED,
             data_quality=quality,
             last_vehicle_update=now,

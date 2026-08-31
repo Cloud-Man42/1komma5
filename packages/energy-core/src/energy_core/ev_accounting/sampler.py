@@ -18,6 +18,7 @@ from energy_core.ev_accounting.battery_ledger import BatteryEnergyLedgerService
 from energy_core.ev_accounting.cost import EVChargingCostCalculator
 from energy_core.ev_accounting.models import BatteryLedgerState, ChargerSessionState, SiteEnergySample
 from energy_core.ev_accounting.session_service import EVSessionService
+from energy_core.ev_accounting.session_totals import session_totals_from_intervals
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +108,11 @@ class EVSessionSampler:
         )
         price = energy_sample.electricity_price_sek_kwh
         if price is None:
+            from energy_core.market_prices.currency import effective_price_sek_kwh
+
             hour = now.replace(minute=0, second=0, microsecond=0)
             mp = await price_repo.get_at(site.id, hour)
-            price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+            price = effective_price_sek_kwh(mp) or site.fallback_purchase_price_sek_kwh
 
         _, discharge_split = self._ledger_service.update(
             ledger_state,
@@ -155,6 +158,17 @@ class EVSessionSampler:
             confidence=attr_result.confidence,
             data_quality=quality if quality == "MEASURED" else attr_result.data_quality,
         )
+
+        # Roll the session row forward on every sample. Without this an ACTIVE
+        # session carries no energy until it ends, so "today" reads 0 kWh while
+        # the car is drawing 13 kW. The meter total is not final yet, hence
+        # measured_kwh=None: the intervals are the best evidence we have.
+        running = session_totals_from_intervals(
+            await interval_repo.list_for_session(active.id),
+            measured_kwh=None,
+            meter_quality="ESTIMATED",
+        )
+        await session_repo.update_totals(active.id, **running.as_fields())
 
         runtime.last_meter_kwh = meter.cumulative_kwh
         runtime.last_sample_at = now

@@ -71,12 +71,12 @@ export function SidebarElectricityPriceCard({ prices }: { prices: MarketPricesRe
               tickLine={false}
             />
             <YAxis
-              domain={[0, model.yMax]}
-              ticks={[0, 50, 100, 150, 200].filter((tick) => tick <= model.yMax)}
+              domain={[model.yMin, model.yMax]}
               tick={{ fill: "#64748b", fontSize: 10 }}
               axisLine={false}
               tickLine={false}
               width={28}
+              tickFormatter={(value) => String(Math.round(Number(value)))}
             />
             {Array.from({ length: model.segmentCount }).map((_, seg) => (
               <Line

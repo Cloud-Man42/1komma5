@@ -31,6 +31,36 @@ def test_correction_trends_toward_historical_ratio() -> None:
     assert 0.85 <= factor <= 0.95
 
 
+def test_correction_uses_site_timezone_for_hourly_factors() -> None:
+    samples = [
+        PerformanceSample(
+            timestamp=datetime(2026, 6, 1, 10, 0, tzinfo=UTC),
+            baseline_energy_kwh=10.0,
+            actual_energy_kwh=8.0,
+            performance_ratio=0.8,
+            month=6,
+            hour=12,
+            irradiance_bucket="high",
+            cloud_bucket="clear",
+        )
+        for _ in range(20)
+    ]
+    profile = build_profile(samples)
+    profile = SitePerformanceProfile(
+        site_id=1,
+        global_factor=1.0,
+        hour_factors={12: 0.8},
+        sample_count=20,
+    )
+    engine = SolarForecastCorrectionEngine()
+    # 10:00 UTC = 12:00 Europe/Stockholm in June
+    point = WeatherForecastPoint(timestamp=datetime(2026, 6, 2, 10, 0, tzinfo=UTC), gti_wm2=800.0)
+    stockholm_factor = engine.correction_factor(profile, point, point.timestamp, "Europe/Stockholm")
+    utc_factor = engine.correction_factor(profile, point, point.timestamp, "UTC")
+    assert stockholm_factor < 1.0
+    assert utc_factor == 1.0
+
+
 def test_no_history_uses_factor_one() -> None:
     profile = SitePerformanceProfile(site_id=1, sample_count=0)
     engine = SolarForecastCorrectionEngine()

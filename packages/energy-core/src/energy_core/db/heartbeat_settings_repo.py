@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import HeartbeatSettingsModel, SiteModel
 from energy_core.heartbeat_auth import HeartbeatAuthError, refresh_bearer_token, token_needs_refresh
+from energy_core.secrets import CredentialCipher
 from energy_core.heartbeat_connection import (
     CLOUD_HOST,
     CLOUD_PORT,
@@ -47,8 +48,9 @@ class SiteHeartbeatMapping:
 class HeartbeatSettingsRepository:
     SETTINGS_ID = 1
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, credential_cipher: CredentialCipher | None = None) -> None:
         self._session = session
+        self._credentials = credential_cipher or CredentialCipher()
 
     async def get_or_create(self) -> HeartbeatSettingsModel:
         row = await self._session.get(HeartbeatSettingsModel, self.SETTINGS_ID)
@@ -95,9 +97,9 @@ class HeartbeatSettingsRepository:
         row.dashboard_refresh_seconds = dashboard_refresh_seconds
         row.username = username.strip()
         if password is not None:
-            row.password = password
+            row.password = self._credentials.encrypt(password)
         if api_token is not None:
-            row.api_token = api_token
+            row.api_token = self._credentials.encrypt(api_token)
         row.updated_at = datetime.now(UTC)
         await self._session.flush()
         return self._to_record(row)
@@ -145,8 +147,8 @@ class HeartbeatSettingsRepository:
             poll_interval_seconds=row.poll_interval_seconds,
             dashboard_refresh_seconds=row.dashboard_refresh_seconds,
             username=row.username,
-            password_configured=bool(row.password),
-            api_token_configured=bool(row.api_token),
+            password_configured=CredentialCipher.is_configured(row.password),
+            api_token_configured=CredentialCipher.is_configured(row.api_token),
             api_url=build_heartbeat_api_url(
                 connection_type,
                 host=host,
@@ -159,26 +161,30 @@ class HeartbeatSettingsRepository:
 
     async def get_secrets(self) -> tuple[str, str]:
         row = await self.get_or_create()
-        return row.password, row.api_token
+        return self._credentials.decrypt(row.password), self._credentials.decrypt(row.api_token)
 
     async def ensure_api_token(self, *, force: bool = False) -> str:
         """Return a usable Bearer token, refreshing from password when needed."""
         row = await self.get_or_create()
         if row.connection_type == HeartbeatConnectionType.MOCK.value:
-            return row.api_token
+            return self._credentials.decrypt(row.api_token)
 
-        if not force and row.api_token and not token_needs_refresh(row.api_token):
-            return row.api_token
+        stored_token = row.api_token
+        api_token = self._credentials.decrypt(stored_token)
+        if not force and api_token and not token_needs_refresh(api_token):
+            return api_token
 
-        if not row.username or not row.password:
-            if row.api_token:
-                return row.api_token
+        password = self._credentials.decrypt(row.password)
+        if not row.username or not password:
+            if api_token:
+                return api_token
             raise HeartbeatAuthError(
                 "HeartBeat Bearer-token saknas och inget lösenord finns sparat för automatisk förnyelse."
             )
 
-        row.api_token = await refresh_bearer_token(row.username, row.password)
+        refreshed = await refresh_bearer_token(row.username, password)
+        row.api_token = self._credentials.encrypt(refreshed)
         row.updated_at = datetime.now(UTC)
         await self._session.flush()
         logger.info("HeartBeat Bearer token refreshed for user %s", row.username)
-        return row.api_token
+        return refreshed

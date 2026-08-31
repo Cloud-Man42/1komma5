@@ -98,12 +98,16 @@ async def site_live_stream(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
     async def event_generator():
+        last_generated_at: str | None = None
         while True:
             if await request.is_disconnected():
                 break
             payload = await _load_snapshot(session, site, settings)
-            yield f"data: {json.dumps(payload, default=str)}\n\n"
-            await asyncio.sleep(5)
+            generated_at = payload.get("generated_at")
+            if generated_at != last_generated_at:
+                last_generated_at = generated_at
+                yield f"data: {json.dumps(payload, default=str)}\n\n"
+            await asyncio.sleep(1)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

@@ -1,0 +1,1608 @@
+/*
+ * EMIC Raspberry Pi kiosk dashboard — touch-first, no sidebar.
+ *
+ * Frame: 1024x600, full-width main (998px content after padding).
+ * Rows: 56 / 127 / 163 / 149 / 47 (gap 8)
+ */
+
+/* Kiosk routes own the viewport: strip any app-level body chrome. */
+html:has(.pi-viewport),
+body:has(.pi-viewport) {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #01060e;
+}
+
+.pi-viewport {
+  --pi-fit: 1;
+
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #01060e;
+  cursor: none;
+}
+
+.pi-frame {
+  /* Colours sampled from the mockup. Brightness belongs in the panel's own OSD. */
+  --pi-page: #01060e;
+  --pi-card: #000c16;
+  --pi-card-top: #04101c;
+  --pi-sidebar-bg: #000811;
+  --pi-bar-bg: #010e1a;
+  --pi-border: #131c28;
+  --pi-border-strong: #1b2634;
+  --pi-divider: #101a26;
+
+  --pi-text: #f4f7fb;
+  --pi-text-dim: #c3d0de;
+  --pi-muted: #6e8397;
+  --pi-muted-dark: #4c5c6e;
+
+  --pi-solar: #fcc206;
+  --pi-solar-soft: #f9ae04;
+  --pi-house: #06baf8;
+  --pi-house-deep: #0b8ede;
+  --pi-battery: #c94ad4;
+  --pi-battery-deep: #ab37c3;
+  --pi-grid: #21cc3e;
+  --pi-grid-bright: #31dc47;
+  --pi-charger: #23ec50;
+  --pi-spa: #07baf7;
+  --pi-danger: #fb1d2e;
+
+  position: relative;
+  width: 1024px;
+  height: 600px;
+  flex: 0 0 auto;
+  transform: scale(var(--pi-fit));
+  transform-origin: center center;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--pi-page);
+  color: var(--pi-text);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 10px;
+  line-height: 1.25;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.pi-frame *,
+.pi-frame *::before,
+.pi-frame *::after {
+  box-sizing: border-box;
+}
+
+.pi-frame h1,
+.pi-frame h2,
+.pi-frame h3,
+.pi-frame p,
+.pi-frame dl,
+.pi-frame dd,
+.pi-frame dt,
+.pi-frame ul,
+.pi-frame li {
+  margin: 0;
+  padding: 0;
+}
+
+.pi-frame ul {
+  list-style: none;
+}
+
+/*
+ * Every readout is authored as "label above value" stacks. Declaring them block
+ * here keeps each panel's markup flat while guaranteeing the two lines never
+ * collapse onto one.
+ */
+.pi-system-title,
+.pi-system-value,
+.pi-vehicle-soc,
+.pi-vehicle-range,
+.pi-stat-value,
+.pi-stat-label,
+.pi-stat-heading,
+.pi-stat-strong,
+.pi-kpi-label,
+.pi-kpi-value,
+.pi-kpi-delta,
+.pi-spa-temp,
+.pi-spa-strong,
+.pi-mini-label,
+.pi-mini-value {
+  display: block;
+}
+
+/* ---------------------------------------------------- touch navigation */
+
+.pi-touch {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: transform 110ms ease-out, filter 110ms ease-out;
+}
+
+.pi-touch:active {
+  transform: scale(0.98);
+  filter: brightness(1.08);
+}
+
+.pi-touch-chevron {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  width: 10px;
+  height: 10px;
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.pi-home-btn {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 50%;
+  border: 1px solid rgba(6, 186, 248, 0.45);
+  background: #000a13;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(6, 186, 248, 0.12);
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 110ms ease-out, filter 110ms ease-out, border-color 110ms ease-out;
+}
+
+.pi-home-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pi-home-btn:active {
+  transform: scale(0.96);
+  filter: brightness(1.1);
+}
+
+.pi-home-btn.is-active {
+  border-color: rgba(6, 186, 248, 0.75);
+  box-shadow: 0 0 14px rgba(6, 186, 248, 0.22);
+}
+
+.pi-back-btn {
+  border: none;
+  background: transparent;
+  color: var(--pi-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 8px 10px;
+  min-height: 44px;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.pi-back-btn:active {
+  color: var(--pi-text);
+}
+
+.pi-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.pi-header-brand .pi-brand-mark {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  color: #1f8bff;
+}
+
+.pi-header-brand .pi-brand-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #fff;
+}
+
+.pi-header-brand .pi-brand-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: #5d7996;
+}
+
+.pi-header-sep-brand {
+  margin-left: 2px;
+  margin-right: 2px;
+}
+
+.pi-sys-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--pi-grid) 35%, transparent);
+  background: color-mix(in srgb, var(--pi-grid) 10%, transparent);
+  font-size: 7px;
+  font-weight: 600;
+  color: var(--pi-grid);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-sys-pill svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+}
+
+.pi-sys-pill.is-bad {
+  border-color: color-mix(in srgb, var(--pi-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--pi-danger) 10%, transparent);
+  color: var(--pi-danger);
+}
+
+/* ------------------------------------------------------------------- main */
+
+/*
+ * Row track sizes are the mockup's, scaled to 600px height:
+ *   header 58 | row1 127 | row2 163 | row3 149 | KPI bar 47
+ * with 9px gaps and 29px of trailing space below the KPI bar. The header track
+ * is 49px because grid applies the 9px gap after it too.
+ */
+.pi-main {
+  display: grid;
+  grid-template-rows: 56px 127px 163px 149px 47px;
+  row-gap: 8px;
+  padding: 0 14px 26px 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ----------------------------------------------------------------- header */
+
+.pi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 7px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pi-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pi-site-name {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+
+/* Outlined pill, as in the reference — not a bare dot + word. */
+.pi-online {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 6px;
+  border: 1px solid color-mix(in srgb, currentcolor 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  color: var(--pi-grid-bright);
+}
+
+.pi-online.is-stale {
+  color: var(--pi-solar);
+}
+
+.pi-online.is-offline {
+  color: var(--pi-danger);
+}
+
+.pi-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+  box-shadow: 0 0 5px currentcolor;
+}
+
+.pi-updated {
+  font-size: 7.5px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+.pi-header-right {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 0 0 auto;
+}
+
+/* The reference leaves a wide breath between the date block and the clock. */
+.pi-header-right .pi-clock {
+  margin-left: 36px;
+}
+
+.pi-weather {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pi-weather svg {
+  width: 21px;
+  height: 21px;
+  color: #9fb4c8;
+}
+
+.pi-weather-temp {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.pi-weather-temp span {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+.pi-weather-label {
+  display: block;
+  font-size: 7px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+.pi-header-sep {
+  width: 1px;
+  height: 26px;
+  background: #1b2634;
+}
+
+.pi-date {
+  text-align: right;
+}
+
+.pi-date-weekday {
+  display: block;
+  font-size: 7px;
+  color: var(--pi-muted);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.pi-date-full {
+  display: block;
+  font-size: 7.5px;
+  color: var(--pi-text-dim);
+  white-space: nowrap;
+}
+
+.pi-clock {
+  font-size: 23px;
+  font-weight: 300;
+  letter-spacing: -0.005em;
+  line-height: 1;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ card shells */
+
+.pi-card {
+  position: relative;
+  border: 1px solid var(--pi-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--pi-card-top) 0%, var(--pi-card) 42%);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pi-card-title {
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  /* Explicit line box: the inherited 1.25 leaves the glyphs taller than the
+     content box, so `overflow: hidden` shaved the ascenders on the Pi's fonts. */
+  line-height: 1.45;
+  color: #8c9db0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pi-panel-status {
+  font-size: 7.5px;
+  font-weight: 600;
+  color: var(--pi-grid);
+  white-space: nowrap;
+}
+
+.pi-panel-status.is-idle {
+  color: var(--pi-muted);
+}
+
+/* ------------------------------------------------------- row 1: metrics */
+
+.pi-row-metrics {
+  display: grid;
+  grid-template-columns: 197.5px 204.2px 191.8px 186.8px 187.7px;
+  column-gap: 7.5px;
+  min-height: 0;
+}
+
+.pi-metric {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  padding: 8px 9px 3px;
+}
+
+/*
+ * Title, value and sub-line all sit on one left edge, 42px in, with the large
+ * type icon occupying the gutter beside the value — the reference's alignment.
+ */
+/* Outranks the `.pi-frame h2` reset, which zeroes heading padding. */
+.pi-frame .pi-metric-title {
+  display: block;
+  margin: 0;
+  padding-left: 42px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.pi-metric-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.pi-metric-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+.pi-metric-value {
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pi-metric-value span {
+  font-size: 11.5px;
+  font-weight: 500;
+  margin-left: 4px;
+  letter-spacing: 0;
+}
+
+.pi-metric-sub {
+  margin-top: 5px;
+  padding-left: 42px;
+  font-size: 7.5px;
+  color: #7b8ea3;
+  white-space: nowrap;
+}
+
+.pi-metric-sub.is-accent {
+  font-weight: 600;
+}
+
+.pi-metric-chart {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin-top: 2px;
+}
+
+.pi-metric-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 3px;
+  font-size: 6.5px;
+  color: #55677c;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-metric.is-solar .pi-metric-title,
+.pi-metric.is-solar .pi-metric-icon {
+  color: var(--pi-solar);
+}
+
+.pi-metric.is-house .pi-metric-title,
+.pi-metric.is-house .pi-metric-icon {
+  color: var(--pi-house);
+}
+
+.pi-metric.is-battery .pi-metric-title,
+.pi-metric.is-battery .pi-metric-icon {
+  color: var(--pi-battery);
+}
+
+.pi-metric.is-grid .pi-metric-title,
+.pi-metric.is-grid .pi-metric-icon {
+  color: var(--pi-grid);
+}
+
+/* surplus gauge (5th card) */
+
+.pi-gauge-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 7px 9px 7px;
+  place-items: center;
+}
+
+/* The gauge card has no icon gutter, so its title is centred instead. */
+.pi-frame .pi-gauge-card .pi-metric-title {
+  padding-left: 0;
+  color: var(--pi-solar);
+}
+
+.pi-gauge-wrap {
+  position: relative;
+  width: 99px;
+  height: 99px;
+  align-self: center;
+  margin-top: -1px;
+}
+
+.pi-gauge-wrap svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Nudged below the ring's centre, matching the reference's optical balance. */
+.pi-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding-top: 5px;
+  text-align: center;
+}
+
+.pi-gauge-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-gauge-value span {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+.pi-gauge-label {
+  font-size: 6.5px;
+  color: var(--pi-muted);
+  line-height: 1.5;
+}
+
+.pi-gauge-state {
+  font-size: 6.5px;
+  font-weight: 600;
+  color: var(--pi-grid);
+  line-height: 1.3;
+}
+
+/* --------------------------------------- row 2: flow / vehicle / charger */
+
+.pi-row-mid {
+  display: grid;
+  grid-template-columns: 346.1px 318.9px 317.2px;
+  column-gap: 7.9px;
+  min-height: 0;
+}
+
+.pi-flow {
+  padding: 7px 9px 6px;
+}
+
+/*
+ * Absolutely positioned and non-uniformly fitted so the viewBox maps 1:1 onto
+ * the card's padding box. Node and link coordinates are then authored directly
+ * in the reference mockup's pixel space, which no amount of flex/grid nesting
+ * could reproduce reliably.
+ */
+.pi-flow-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pi-flow > .pi-card-title {
+  position: relative;
+  z-index: 1;
+}
+
+.pi-flow-empty {
+  height: calc(100% - 14px);
+}
+
+.pi-flow-label {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+
+.pi-flow-value {
+  font-size: 10.5px;
+  font-weight: 700;
+  fill: #fff;
+}
+
+.pi-flow-status {
+  font-size: 7.5px;
+}
+
+.pi-flow-house-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  fill: #fff;
+}
+
+/* vehicle */
+
+.pi-vehicle {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 7px 9px 0;
+}
+
+.pi-vehicle-body {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pi-vehicle-stats {
+  position: relative;
+  z-index: 2;
+  padding-top: 20px;
+  flex: 0 0 auto;
+}
+
+.pi-vehicle-soc {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pi-vehicle-soc span {
+  font-size: 13px;
+  font-weight: 500;
+  margin-left: 1px;
+}
+
+.pi-vehicle-range {
+  margin-top: 3px;
+  font-size: 8.5px;
+  color: #93a6bb;
+  white-space: nowrap;
+}
+
+.pi-bar-track {
+  width: 44px;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #0e1a26;
+  overflow: hidden;
+}
+
+.pi-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #148c49, #23d75c);
+}
+
+/*
+ * The EQE asset is a 3:2 studio shot whose grey backdrop and floor would read as
+ * a visible box on the card. `cover` crops to the mockup's wide framing,
+ * `lighten` drops the near-black areas, and the radial mask feathers the
+ * remaining backdrop away so the car appears to float like in the reference.
+ */
+.pi-vehicle-image {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 196px;
+  height: 88px;
+  object-fit: cover;
+  object-position: center 53%;
+  mix-blend-mode: lighten;
+  filter: brightness(1.06) saturate(0.85);
+  mask-image: radial-gradient(115% 95% at 52% 50%, #000 46%, rgba(0, 0, 0, 0.35) 74%, transparent 96%);
+  pointer-events: none;
+}
+
+.pi-mini-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--pi-divider);
+}
+
+.pi-mini-row.is-two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.pi-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 2px 7px;
+  text-align: center;
+  min-width: 0;
+}
+
+.pi-mini + .pi-mini {
+  border-left: 1px solid var(--pi-divider);
+}
+
+.pi-mini svg {
+  width: 13px;
+  height: 13px;
+  color: var(--pi-charger);
+  margin-bottom: 2px;
+}
+
+.pi-mini-label {
+  font-size: 7px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+.pi-mini-value {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--pi-text-dim);
+  white-space: nowrap;
+}
+
+.pi-mini-value.is-danger {
+  color: var(--pi-danger);
+}
+
+/* charger */
+
+.pi-charger {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 7px 9px 0;
+}
+
+.pi-charger-body {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pi-charger-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 5px;
+  flex: 0 0 auto;
+}
+
+.pi-stat-value {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pi-stat-value span {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.pi-stat-label {
+  margin-top: 2px;
+  font-size: 7px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+/* "Smart laddning" reads as a light heading in the reference, not a dim label */
+.pi-stat-heading {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--pi-text-dim);
+  white-space: nowrap;
+}
+
+.pi-stat-strong {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--pi-charger);
+  white-space: nowrap;
+}
+
+.pi-charger-image {
+  width: 112px;
+  height: 106px;
+  object-fit: contain;
+  align-self: center;
+  flex: 0 0 112px;
+  margin: -4px 4px 0 0;
+}
+
+/* ------------------------------------- row 3: spa / economy / highlights */
+
+.pi-row-bottom {
+  display: grid;
+  grid-template-columns: 300.7px 341.9px 340.2px;
+  column-gap: 7.65px;
+  min-height: 0;
+}
+
+/* spa */
+
+.pi-spa {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 7px 9px 0;
+}
+
+.pi-spa-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-top: 3px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/*
+ * The reference shows a near-neutral grey tub shell; the EMIC hero asset is a
+ * lit, cyan-water photo, so it is heavily desaturated to land on the same tone.
+ */
+.pi-spa-image {
+  width: 114px;
+  height: 68px;
+  object-fit: cover;
+  object-position: center 44%;
+  border-radius: 4px;
+  mix-blend-mode: lighten;
+  filter: saturate(0.12) brightness(0.98) contrast(1.06);
+  mask-image: radial-gradient(120% 105% at 50% 48%, #000 60%, transparent 99%);
+  flex: 0 0 114px;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.pi-spa-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+
+.pi-spa-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pi-spa-row svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.pi-spa-temp {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.pi-spa-temp span {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 3.5px;
+}
+
+.pi-spa-strong {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--pi-text-dim);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* economy */
+
+/*
+ * Track sizes follow the reference: the KPI block starts 28px below the card
+ * top and the bar chart plot is only ~36px tall, with the x-axis and legend
+ * packed beneath it.
+ */
+/*
+ * Tracks are pinned rather than `auto`: grid shrinks `auto` rows below their
+ * content when the tracks total more than the card, which silently clipped the
+ * title. The five tracks sum to the 136px content box exactly.
+ */
+.pi-economy {
+  display: grid;
+  grid-template-rows: 11px 46px 52px 15px 12px;
+  align-content: start;
+  padding: 7px 9px 6px;
+}
+
+.pi-economy-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.pi-economy-kpi {
+  display: grid;
+  grid-template-columns: 19px 1fr;
+  column-gap: 11px;
+  align-items: start;
+  min-width: 0;
+}
+
+.pi-kpi-icon {
+  width: 19px;
+  height: 19px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  flex: 0 0 auto;
+}
+
+.pi-kpi-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pi-kpi-icon.is-solar {
+  background: rgba(252, 194, 6, 0.14);
+  color: var(--pi-solar);
+}
+
+.pi-kpi-icon.is-battery {
+  background: rgba(201, 74, 212, 0.14);
+  color: var(--pi-battery);
+}
+
+.pi-kpi-icon.is-grid {
+  background: rgba(33, 204, 62, 0.14);
+  color: var(--pi-grid);
+}
+
+.pi-kpi-label {
+  font-size: 6.5px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+.pi-kpi-value {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pi-kpi-delta {
+  display: block;
+  margin-top: 3px;
+  font-size: 6.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pi-kpi-delta.is-up {
+  color: var(--pi-grid);
+}
+
+.pi-kpi-delta.is-down {
+  color: var(--pi-battery);
+}
+
+.pi-kpi-delta.is-flat {
+  color: var(--pi-muted-dark);
+}
+
+.pi-economy-chart {
+  min-height: 0;
+  margin-top: 16px;
+}
+
+.pi-bars {
+  display: grid;
+  grid-template-columns: 27px 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+.pi-bars-axis {
+  position: relative;
+  font-size: 6.5px;
+  color: #55677c;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-bars-axis span {
+  position: absolute;
+  left: 0;
+  right: 4px;
+  text-align: right;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.pi-bars-unit {
+  position: absolute;
+  top: -7px;
+  left: 0;
+  right: auto !important;
+  transform: none !important;
+}
+
+.pi-bars-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.pi-bars-xaxis {
+  display: flex;
+  justify-content: space-between;
+  padding-left: 27px;
+  margin-top: 7px;
+  font-size: 6.5px;
+  color: #55677c;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 4px;
+  font-size: 6.8px;
+  color: #8a9cb0;
+}
+
+.pi-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pi-legend i {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+/* highlights */
+
+.pi-highlights {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  padding: 7px 9px 4px;
+}
+
+/*
+ * The reference packs the five rows at a fixed 22px pitch from the top and
+ * leaves the remaining card height empty, rather than distributing them.
+ */
+.pi-highlights ul {
+  display: grid;
+  grid-auto-rows: 22px;
+  align-content: start;
+  margin-top: 3px;
+  min-height: 0;
+}
+
+.pi-highlights li {
+  display: grid;
+  grid-template-columns: 21px 1fr auto auto;
+  align-items: center;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.pi-highlights li + li {
+  border-top: 1px solid #131f2b;
+}
+
+.pi-highlight-icon {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentcolor 13%, transparent);
+}
+
+.pi-highlight-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.pi-highlight-label {
+  font-size: 8.5px;
+  color: #93a6bb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-highlight-value {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-highlight-value span {
+  font-size: 7.5px;
+  font-weight: 500;
+  margin-left: 3px;
+  color: var(--pi-text-dim);
+}
+
+.pi-highlight-detail {
+  min-width: 26px;
+  text-align: right;
+  font-size: 7px;
+  color: var(--pi-muted);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------ row 4: bottom KPI bar */
+
+.pi-kpibar {
+  display: grid;
+  grid-template-columns: 149.5px 168.4px 128.1px 171.7px 176.7px 203.7px;
+  align-items: center;
+  border: 1px solid var(--pi-border);
+  border-radius: 8px;
+  background: var(--pi-bar-bg);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pi-kpibar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 6px;
+  min-width: 0;
+}
+
+.pi-kpibar-cell + .pi-kpibar-cell {
+  border-left: 1px solid var(--pi-divider);
+}
+
+.pi-kpibar-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, currentcolor 14%, transparent);
+}
+
+.pi-kpibar-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pi-kpibar-label {
+  display: block;
+  font-size: 6.8px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: #6f8399;
+  white-space: nowrap;
+}
+
+.pi-kpibar-value {
+  display: block;
+  margin-top: 1px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pi-kpibar-value span {
+  font-size: 9px;
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+.pi-kpibar-value.is-danger {
+  color: var(--pi-danger);
+  font-size: 12px;
+}
+
+.pi-kpibar-value.is-grid {
+  color: var(--pi-grid);
+  font-size: 12px;
+}
+
+.pi-kpibar-sub {
+  display: block;
+  font-size: 7px;
+  color: #6f8399;
+  white-space: nowrap;
+}
+
+.pi-icon-solar {
+  color: var(--pi-solar);
+}
+
+.pi-icon-house {
+  color: var(--pi-house);
+}
+
+.pi-icon-battery {
+  color: var(--pi-battery);
+}
+
+.pi-icon-grid {
+  color: var(--pi-grid);
+}
+
+.pi-icon-spa {
+  color: var(--pi-spa);
+}
+
+.pi-icon-danger {
+  color: var(--pi-danger);
+}
+
+.pi-icon-muted {
+  color: var(--pi-muted);
+}
+
+/* ----------------------------------------------------- states / fallback */
+
+.pi-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 8px;
+  color: var(--pi-muted-dark);
+  letter-spacing: 0.04em;
+}
+
+.pi-banner {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.pi-banner.is-reconnecting {
+  background: rgba(252, 194, 6, 0.16);
+  border: 1px solid rgba(252, 194, 6, 0.4);
+  color: #ffd968;
+}
+
+.pi-banner.is-offline {
+  background: rgba(251, 29, 46, 0.18);
+  border: 1px solid rgba(251, 29, 46, 0.45);
+  color: #ff9c9c;
+}
+
+/* Reachable API but the readings have stopped flowing — a distinct state from
+   losing contact, so it gets its own colour rather than reusing the amber. */
+.pi-banner.is-stale {
+  background: rgba(255, 138, 43, 0.16);
+  border: 1px solid rgba(255, 138, 43, 0.42);
+  color: #ffbb85;
+}
+
+/* -------------------------------------------------------- detail views */
+
+.pi-detail-frame {
+  display: block;
+}
+
+.pi-detail {
+  display: grid;
+  /*
+   * Header, then rows that split the remaining height evenly: tiles + chart for
+   * the sections that have one, a single tall tile block for the rest. Fixed
+   * 230px rows left between 40px and a whole empty row of the 600px panel
+   * unused, depending on how many rows the section actually renders.
+   */
+  grid-template-rows: 56px minmax(0, 1fr);
+  grid-auto-rows: minmax(0, 1fr);
+  row-gap: 8px;
+  padding: 0 14px 12px 12px;
+  height: 600px;
+  box-sizing: border-box;
+}
+
+/*
+ * Nät & energiflöde. The flow diagram is the section's subject and is authored
+ * for a box of roughly 2:1 (see PiEnergyFlowDiagram), so it cannot have the full
+ * 998px width: at 998x120 it was stretched 3.4x sideways and squeezed to 0.75x
+ * vertically, which is what collapsed the node text into itself. Moving the four
+ * readouts into a column beside it leaves the diagram ~644x390 — close enough to
+ * its authored shape that scaling uniformly wastes about 30px.
+ */
+.pi-detail-section-grid {
+  grid-template-columns: 336px minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.pi-detail-section-grid > .pi-detail-header {
+  grid-column: 1 / -1;
+}
+
+.pi-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pi-detail-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.pi-detail-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.pi-detail-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.pi-detail-updated {
+  font-size: 7px;
+}
+
+.pi-detail-weather {
+  gap: 4px;
+}
+
+.pi-detail-weather svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pi-detail-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  /* Share the row's height instead of leaving the surplus at the bottom. */
+  grid-auto-rows: minmax(100px, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.pi-detail-tiles-insights {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* Stacked beside the flow diagram rather than across the top. */
+.pi-detail-tiles-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pi-detail-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 100px;
+  padding: 10px 12px;
+  border: 1px solid var(--pi-border);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--pi-card-top) 0%, var(--pi-card) 42%);
+}
+
+.pi-detail-tile-label {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--pi-muted);
+}
+
+.pi-detail-tile-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.05;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-detail-tile-value span {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 3px;
+  color: var(--pi-text-dim);
+}
+
+.pi-detail-tile-sub {
+  font-size: 8px;
+  color: var(--pi-muted);
+}
+
+.pi-detail-tile-gauge {
+  align-items: center;
+}
+
+.pi-detail-gauge-mini {
+  width: 72px;
+  height: 72px;
+}
+
+.pi-detail-gauge-mini svg {
+  width: 100%;
+  height: 100%;
+}
+
+.pi-detail-chart {
+  border: 1px solid var(--pi-border);
+  border-radius: 8px;
+  background: var(--pi-card);
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px;
+}
+
+.pi-detail-chart-svg {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+
+.pi-detail-flow-wrap {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 110px;
+  gap: 8px;
+  height: 100%;
+}
+
+.pi-detail-flow-wrap .pi-flow {
+  border: none;
+  background: transparent;
+  padding: 0;
+  /* The diagram takes the 1fr track; a floor here only pushed the chart out. */
+  min-height: 0;
+}
+
+/*
+ * The card padding is dropped above so the diagram gets the whole box, which put
+ * the title hard against the edge and `overflow: hidden` shaved its first glyph.
+ * Inset the text only — padding on the card would move the diagram with it.
+ */
+.pi-detail-flow-wrap .pi-flow > .pi-card-title {
+  padding-left: 4px;
+}
+
+.pi-detail-chart-inline {
+  min-height: 60px;
+}
+
+.pi-detail-economy {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -45,6 +45,8 @@ class VehicleChargeSessionSampler:
         active = await session_repo.get_active_for_vehicle(vehicle.id)
         if active is None:
             return
+        if active.ev_charging_session_id is not None:
+            return
         if not is_charging and (meter.power_w or 0) <= 0:
             return
 
@@ -84,9 +86,11 @@ class VehicleChargeSessionSampler:
         )
         price = energy_sample.electricity_price_sek_kwh
         if price is None:
+            from energy_core.market_prices.currency import effective_price_sek_kwh
+
             hour = now.replace(minute=0, second=0, microsecond=0)
             mp = await price_repo.get_at(site.id, hour)
-            price = mp.all_in_price_sek_kwh if mp and mp.all_in_price_sek_kwh else site.fallback_purchase_price_sek_kwh
+            price = effective_price_sek_kwh(mp) or site.fallback_purchase_price_sek_kwh
 
         _, discharge_split = self._ledger_service.update(
             ledger_state,

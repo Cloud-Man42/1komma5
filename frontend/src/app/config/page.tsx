@@ -375,6 +375,15 @@ export default function ConfigPage() {
 
       <AppleDevicesAdminPanel />
 
+      <div className="card config-card">
+        <h3 className="config-section-title">Integrationer</h3>
+        <ul className="config-notes">
+          <li>
+            <Link href="/admin/integrations/mercedes">Mercedes me — diagnostik och råattribut</Link>
+          </li>
+        </ul>
+      </div>
+
       <SitesManager />
 
       <div className="card config-card">

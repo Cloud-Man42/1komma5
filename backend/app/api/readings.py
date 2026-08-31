@@ -20,6 +20,7 @@ from energy_core.db.repositories import (
     HistoricalEnergyRepository,
     SiteRepository,
 )
+from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.forecasting import ForecastValues, build_year_forecast
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,6 +63,7 @@ async def get_site_forecast(
         timezone=site.timezone,
         fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
         export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+        sell_config=sell_price_config_from_site(site),
     )
     historical_records = await HistoricalEnergyRepository(
         session,
@@ -143,6 +145,7 @@ async def get_site_financial_stats(
         export_compensation_sek_kwh=site.export_compensation_sek_kwh,
         from_time=from_time,
         to_time=to_time,
+        sell_config=sell_price_config_from_site(site),
     )
     return FinancialStatsResponse(
         slug=slug,
@@ -150,6 +153,8 @@ async def get_site_financial_stats(
         period=period,
         fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
         export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+        sell_pricing_mode=getattr(site, "sell_pricing_mode", "spot") or "spot",
+        sell_contract_start_date=getattr(site, "sell_contract_start_date", None),
         stats=[
             FinancialStatResponse(
                 period_start=stat.period_start,
@@ -162,6 +167,12 @@ async def get_site_financial_stats(
                 export_revenue_sek=stat.export_revenue_sek,
                 grid_import_cost_sek=stat.grid_import_cost_sek,
                 market_priced_fraction=stat.market_priced_fraction,
+                energy_sale_revenue_sek=stat.energy_sale_revenue_sek,
+                grid_benefit_revenue_sek=stat.grid_benefit_revenue_sek,
+                tax_credit_sek=stat.tax_credit_sek,
+                effective_sell_price_sek_kwh=stat.effective_sell_price_sek_kwh,
+                export_spot_priced_fraction=stat.export_spot_priced_fraction,
+                uncontracted_exported_kwh=stat.uncontracted_exported_kwh,
             )
             for stat in stats
         ],

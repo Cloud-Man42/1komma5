@@ -143,3 +143,174 @@ async def test_vehicle_state_history_on_change(vehicle_session):
         assert latest is not None
         assert latest.state_of_charge_percent == 31.0
         await session.commit()
+
+
+def _measured_state(now: datetime) -> VehicleState:
+    return VehicleState(
+        vehicle_id="mock-1",
+        provider="mock",
+        manufacturer="Mercedes-Benz",
+        model="EQE",
+        state_of_charge_percent=100.0,
+        electric_range_km=604.0,
+        is_plugged_in=True,
+        is_charging=False,
+        connection_state=VehicleConnectionState.CONNECTED,
+        data_quality=DataQuality.MEASURED,
+        last_vehicle_update=now,
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+
+
+def _discovery_state(
+    connection_state: VehicleConnectionState = VehicleConnectionState.CONNECTED,
+) -> VehicleState:
+    """What MercedesProvider.discover returns: identity, no telemetry."""
+    return VehicleState(
+        vehicle_id="mock-1",
+        provider="mock",
+        manufacturer="Mercedes-Benz",
+        model="EQE",
+        connection_state=connection_state,
+        data_quality=DataQuality.UNKNOWN,
+        last_provider_update=datetime.now(UTC),
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+
+
+@pytest.fixture
+async def stored_vehicle(vehicle_session):
+    session_factory, site_id = vehicle_session
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        vehicle = await repo.upsert_vehicle(
+            site_id=site_id,
+            provider="mock",
+            external_id="mock-1",
+            vin="W1K12345678901234",
+            manufacturer="Mercedes-Benz",
+            model="EQE",
+            display_name="EQE",
+        )
+        await session.commit()
+        yield session_factory, vehicle.id
+
+
+@pytest.mark.asyncio
+async def test_a_discovery_does_not_blank_a_good_reading(stored_vehicle):
+    """Every collector restart used to wipe the car's state to OFFLINE."""
+    session_factory, vehicle_id = stored_vehicle
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _measured_state(now))
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _discovery_state())
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.state_of_charge_percent == 100.0
+        assert latest.electric_range_km == 604.0
+        assert latest.is_plugged_in is True
+        assert latest.data_quality == "MEASURED"
+        assert latest.last_vehicle_update is not None
+
+
+@pytest.mark.asyncio
+async def test_a_discovery_still_refreshes_the_link_state(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _measured_state(datetime.now(UTC)))
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _discovery_state(VehicleConnectionState.DEGRADED))
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.connection_state == "DEGRADED"
+        assert latest.state_of_charge_percent == 100.0
+
+
+@pytest.mark.asyncio
+async def test_a_first_discovery_creates_the_row_even_without_telemetry(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _discovery_state())
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.data_quality == "UNKNOWN"
+        assert latest.state_of_charge_percent is None
+
+
+@pytest.mark.asyncio
+async def test_a_real_reading_still_overwrites_an_older_one(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _measured_state(datetime.now(UTC)))
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        newer = VehicleState(
+            vehicle_id="mock-1",
+            provider="mock",
+            manufacturer="Mercedes-Benz",
+            model="EQE",
+            state_of_charge_percent=42.0,
+            electric_range_km=250.0,
+            is_plugged_in=False,
+            connection_state=VehicleConnectionState.CONNECTED,
+            data_quality=DataQuality.MEASURED,
+            last_vehicle_update=datetime.now(UTC),
+            capabilities=VehicleCapabilities(can_read_soc=True),
+        )
+        await repo.persist_state(vehicle_id, newer)
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.state_of_charge_percent == 42.0
+        assert latest.electric_range_km == 250.0
+        assert latest.is_plugged_in is False
+
+
+@pytest.mark.asyncio
+async def test_a_discovery_writes_no_history_row(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _measured_state(datetime.now(UTC)))
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _discovery_state())
+        await session.commit()
+
+    async with session_factory() as session:
+        from sqlalchemy import func, select as sa_select
+
+        from energy_core.db.models import VehicleStateHistoryModel
+
+        total = await session.execute(
+            sa_select(func.count()).select_from(VehicleStateHistoryModel).where(
+                VehicleStateHistoryModel.vehicle_id == vehicle_id
+            )
+        )
+        assert total.scalar_one() == 1

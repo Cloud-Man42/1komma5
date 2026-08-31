@@ -76,7 +76,7 @@ describe("computeBestSolarWindow", () => {
     expect(result).not.toBeNull();
     expect(result?.expectedSurplusKwh).toBeGreaterThan(2);
     expect(result?.bars.length).toBe(5);
-    expect(Math.max(...(result?.bars ?? []))).toBeCloseTo(1, 1);
+    expect(Math.max(...(result?.bars ?? []))).toBeGreaterThan(3000);
   });
 
   it("computes surplus after subtracting estimated house load", () => {

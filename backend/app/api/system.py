@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
 from app.schemas import (
     ChargeAmpsConfigResponse,
     ChargingReadinessResponse,
@@ -15,6 +15,7 @@ from app.schemas import (
 from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
 from energy_core.charging.readiness import evaluate_charging_readiness
 from energy_core.config import get_settings
+from energy_core.config import Settings
 from energy_core.db.consumer_repo import ConsumerRepository
 from energy_core.db.vehicle_repo import VehicleProviderRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
@@ -210,12 +211,32 @@ async def get_vehicle_readiness(session: AsyncSession = Depends(get_db_session))
 
 
 @router.get("/system/performance")
-async def get_performance_metrics() -> dict:
+async def get_performance_metrics(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_app_settings),
+) -> dict:
+    from energy_core.db.repositories import SiteRepository
+    from energy_core.db.snapshot_repo import SiteLiveSnapshotRepository
     from energy_core.performance.provider_metrics import get_provider_metrics_store
     from energy_core.performance.store import get_performance_store
 
     store = get_performance_store()
+    site_repo = SiteRepository(session)
+    snapshot_repo = SiteLiveSnapshotRepository(session, is_sqlite=settings.is_sqlite)
+    sites = await site_repo.list_all()
+    ages_by_site_id = {row["site_id"]: row for row in await snapshot_repo.list_snapshot_ages()}
+    site_snapshots = [
+        {
+            "site_slug": site.slug,
+            "site_name": site.name,
+            "age_seconds": ages_by_site_id.get(site.id, {}).get("age_seconds"),
+            "freshness": ages_by_site_id.get(site.id, {}).get("freshness", "MISSING"),
+            "generated_at": ages_by_site_id.get(site.id, {}).get("generated_at"),
+        }
+        for site in sites
+    ]
     return {
         **store.summary(),
         "providers": get_provider_metrics_store().summary(),
+        "site_snapshots": site_snapshots,
     }

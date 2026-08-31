@@ -11,6 +11,8 @@ import {
   type SiteDashboard,
   type AggregatedReading,
 } from "@/lib/api";
+import { useOptionalSiteData } from "@/lib/SiteDataProvider";
+import { gridFlowState, normalizeFlowValues, readingToFlowValues } from "@/lib/energyFlow";
 import {
   buildFlowChartSeries,
   buildLiveMetrics,
@@ -22,7 +24,8 @@ import {
 } from "./energyDashboardHelpers";
 
 export function useEnergyDashboardData(siteSlug: string, bucketMinutes: HistoryBucketMinutes = 15) {
-  const [dashboard, setDashboard] = useState<SiteDashboard | null>(null);
+  const shared = useOptionalSiteData();
+  const [dashboard, setDashboard] = useState<SiteDashboard | null>(shared?.dashboard ?? null);
   const [readings, setReadings] = useState<(Reading | AggregatedReading)[]>([]);
   const [peaks, setPeaks] = useState<PeakReading[]>([]);
   const [peakPeriod, setPeakPeriod] = useState<PeakPeriod>("day");
@@ -33,13 +36,23 @@ export function useEnergyDashboardData(siteSlug: string, bucketMinutes: HistoryB
   const [error, setError] = useState<string | null>(null);
   const [peaksError, setPeaksError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (shared?.dashboard) {
+      setDashboard(shared.dashboard);
+    }
+  }, [shared?.dashboard]);
+
   const timezone = dashboard?.site.timezone ?? "Europe/Stockholm";
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
+      const dashboardPromise = shared?.dashboard
+        ? Promise.resolve(shared.dashboard)
+        : fetchSiteDashboard(siteSlug).catch(() => null);
+
       const [dash, history] = await Promise.all([
-        fetchSiteDashboard(siteSlug).catch(() => null),
+        dashboardPromise,
         fetchSiteHistory(siteSlug, bucketMinutes, 24),
       ]);
       setDashboard(dash);
@@ -50,12 +63,15 @@ export function useEnergyDashboardData(siteSlug: string, bucketMinutes: HistoryB
     } finally {
       setLoading(false);
     }
-  }, [bucketMinutes, siteSlug]);
+  }, [bucketMinutes, shared?.dashboard, siteSlug]);
 
   const reloadPeaks = useCallback(async () => {
     setPeaksLoading(true);
     try {
-      const yearResponse = await fetchSitePeaks(siteSlug, "year");
+      const yearPromise = fetchSitePeaks(siteSlug, "year");
+      const periodPromise =
+        peakPeriod === "year" ? yearPromise : fetchSitePeaks(siteSlug, peakPeriod, peakYear);
+      const [yearResponse, periodResponse] = await Promise.all([yearPromise, periodPromise]);
       const years = yearResponse.peaks
         .map((p) => Number(p.period_start))
         .filter(Number.isFinite)
@@ -64,13 +80,7 @@ export function useEnergyDashboardData(siteSlug: string, bucketMinutes: HistoryB
       if (years.length > 0 && !years.includes(peakYear)) {
         setPeakYear(years[0]);
       }
-
-      if (peakPeriod === "year") {
-        setPeaks(yearResponse.peaks);
-      } else {
-        const response = await fetchSitePeaks(siteSlug, peakPeriod, peakYear);
-        setPeaks(response.peaks);
-      }
+      setPeaks(periodResponse.peaks);
       setPeaksError(null);
     } catch (reason) {
       setPeaks([]);
@@ -115,10 +125,10 @@ export function useEnergyDashboardData(siteSlug: string, bucketMinutes: HistoryB
   );
   const sparkGrid = useMemo(
     () =>
-      sparklineFromReadings(
-        readings,
-        (r) => (r.grid_export_w ?? 0) - (r.grid_import_w ?? 0),
-      ),
+      sparklineFromReadings(readings, (r) => {
+        const normalized = normalizeFlowValues(readingToFlowValues(r as Reading));
+        return Math.abs(gridFlowState(normalized.gridImportW, normalized.gridExportW).signedW);
+      }),
     [readings],
   );
 

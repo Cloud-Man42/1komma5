@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<title>EMIC panel colour test</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  body {
+    width: 1024px; height: 600px;
+    font-family: "DejaVu Sans", sans-serif;
+    color: #fff;
+    display: grid;
+    grid-template-rows: 26px 1fr 1fr 1fr;
+  }
+  h1 { margin: 0; padding: 5px 8px; font-size: 13px; font-weight: 600; letter-spacing: .04em; }
+  .row { display: grid; }
+  .row-6 { grid-template-columns: repeat(6, 1fr); }
+  .row-8 { grid-template-columns: repeat(8, 1fr); }
+  .sw { display: grid; align-content: end; justify-items: center; padding-bottom: 6px; }
+  .sw b {
+    font-size: 15px; font-weight: 700;
+    color: #000;
+    background: rgba(255,255,255,.82);
+    padding: 1px 7px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+  <h1>EMIC PANELTEST — fotografera hela skarmen</h1>
+
+  <div class="row row-6">
+    <div class="sw" style="background:#ff0000"><b>RED</b></div>
+    <div class="sw" style="background:#00ff00"><b>GREEN</b></div>
+    <div class="sw" style="background:#0000ff"><b>BLUE</b></div>
+    <div class="sw" style="background:#00ffff"><b>CYAN</b></div>
+    <div class="sw" style="background:#ff00ff"><b>MAGENTA</b></div>
+    <div class="sw" style="background:#ffff00"><b>YELLOW</b></div>
+  </div>
+
+  <div class="row row-6">
+    <div class="sw" style="background:#ffffff"><b>WHITE</b></div>
+    <div class="sw" style="background:#bfbfbf"><b>GREY 75</b></div>
+    <div class="sw" style="background:#808080"><b>GREY 50</b></div>
+    <div class="sw" style="background:#404040"><b>GREY 25</b></div>
+    <div class="sw" style="background:#101010"><b>NEAR BLACK</b></div>
+    <div class="sw" style="background:#000000"><b>BLACK</b></div>
+  </div>
+
+  <div class="row row-8">
+    <div class="sw" style="background:#fcc206"><b>SOL</b></div>
+    <div class="sw" style="background:#06baf8"><b>HUS</b></div>
+    <div class="sw" style="background:#c94ad4"><b>BATT</b></div>
+    <div class="sw" style="background:#21cc3e"><b>NAT</b></div>
+    <div class="sw" style="background:#23ec50"><b>LADD</b></div>
+    <div class="sw" style="background:#07baf7"><b>SPA</b></div>
+    <div class="sw" style="background:#fb1d2e"><b>LARM</b></div>
+    <div class="sw" style="background:#f4f7fb"><b>TEXT</b></div>
+  </div>
+</body>
+</html>

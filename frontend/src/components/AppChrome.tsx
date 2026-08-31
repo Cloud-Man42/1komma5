@@ -7,6 +7,12 @@ import { APP_ACRONYM, APP_NAME } from "@/lib/brand";
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isSiteDashboard = pathname.startsWith("/sites/");
+  const isPiDisplay = pathname.startsWith("/display/");
+
+  // The kiosk display owns the whole viewport and must not inherit app chrome.
+  if (isPiDisplay) {
+    return <>{children}</>;
+  }
 
   if (isSiteDashboard) {
     return <div className="emic-app emic-app-dashboard">{children}</div>;

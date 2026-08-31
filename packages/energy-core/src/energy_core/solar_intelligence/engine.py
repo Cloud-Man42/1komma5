@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
 from energy_core.solar_forecast.constants import INTERVAL_HOURS
+from energy_core.solar_forecast.intervals import infer_interval_hours_from_timestamps, power_to_energy_kwh
 from energy_core.solar_forecast.types import confidence_label_from_score
 from energy_core.solar_intelligence.calibration import SolarCalibrationService, build_feature_vector
 from energy_core.solar_intelligence.confidence import confidence_score_from_metrics, radiation_confidence_for_location
@@ -23,6 +24,39 @@ from energy_core.solar_intelligence.types import (
 from energy_core.solar_forecast.types import SolarSiteConfiguration
 
 logger = logging.getLogger(__name__)
+
+
+def _hour_utc(ts: datetime) -> datetime:
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    ts = ts.astimezone(UTC)
+    return ts.replace(minute=0, second=0, microsecond=0)
+
+
+def _merge_radiation_samples(primary, fallback, *, from_ts: datetime, to_ts: datetime):
+    merged: dict[tuple[datetime, str], object] = {}
+    for sample in fallback:
+        hour = _hour_utc(sample.ts_utc)
+        if from_ts <= hour <= to_ts:
+            merged[(hour, sample.parameter)] = sample
+    for sample in primary:
+        hour = _hour_utc(sample.ts_utc)
+        if from_ts <= hour <= to_ts:
+            merged[(hour, sample.parameter)] = sample
+    return sorted(merged.values(), key=lambda s: (s.ts_utc, s.parameter))
+
+
+def _merge_weather_snapshots(primary, fallback, *, from_ts: datetime, to_ts: datetime):
+    merged: dict[datetime, object] = {}
+    for snapshot in fallback:
+        hour = _hour_utc(snapshot.ts_utc)
+        if from_ts <= hour <= to_ts:
+            merged[hour] = snapshot
+    for snapshot in primary:
+        hour = _hour_utc(snapshot.ts_utc)
+        if from_ts <= hour <= to_ts:
+            merged[hour] = snapshot
+    return sorted(merged.values(), key=lambda s: s.ts_utc)
 
 
 class SolarIntelligenceEngine:
@@ -55,11 +89,14 @@ class SolarIntelligenceEngine:
         now = now or datetime.now(UTC)
         status = ForecastStatus.HEALTHY
         weather_source = getattr(self._radiation, "provider_name", "unknown")
+        tz = ZoneInfo(site.timezone)
+        local_today = now.astimezone(tz).date()
+        local_day_start = datetime.combine(local_today, time.min, tzinfo=tz).astimezone(UTC)
 
         try:
             to_ts = now + timedelta(hours=self._horizon_hours)
-            radiation = await self._fetch_radiation(site, now, to_ts)
-            weather = await self._fetch_weather(site, now, to_ts)
+            radiation = await self._fetch_radiation(site, local_day_start, to_ts)
+            weather = await self._fetch_weather(site, local_day_start, to_ts)
             if not radiation:
                 status = ForecastStatus.DEGRADED
                 weather_source = "open-meteo"
@@ -101,7 +138,8 @@ class SolarIntelligenceEngine:
         hourly_points: list[HourlyForecastPoint] = []
         for row in hourly_inputs:
             ts = row["ts_utc"]
-            if ts < now - timedelta(minutes=30):
+            local_date = ts.astimezone(tz).date()
+            if local_date < local_today:
                 continue
             ghi = float(row.get("ghi_wm2") or 0.0)
             power_w, poa = physical.expected_power_w(
@@ -132,15 +170,18 @@ class SolarIntelligenceEngine:
                 )
             )
 
-        local_today = now.astimezone(ZoneInfo(site.timezone)).date()
-        today_kwh, tomorrow_kwh, day_after_kwh = _daily_totals(hourly_points, local_today, site.timezone)
+        local_today = now.astimezone(tz).date()
+        interval_h = infer_interval_hours_from_timestamps([p.timestamp for p in hourly_points])
+        today_kwh, tomorrow_kwh, day_after_kwh = _daily_totals(
+            hourly_points, local_today, site.timezone, interval_h
+        )
         physical_today = sum(
-            p.physical_w / 1000.0 * INTERVAL_HOURS
+            power_to_energy_kwh(p.physical_w, interval_h)
             for p in hourly_points
             if p.timestamp.astimezone(ZoneInfo(site.timezone)).date() == local_today
         )
         remaining = sum(
-            p.corrected_w / 1000.0 * INTERVAL_HOURS
+            power_to_energy_kwh(p.corrected_w, interval_h)
             for p in hourly_points
             if p.timestamp > now and p.timestamp.astimezone(ZoneInfo(site.timezone)).date() == local_today
         )
@@ -189,33 +230,59 @@ class SolarIntelligenceEngine:
         )
 
     async def _fetch_radiation(self, site, from_ts, to_ts):
+        primary: list = []
         try:
             data = await self._radiation.fetch_radiation(
                 latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts
             )
             if data:
-                return data
+                primary = data
         except Exception:
             logger.warning("STRÅNG failed, using fallback site=%s", site.site_id)
+
+        fallback: list = []
         if self._fallback:
-            return await self._fallback.fetch_radiation(
-                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts, timezone=site.timezone
-            )
+            try:
+                fallback = await self._fallback.fetch_radiation(
+                    latitude=site.latitude,
+                    longitude=site.longitude,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                    timezone=site.timezone,
+                )
+            except Exception:
+                logger.warning("Open-Meteo radiation fallback failed site=%s", site.site_id)
+
+        if primary or fallback:
+            return _merge_radiation_samples(primary, fallback, from_ts=from_ts, to_ts=to_ts)
         return []
 
     async def _fetch_weather(self, site, from_ts, to_ts):
+        primary: list = []
         try:
             data = await self._weather.fetch_weather(
                 latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts
             )
             if data:
-                return data
+                primary = data
         except Exception:
             logger.warning("SNOW failed, using fallback site=%s", site.site_id)
+
+        fallback: list = []
         if self._fallback:
-            return await self._fallback.fetch_weather(
-                latitude=site.latitude, longitude=site.longitude, from_ts=from_ts, to_ts=to_ts, timezone=site.timezone
-            )
+            try:
+                fallback = await self._fallback.fetch_weather(
+                    latitude=site.latitude,
+                    longitude=site.longitude,
+                    from_ts=from_ts,
+                    to_ts=to_ts,
+                    timezone=site.timezone,
+                )
+            except Exception:
+                logger.warning("Open-Meteo weather fallback failed site=%s", site.site_id)
+
+        if primary or fallback:
+            return _merge_weather_snapshots(primary, fallback, from_ts=from_ts, to_ts=to_ts)
         return []
 
 
@@ -252,12 +319,17 @@ def _learned_correction(champion, ts, row, site, array) -> float:
     return max(-0.5, min(0.5, corr))
 
 
-def _daily_totals(hourly: list[HourlyForecastPoint], today: date, timezone: str) -> tuple[float, float | None, float | None]:
+def _daily_totals(
+    hourly: list[HourlyForecastPoint],
+    today: date,
+    timezone: str,
+    interval_hours: float,
+) -> tuple[float, float | None, float | None]:
     tz = ZoneInfo(timezone)
     by_day: dict[date, float] = {}
     for p in hourly:
         d = p.timestamp.astimezone(tz).date()
-        by_day[d] = by_day.get(d, 0.0) + p.corrected_w / 1000.0 * INTERVAL_HOURS
+        by_day[d] = by_day.get(d, 0.0) + power_to_energy_kwh(p.corrected_w, interval_hours)
     tomorrow = today + timedelta(days=1)
     day_after = today + timedelta(days=2)
     return by_day.get(today, 0.0), by_day.get(tomorrow), by_day.get(day_after)

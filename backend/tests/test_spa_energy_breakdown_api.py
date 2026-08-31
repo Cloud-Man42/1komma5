@@ -51,6 +51,28 @@ async def _seed_spa_intervals(session_factory):
 
 
 @pytest.mark.asyncio
+async def test_spa_energy_get_does_not_rebuild_intervals(client, monkeypatch):
+    ac, session_factory, _ = client
+    await ac.get("/api/sites/akarp/spa/status")
+    await _seed_spa_intervals(session_factory)
+
+    called = {"rebuild": False}
+
+    async def _fake_rebuild(*args, **kwargs):
+        called["rebuild"] = True
+        return 0
+
+    monkeypatch.setattr(
+        "energy_core.consumer_accounting.coordinator.ConsumerAccountingCoordinator.rebuild_spa_intervals_for_site",
+        _fake_rebuild,
+    )
+
+    res = await ac.get("/api/sites/akarp/spa/energy/month")
+    assert res.status_code == 200
+    assert called["rebuild"] is False
+
+
+@pytest.mark.asyncio
 async def test_spa_energy_breakdown_and_cost_split(client):
     ac, session_factory, _ = client
     await ac.get("/api/sites/akarp/spa/status")

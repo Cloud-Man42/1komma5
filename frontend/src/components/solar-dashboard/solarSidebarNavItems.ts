@@ -1,30 +1,11 @@
-import {
-  isSolarSectionActive,
-  solarSectionHref,
-  SOLAR_SECTION_LABELS,
-  type SolarSectionId,
-} from "./solarSection";
-
-export interface SolarSidebarNavItem {
-  id: SolarSectionId;
-  label: string;
-  href: (slug: string) => string;
-}
-
-export const SOLAR_SIDEBAR_NAV: SolarSidebarNavItem[] = (
-  ["overview", "forecast", "tomorrow", "weather", "performance", "accuracy"] as SolarSectionId[]
-).map((id) => ({
-  id,
-  label: SOLAR_SECTION_LABELS[id],
-  href: (slug: string) => solarSectionHref(slug, id),
-}));
-
-export function isSolarSidebarNavActive(
-  pathname: string,
-  slug: string,
-  item: SolarSidebarNavItem,
-  hash = "",
-): boolean {
-  return isSolarSectionActive(pathname, slug, item.id, hash);
-}
-
+export {
+  isSolarSidebarNavActive,
+  SOLAR_SIDEBAR_SUBNAV,
+  SOLAR_SECTION_LABELS,
+  solarSectionHref,
+  type SolarSectionId,
+  type SolarSidebarNavItem,
+} from "./solarSection";
+
+/** @deprecated Use SOLAR_SIDEBAR_SUBNAV */
+export { SOLAR_SIDEBAR_SUBNAV as SOLAR_SIDEBAR_NAV } from "./solarSection";

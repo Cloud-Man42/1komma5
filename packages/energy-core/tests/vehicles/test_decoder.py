@@ -41,3 +41,31 @@ def test_decoder_maps_vep_update_attributes():
     assert mapped is not None
     assert mapped.vin == "W1KTESTVIN1234567"
     assert any(attr.name == ATTRIBUTE_SOC and attr.value == 55 for attr in mapped.attributes)
+
+
+def test_decoder_maps_vehicle_status_rest_payload():
+    decoder = MercedesMessageDecoder()
+    status_msg = vehicle_events_pb2.VehicleStatus()
+    status_msg.vin = "W1KTESTVIN1234567"
+    status_msg.attributes["soc"].int_value = 63
+    status_msg.attributes["chargingstatus"].string_value = "unplugged"
+    mapped = decoder.decode_vehicle_status(status_msg.SerializeToString())
+    assert mapped is not None
+    assert mapped.vin == "W1KTESTVIN1234567"
+    assert any(attr.name == ATTRIBUTE_SOC and attr.value == 63 for attr in mapped.attributes)
+    assert any(attr.name == "chargingstatus" and attr.value == "unplugged" for attr in mapped.attributes)
+
+
+def test_decoder_vehicle_status_returns_none_for_invalid_payload():
+    decoder = MercedesMessageDecoder()
+    assert decoder.decode_vehicle_status(b"not-protobuf") is None
+
+
+def test_decoder_reads_display_value_when_numeric_oneof_unset():
+    decoder = MercedesMessageDecoder()
+    status_msg = vehicle_events_pb2.VehicleStatus()
+    status_msg.vin = "W1KTESTVIN1234567"
+    status_msg.attributes["chargingstatus"].display_value = "Unplugged"
+    mapped = decoder.decode_vehicle_status(status_msg.SerializeToString())
+    assert mapped is not None
+    assert any(attr.name == "chargingstatus" and attr.value == "Unplugged" for attr in mapped.attributes)

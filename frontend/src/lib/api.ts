@@ -68,6 +68,22 @@ export interface DashboardEvSection extends DashboardSectionMeta {
   next_planned_charge_at: string | null;
 }
 
+export interface DashboardVehicleSection extends DashboardSectionMeta {
+  available: boolean;
+  display_name: string | null;
+  mode: "parked" | "charging" | string;
+  state_of_charge_percent: number | null;
+  electric_range_km: number | null;
+  is_plugged_in: boolean | null;
+  is_charging: boolean | null;
+  charging_power_kw: number | null;
+  location_name: string | null;
+  charging_type: string | null;
+  session_energy_kwh: number | null;
+  data_quality: string | null;
+  freshness_label: string | null;
+}
+
 export interface DashboardSolarSection extends DashboardSectionMeta {
   expected_today_kwh: number | null;
   remaining_kwh: number | null;
@@ -103,6 +119,7 @@ export interface SiteDashboard {
   live: DashboardLiveSection | null;
   today: DashboardTodaySection | null;
   ev: DashboardEvSection | null;
+  vehicle: DashboardVehicleSection | null;
   solar: DashboardSolarSection | null;
   price: DashboardPriceSection | null;
   optimization: DashboardOptimizationSection | null;
@@ -505,7 +522,15 @@ export interface FinancialStat {
   export_revenue_sek: number;
   grid_import_cost_sek: number;
   market_priced_fraction: number;
+  energy_sale_revenue_sek?: number;
+  grid_benefit_revenue_sek?: number;
+  tax_credit_sek?: number;
+  effective_sell_price_sek_kwh?: number | null;
+  export_spot_priced_fraction?: number;
+  uncontracted_exported_kwh?: number;
 }
+
+export type ExportPricingMode = "spot" | "feed_in" | "flat";
 
 export interface FinancialStatsResponse {
   slug: string;
@@ -513,6 +538,8 @@ export interface FinancialStatsResponse {
   period: PeakPeriod;
   fallback_purchase_price_sek_kwh: number;
   export_compensation_sek_kwh: number;
+  sell_pricing_mode?: ExportPricingMode;
+  sell_contract_start_date?: string | null;
   stats: FinancialStat[];
 }
 
@@ -742,6 +769,7 @@ export async function fetchYearForecast(
 export async function fetchMarketPrices(
   slug: string,
   hours = 24,
+  timezone = "Europe/Stockholm",
 ): Promise<MarketPricesResponse> {
   const now = new Date();
   let from: Date;
@@ -751,9 +779,8 @@ export async function fetchMarketPrices(
     from = new Date(now.getTime() - hours * 60 * 60 * 1000);
     to = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   } else {
-    // Today's intraday curve needs local midnight through end of day.
-    from = new Date(now.getTime() - 26 * 60 * 60 * 1000);
-    to = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const { intradayMarketPriceWindow } = await import("@/lib/marketPriceWindow");
+    ({ from, to } = intradayMarketPriceWindow(now, timezone));
   }
   const params = new URLSearchParams({
     from: from.toISOString(),
@@ -1068,6 +1095,10 @@ export async function fetchEnergyBalance(
   return res.json();
 }
 
+/** The API rejects anything larger. Asking for 288 returned 422, and the caller
+ *  swallowed it, so the charging power charts sat empty at 0.0 kW. */
+export const ENERGY_BALANCE_HISTORY_MAX_LIMIT = 200;
+
 export async function fetchEnergyBalanceHistory(
   slug: string,
   chargerId: number,
@@ -1075,7 +1106,7 @@ export async function fetchEnergyBalanceHistory(
   offset = 0,
 ): Promise<EnergyBalanceHistory> {
   const params = new URLSearchParams({
-    limit: String(limit),
+    limit: String(Math.min(limit, ENERGY_BALANCE_HISTORY_MAX_LIMIT)),
     offset: String(offset),
   });
   const res = await fetch(
@@ -1950,6 +1981,14 @@ export interface VehicleHaloCorrelation {
   updated_at: string | null;
 }
 
+export interface VehicleValueEnvelope {
+  value: number | boolean | string | null;
+  source_timestamp: string | null;
+  received_timestamp: string | null;
+  age_seconds: number | null;
+  quality: string;
+}
+
 export interface VehicleListItem {
   id: number;
   site_id: number;
@@ -1971,11 +2010,19 @@ export interface VehicleListItem {
   last_vehicle_update: string | null;
   capabilities: VehicleCapabilities;
   halo_correlation: VehicleHaloCorrelation | null;
+  state_of_charge?: VehicleValueEnvelope | null;
+  charging_power?: VehicleValueEnvelope | null;
+  electric_range?: VehicleValueEnvelope | null;
 }
 
 export interface VehicleListResponse {
   site_slug: string;
   vehicles: VehicleListItem[];
+}
+
+export interface VehicleSyncResponse extends VehicleListResponse {
+  synced_at: string;
+  vehicles_updated: number;
 }
 
 export interface VehicleIntegrationStatus {
@@ -2023,7 +2070,7 @@ export interface VehicleEnergySources {
 export interface VehicleChargeSession {
   id: number;
   vehicle_id: number;
-  charger_id: number;
+  charger_id: number | null;
   connected_at: string;
   disconnected_at: string | null;
   charging_started_at: string | null;
@@ -2044,6 +2091,38 @@ export interface VehicleChargeSession {
   energy_quality: string | null;
   cost_quality: string | null;
   attribution_quality: string | null;
+  location_name?: string | null;
+  charger_operator?: string | null;
+  charging_type?: string | null;
+  home_charging?: boolean | null;
+  energy_source?: string | null;
+  estimated_energy_kwh?: number | null;
+  charging_cost_sek?: number | null;
+  cost_source?: string | null;
+  detection_confidence?: string | null;
+  identification_method?: string | null;
+  vehicle_data_quality?: string | null;
+  charging_power_avg_kw?: number | null;
+  charging_power_max_kw?: number | null;
+}
+
+export interface VehicleChargingStats {
+  site_slug: string;
+  vehicle_id: number | null;
+  period: string;
+  total_energy_kwh: number;
+  home_energy_kwh: number;
+  away_energy_kwh: number;
+  ac_energy_kwh: number;
+  dc_energy_kwh: number;
+  free_energy_kwh: number;
+  paid_energy_kwh: number;
+  avg_price_sek_kwh: number | null;
+  total_cost_sek: number;
+  savings_vs_public_sek: number | null;
+  solar_share_pct: number | null;
+  grid_share_pct: number | null;
+  session_count: number;
 }
 
 export interface VehicleChargeSessionListResponse {
@@ -2054,6 +2133,15 @@ export interface VehicleChargeSessionListResponse {
 
 export async function fetchVehicles(slug: string): Promise<VehicleListResponse> {
   const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function syncVehicles(slug: string): Promise<VehicleSyncResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/sync`, {
+    method: "POST",
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2089,6 +2177,86 @@ export async function loginVehicleIntegration(slug: string): Promise<VehicleInte
   return res.json();
 }
 
+export interface VehicleAttributeObservation {
+  attribute_name: string;
+  source: string;
+  value_type: string;
+  masked_sample: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  sample_count: number;
+}
+
+export interface VehicleRawAttributesResponse {
+  site_slug: string;
+  vehicle_id?: number | null;
+  observations: VehicleAttributeObservation[];
+}
+
+export interface VehicleIntegrationDiagnosticsResponse {
+  site_slug: string;
+  health_status: string;
+  connection_state: string;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  last_vehicle_update?: string | null;
+  last_token_refresh_at?: string | null;
+  consecutive_failures: number;
+  last_error_code?: string | null;
+  last_latency_ms?: number | null;
+  current_polling_interval_seconds?: number | null;
+  vehicle_data_age_seconds?: number | null;
+  api_data_age_seconds?: number | null;
+  recent_events: Array<{
+    endpoint: string;
+    method: string;
+    http_status?: number | null;
+    duration_ms: number;
+    error_code?: string | null;
+    retry_count: number;
+    recorded_at: string;
+  }>;
+}
+
+export interface VehicleIntegrationActionResponse {
+  success: boolean;
+  message: string;
+}
+
+export async function fetchVehicleRawAttributes(
+  slug: string,
+  vehicleId?: number,
+): Promise<VehicleRawAttributesResponse> {
+  const query = vehicleId != null ? `?vehicle_id=${vehicleId}` : "";
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/raw-attributes${query}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function fetchVehicleIntegrationDiagnostics(
+  slug: string,
+): Promise<VehicleIntegrationDiagnosticsResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/diagnostics`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function runVehicleIntegrationAction(
+  slug: string,
+  action: string,
+): Promise<VehicleIntegrationActionResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/actions/${action}`, {
+    method: "POST",
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
 export async function fetchVehicleChargeSessions(
   slug: string,
   vehicleId: number,
@@ -2107,6 +2275,37 @@ export async function fetchCurrentVehicleChargeSession(
   const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/current`, {
     cache: "no-store",
   });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function patchVehicleChargeSession(
+  slug: string,
+  vehicleId: number,
+  sessionId: number,
+  payload: Partial<Pick<VehicleChargeSession, "location_name" | "charger_operator" | "charging_type" | "charging_cost_sek" | "home_charging">>,
+): Promise<VehicleChargeSession> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/${sessionId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchVehicleChargingStats(
+  slug: string,
+  vehicleId: number,
+  period: "day" | "week" | "month" | "year" = "month",
+): Promise<VehicleChargingStats> {
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charging-stats?period=${period}`,
+    { cache: "no-store" },
+  );
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2185,6 +2384,13 @@ export interface PerformanceCenterMetrics {
   slowest_requests: Array<Record<string, unknown>>;
   slow_queries: Array<{ sql: string; duration_ms: number; route: string }>;
   providers: Array<{ provider: string; calls: number; avg_ms: number; errors: number }>;
+  site_snapshots: Array<{
+    site_slug: string;
+    site_name: string;
+    age_seconds: number | null;
+    freshness: string;
+    generated_at?: string | null;
+  }>;
 }
 
 export async function fetchPerformanceMetrics(): Promise<PerformanceCenterMetrics> {

@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-BACKOFF_STEPS_SECONDS = (15, 30, 60, 120, 300, 900)
+BACKOFF_STEPS_SECONDS = (5, 15, 30, 60, 300, 900)
 
 
 @dataclass(frozen=True, slots=True)

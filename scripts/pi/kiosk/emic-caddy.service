@@ -1,0 +1,17 @@
+[Unit]
+Description=EMIC kiosk local proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/emic/kiosk.env
+# display.env carries EMIC_SERVER / EMIC_SERVER_SCHEME, which the Caddyfile
+# resolves as placeholders. Optional so an un-migrated Pi still starts.
+EnvironmentFile=-/etc/emic/display.env
+ExecStart=/usr/bin/caddy run --config /etc/emic/Caddyfile
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

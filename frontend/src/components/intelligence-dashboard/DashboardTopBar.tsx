@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { navigateEconomySection } from "@/components/economy-dashboard/economySection";
+import { navigateEnergySection } from "@/components/energy-dashboard/energySection";
+import { navigateEvSection } from "@/components/ev-dashboard/evSection";
+import { navigateSolarSection } from "@/components/solar-dashboard/solarSection";
+import { navigateVehicleSection } from "@/components/vehicle-dashboard/vehicleSection";
 import { isNavActive, visibleNavItems } from "./navItems";
 
 export function DashboardTopBar({
@@ -16,6 +21,11 @@ export function DashboardTopBar({
 }) {
   const pathname = usePathname();
   const items = visibleNavItems(spaEnabled, vehicleEnabled);
+  const isEnergyRoute = pathname.includes(`/sites/${slug}/energy`);
+  const isSolarRoute = pathname.includes(`/sites/${slug}/solar`) && !pathname.includes("/intelligence");
+  const isEvRoute = pathname.includes(`/sites/${slug}/ev`);
+  const isVehicleRoute = pathname.includes(`/sites/${slug}/vehicle`);
+  const isCostsRoute = pathname.includes(`/sites/${slug}/costs`);
 
   return (
     <header className="idash-topbar">
@@ -26,6 +36,32 @@ export function DashboardTopBar({
             <Link
               key={item.id}
               href={item.href(slug)}
+              onClick={(event) => {
+                if (item.id === "energy" && isEnergyRoute) {
+                  event.preventDefault();
+                  navigateEnergySection(slug, "flow");
+                  return;
+                }
+                if (item.id === "solar" && isSolarRoute) {
+                  event.preventDefault();
+                  navigateSolarSection(slug, "overview");
+                  return;
+                }
+                if (item.id === "ev" && isEvRoute) {
+                  event.preventDefault();
+                  navigateEvSection(slug, "overview");
+                  return;
+                }
+                if (item.id === "vehicle" && isVehicleRoute) {
+                  event.preventDefault();
+                  navigateVehicleSection(slug, "overview");
+                  return;
+                }
+                if (item.id === "costs" && isCostsRoute) {
+                  event.preventDefault();
+                  navigateEconomySection(slug, "analysis");
+                }
+              }}
               className={`idash-topbar-link ${active ? "idash-topbar-link-active" : ""}`.trim()}
             >
               {item.label}

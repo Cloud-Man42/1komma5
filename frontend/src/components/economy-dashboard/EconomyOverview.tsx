@@ -21,15 +21,21 @@ import {
 } from "./EconomyDetailSections";
 import { EconomyReportsSection } from "./EconomyReportsSection";
 import { EconomySettingsSection } from "./EconomySettingsSection";
-import { ECONOMY_SECTION_LABELS } from "./economySection";
-import { exportFinancialCsv, monthRangeLabel } from "./economyDashboardHelpers";
+import {
+  ECONOMY_COMPARE_OPTIONS,
+  ECONOMY_PERIOD_OPTIONS,
+  type EconomyCompareMode,
+  type EconomyPeriodId,
+} from "./economyPeriods";
+import { exportFinancialCsv } from "./economyDashboardHelpers";
 import { useEconomyDashboardData } from "./useEconomyDashboardData";
 import { useEconomySection } from "./useEconomySection";
 
 export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
-  const data = useEconomyDashboardData(siteSlug);
   const { section } = useEconomySection();
-  const [compareMode, setCompareMode] = useState("previous-month");
+  const [period, setPeriod] = useState<EconomyPeriodId>("this-month");
+  const [compareMode, setCompareMode] = useState<EconomyCompareMode>("previous-period");
+  const data = useEconomyDashboardData(siteSlug, period, compareMode);
 
   const siteName = siteSlug.charAt(0).toUpperCase() + siteSlug.slice(1);
   const updatedLabel = data.dashboard?.freshness.updated_at
@@ -39,7 +45,7 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
   const sparkSeries = useMemo(() => {
     const daily = data.dailySeries;
     return [
-      daily.map((p) => p.purchasedSek),
+      daily.map((p) => p.purchasedSek + p.gridFeeSek + p.taxSek + Math.abs(p.soldSek)),
       daily.map((p) => p.purchasedSek + p.gridFeeSek + p.taxSek),
       daily.map((p) => Math.abs(p.soldSek)),
       daily.map((p) => p.netSek),
@@ -53,7 +59,14 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
 
   const renderAnalysisDashboard = () => (
     <>
-      <EconomyMetricStrip metrics={data.metrics} sparkSeries={sparkSeries} />
+      <EconomyMetricStrip
+        metrics={data.metrics}
+        payback={data.payback}
+        savingsBreakdown={data.savingsBreakdown}
+        exportBreakdown={data.exportBreakdown}
+        comparisonLabel={data.comparisonLabel}
+        sparkSeries={sparkSeries}
+      />
       <div className="edash-mid-row">
         <EconomyCostOverviewChart series={data.dailySeries} />
         <EconomyDonutPanel
@@ -80,11 +93,10 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
           forecastDeltaPct={data.forecastDeltaPct}
         />
         <EconomyInvestmentPanel
-          investmentSek={data.investmentSek}
-          expectedAnnualSaving={data.expectedAnnualSaving}
-          paybackYears={data.paybackYears}
+          payback={data.payback}
           ytdReturnPct={data.ytdReturnPct}
-          return12mPct={data.ytdReturnPct * 0.96}
+          ytdBenefitSek={data.metrics.ytdEconomicBenefitSek}
+          lifetimeBenefitSek={data.metrics.lifetimeEconomicBenefitSek}
         />
       </div>
       <div className="edash-bottom-row">
@@ -97,7 +109,7 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
   const renderSection = () => {
     switch (section) {
       case "reports":
-        return <EconomyReportsSection stats={data.currentMonthStats} siteSlug={siteSlug} />;
+        return <EconomyReportsSection stats={data.periodStats} siteSlug={siteSlug} />;
       case "budget":
         return (
           <EconomyBudgetSection
@@ -115,7 +127,7 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
       case "cashflow":
         return (
           <EconomyCashFlowSection
-            stats={data.currentMonthStats}
+            stats={data.periodStats}
             siteSlug={siteSlug}
             importCost={data.metrics.gridImportCostSek}
             exportRevenue={data.metrics.exportRevenueSek}
@@ -151,31 +163,45 @@ export function EconomyOverview({ siteSlug }: { siteSlug: string }) {
             {siteName} • {data.timezone} · Senast uppdaterad {updatedLabel}
           </p>
           {section !== "analysis" ? (
-            <p className="edash-section-label">{ECONOMY_SECTION_LABELS[section]}</p>
+            <p className="edash-section-label">{data.periodRange.label}</p>
           ) : null}
         </div>
         <div className="edash-header-controls">
           <label className="edash-control">
             <span className="edash-control-icon" aria-hidden="true">📅</span>
-            <span>
-              {monthRangeLabel(data.currentYear, data.currentMonth, new Date().getDate())} / Denna månad
-            </span>
-          </label>
-          <label className="edash-control">
-            <span>Jämför med</span>
+            <span className="sr-only">Period</span>
             <select
-              aria-label="Jämförelseperiod"
-              value={compareMode}
-              onChange={(event) => setCompareMode(event.target.value)}
+              aria-label="Period"
+              value={period}
+              onChange={(event) => setPeriod(event.target.value as EconomyPeriodId)}
             >
-              <option value="previous-month">Föregående månad</option>
-              <option value="previous-year">Föregående år</option>
+              {ECONOMY_PERIOD_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
+          {period !== "since-installation" ? (
+            <label className="edash-control">
+              <span>Jämför med</span>
+              <select
+                aria-label="Jämförelseperiod"
+                value={compareMode}
+                onChange={(event) => setCompareMode(event.target.value as EconomyCompareMode)}
+              >
+                {ECONOMY_COMPARE_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <button
             type="button"
             className="edash-export-btn"
-            onClick={() => exportFinancialCsv(data.currentMonthStats)}
+            onClick={() => exportFinancialCsv(data.periodStats)}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" fill="none" stroke="currentColor" strokeWidth="1.6" />

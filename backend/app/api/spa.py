@@ -348,7 +348,6 @@ async def get_spa_energy_breakdown(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyBreakdownResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -388,7 +387,6 @@ async def get_spa_energy_period(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaEnergyPeriodResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
     totals = await _period_energy_totals(
         session,
@@ -453,7 +451,6 @@ async def get_spa_history(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaHistoryResponse:
     site, consumer, _config = await _get_spa_context(session, slug)
-    await _ensure_spa_intervals(session, site, consumer.id, _config.poll_interval_seconds or 60)
     period = _normalize_spa_period(period)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
@@ -566,11 +563,12 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
 @router.get("/sites/{slug}/spa/config", response_model=SpaConfigResponse)
 async def get_spa_config(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaConfigResponse:
     site, consumer, config = await _get_spa_context(session, slug)
+    repo = ConsumerRepository(session)
     return SpaConfigResponse(
         consumer_id=consumer.id,
         integration_enabled=config.integration_enabled,
         api_base_url=config.api_base_url,
-        masked_api_key=mask_api_key(config.api_key),
+        masked_api_key=mask_api_key(repo.decrypt_spa_api_key(config)),
         external_spa_id=config.external_spa_id,
         poll_interval_seconds=config.poll_interval_seconds,
         energy_collection_enabled=config.energy_collection_enabled,
@@ -607,10 +605,11 @@ async def test_spa_connection(
     session: AsyncSession = Depends(get_db_session),
 ) -> SpaConnectionTestResponse:
     site, consumer, config = await _get_spa_context(session, slug)
+    repo = ConsumerRepository(session)
     cfg = ArcticSpaConfiguration.merge(
         db_enabled=True,
         db_base_url=config.api_base_url,
-        db_api_key=config.api_key,
+        db_api_key=repo.decrypt_spa_api_key(config),
         db_spa_id=config.external_spa_id,
         db_poll_interval=config.poll_interval_seconds,
         db_energy_enabled=config.energy_collection_enabled,

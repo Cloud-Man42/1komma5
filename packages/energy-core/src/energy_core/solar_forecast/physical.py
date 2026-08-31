@@ -38,7 +38,7 @@ def irradiance_wm2(point: WeatherForecastPoint, site: SolarSiteConfiguration) ->
         return 0.0
 
     tilt, _, _, _ = effective_tilt_azimuth(site)
-    elevation, _ = _solar_geometry(point.timestamp, site.latitude, site.longitude)
+    elevation, _ = _solar_geometry(point.timestamp, site.latitude, site.longitude, site.timezone)
     if elevation <= 0:
         return 0.0
 
@@ -91,15 +91,17 @@ def baseline_energy_kwh(power_w: float) -> float:
     return (power_w / 1000.0) * INTERVAL_HOURS
 
 
-def _solar_geometry(ts: datetime, lat: float, lon: float) -> tuple[float, float]:
+def _solar_geometry(ts: datetime, lat: float, lon: float, timezone: str = "UTC") -> tuple[float, float]:
     """Return (elevation_deg, azimuth_deg) simplified solar position."""
     from datetime import UTC
+    from zoneinfo import ZoneInfo
 
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
+    local = ts.astimezone(ZoneInfo(timezone))
 
-    day_of_year = ts.timetuple().tm_yday
-    hour = ts.hour + ts.minute / 60.0 + ts.second / 3600.0
+    day_of_year = local.timetuple().tm_yday
+    hour = local.hour + local.minute / 60.0 + local.second / 3600.0
     # Solar declination (Cooper)
     decl = 23.45 * math.sin(math.radians(360 / 365 * (day_of_year - 81)))
     lat_rad = math.radians(lat)

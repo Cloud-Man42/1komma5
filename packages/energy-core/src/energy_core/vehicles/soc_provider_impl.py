@@ -30,6 +30,6 @@ class MercedesVehicleSocProvider:
             select(VehicleStateLatestModel).where(VehicleStateLatestModel.vehicle_id == vid)
         )
         row = result.scalar_one_or_none()
-        if row is None or row.soc_pct is None:
+        if row is None or row.state_of_charge_percent is None:
             return None
-        return VehicleSocSnapshot(soc_pct=float(row.soc_pct), source="mercedes", vehicle_id=vehicle_id)
+        return VehicleSocSnapshot(soc_pct=float(row.state_of_charge_percent), source="mercedes", vehicle_id=vehicle_id)

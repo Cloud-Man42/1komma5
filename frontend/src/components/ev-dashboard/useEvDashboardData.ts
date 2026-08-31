@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ENERGY_BALANCE_HISTORY_MAX_LIMIT,
   fetchEnergyBalanceHistory,
   fetchEnergyReasoning,
   fetchEvBridgeStatus,
@@ -21,6 +22,7 @@ import {
   type EvSolarChargingPlan,
   type SiteDashboard,
 } from "@/lib/api";
+import { useOptionalSiteData } from "@/lib/SiteDataProvider";
 import { useDashboardRefreshSeconds } from "@/lib/useDashboardRefresh";
 import {
   buildEnergyMixSlices,
@@ -29,13 +31,15 @@ import {
   buildPowerChartFromHistory,
   buildSavingsChart,
   computeCo2SavedKg,
+  averageChargingPowerKw,
   maxPowerTodayKw,
   type EvStatsPeriod,
 } from "./evDashboardHelpers";
 
 export function useEvDashboardData(siteSlug: string, statsPeriod: EvStatsPeriod = "day") {
   const refreshSeconds = useDashboardRefreshSeconds();
-  const [dashboard, setDashboard] = useState<SiteDashboard | null>(null);
+  const shared = useOptionalSiteData();
+  const [dashboard, setDashboard] = useState<SiteDashboard | null>(shared?.dashboard ?? null);
   const [energyConfig, setEnergyConfig] = useState<{ ev_vehicle_label: string } | null>(null);
   const [chargers, setChargers] = useState<EvCharger[]>([]);
   const [charger, setCharger] = useState<EvCharger | null>(null);
@@ -49,12 +53,71 @@ export function useEvDashboardData(siteSlug: string, statsPeriod: EvStatsPeriod 
   const [sessions, setSessions] = useState<EvChargingSession[]>([]);
   const [balanceItems, setBalanceItems] = useState<Awaited<ReturnType<typeof fetchEnergyBalanceHistory>>["items"]>([]);
   const [loading, setLoading] = useState(true);
+  const [secondaryLoading, setSecondaryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (shared?.dashboard) {
+      setDashboard(shared.dashboard);
+    }
+  }, [shared?.dashboard]);
+
+  const loadSecondary = useCallback(
+    async (primary: EvCharger, dash: SiteDashboard | null) => {
+      setSecondaryLoading(true);
+      try {
+        const [
+          bridgeStatus,
+          solarPlan,
+          energyReasoning,
+          savingsData,
+          statsDay,
+          statsPeriodData,
+          statsMonth,
+          sessionList,
+          balanceHistory,
+        ] = await Promise.all([
+          fetchEvBridgeStatus(siteSlug, primary.id).catch(() => null),
+          fetchEvSolarChargingPlan(siteSlug, primary.id).catch(() => null),
+          fetchEnergyReasoning(siteSlug, primary.id).catch(() => null),
+          fetchEvChargerSavings(siteSlug, primary.id, 30).catch(() => null),
+          fetchEvChargingStats(siteSlug, primary.id, "day").catch(() => null),
+          fetchEvChargingStats(siteSlug, primary.id, statsPeriod).catch(() => null),
+          fetchEvChargingStats(siteSlug, primary.id, "month").catch(() => null),
+          fetchEvChargingSessions(siteSlug, primary.id, 20).catch(() => []),
+          fetchEnergyBalanceHistory(siteSlug, primary.id, ENERGY_BALANCE_HISTORY_MAX_LIMIT, 0).catch(
+            (err) => {
+              console.warn("EV balance history unavailable", err);
+              return { items: [], total: 0 };
+            },
+          ),
+        ]);
+
+        setBridge(bridgeStatus);
+        setPlan(solarPlan);
+        setReasoning(energyReasoning);
+        setSavings(savingsData);
+        setDayStats(statsDay);
+        setPeriodStats(statsPeriodData);
+        setMonthStats(statsMonth);
+        setSessions(sessionList);
+        setBalanceItems(balanceHistory.items);
+        if (dash) setDashboard(dash);
+      } finally {
+        setSecondaryLoading(false);
+      }
+    },
+    [siteSlug, statsPeriod],
+  );
 
   const reload = useCallback(async () => {
     try {
+      const dashboardPromise = shared?.dashboard
+        ? Promise.resolve(shared.dashboard)
+        : fetchSiteDashboard(siteSlug).catch(() => null);
+
       const [dash, config, chargerList] = await Promise.all([
-        fetchSiteDashboard(siteSlug).catch(() => null),
+        dashboardPromise,
         fetchSiteEnergyConfig(siteSlug).catch(() => null),
         fetchEvChargers(siteSlug),
       ]);
@@ -69,44 +132,14 @@ export function useEvDashboardData(siteSlug: string, statsPeriod: EvStatsPeriod 
         return;
       }
 
-      const [
-        bridgeStatus,
-        solarPlan,
-        energyReasoning,
-        savingsData,
-        statsDay,
-        statsPeriodData,
-        statsMonth,
-        sessionList,
-        balanceHistory,
-      ] = await Promise.all([
-        fetchEvBridgeStatus(siteSlug, primary.id).catch(() => null),
-        fetchEvSolarChargingPlan(siteSlug, primary.id).catch(() => null),
-        fetchEnergyReasoning(siteSlug, primary.id).catch(() => null),
-        fetchEvChargerSavings(siteSlug, primary.id, 30).catch(() => null),
-        fetchEvChargingStats(siteSlug, primary.id, "day").catch(() => null),
-        fetchEvChargingStats(siteSlug, primary.id, statsPeriod).catch(() => null),
-        fetchEvChargingStats(siteSlug, primary.id, "month").catch(() => null),
-        fetchEvChargingSessions(siteSlug, primary.id, 20).catch(() => []),
-        fetchEnergyBalanceHistory(siteSlug, primary.id, 288, 0).catch(() => ({ items: [], total: 0 })),
-      ]);
-
-      setBridge(bridgeStatus);
-      setPlan(solarPlan);
-      setReasoning(energyReasoning);
-      setSavings(savingsData);
-      setDayStats(statsDay);
-      setPeriodStats(statsPeriodData);
-      setMonthStats(statsMonth);
-      setSessions(sessionList);
-      setBalanceItems(balanceHistory.items);
+      await loadSecondary(primary, dash);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Kunde inte ladda laddboxdata.");
     } finally {
       setLoading(false);
     }
-  }, [siteSlug, statsPeriod]);
+  }, [loadSecondary, shared?.dashboard, siteSlug]);
 
   useEffect(() => {
     reload();
@@ -116,6 +149,7 @@ export function useEvDashboardData(siteSlug: string, statsPeriod: EvStatsPeriod 
 
   const powerChart = useMemo(() => buildPowerChartFromHistory(balanceItems), [balanceItems]);
   const maxPowerKw = useMemo(() => maxPowerTodayKw(balanceItems), [balanceItems]);
+  const avgPowerKw = useMemo(() => averageChargingPowerKw(balanceItems), [balanceItems]);
   const energyMix = useMemo(() => buildEnergyMixSlices(dayStats), [dayStats]);
   const hourlySources = useMemo(() => buildHourlySourceChart(sessions), [sessions]);
   const savingsChart = useMemo(() => buildSavingsChart(sessions), [sessions]);
@@ -139,13 +173,14 @@ export function useEvDashboardData(siteSlug: string, statsPeriod: EvStatsPeriod 
     sessions,
     powerChart,
     maxPowerKw,
+    avgPowerKw,
     energyMix,
     hourlySources,
     savingsChart,
     planWindows,
     co2SavedKg,
     vehicleLabel,
-    loading,
+    loading: loading || secondaryLoading,
     error,
     refreshSeconds,
     reload,

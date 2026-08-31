@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { DashboardShell } from "@/components/intelligence-dashboard/DashboardShell";
 import { SiteDataProvider, useSiteData } from "@/lib/SiteDataProvider";
+import { SolarLayoutProvider } from "@/lib/SolarLayoutContext";
 import {
   fetchSolarConfig,
   fetchSolarWeather,
@@ -42,15 +43,17 @@ function SiteLayoutInner({ children }: { children: ReactNode }) {
   }, [slug]);
 
   return (
-    <DashboardShell
-      slug={slug}
-      dashboard={dashboard}
-      latitude={config?.latitude}
-      longitude={config?.longitude}
-      weather={weather}
-    >
-      {children}
-    </DashboardShell>
+    <SolarLayoutProvider config={config} weather={weather}>
+      <DashboardShell
+        slug={slug}
+        dashboard={dashboard}
+        latitude={config?.latitude}
+        longitude={config?.longitude}
+        weather={weather}
+      >
+        {children}
+      </DashboardShell>
+    </SolarLayoutProvider>
   );
 }
 

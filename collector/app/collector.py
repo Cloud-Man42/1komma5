@@ -28,6 +28,7 @@ from energy_core.heartbeat.bridge.constraints import BridgeConstraints
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.domain import reading_is_actionable
 from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
@@ -35,6 +36,8 @@ from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.aggregation.service import EnergyAggregationService
 from energy_core.snapshots.writer import SnapshotWriter
 from energy_core.heartbeat.market_prices import parse_market_prices
+from energy_core.heartbeat.feed_in_prices import parse_feed_in_tariff
+from energy_core.market_prices.currency import stored_eur_to_sek_kwh
 from energy_core.vehicles.sessions.coordinator import VehicleChargeSessionCoordinator
 from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
 from app.site_poll_context import SitePollContext
@@ -61,10 +64,7 @@ class Collector:
         self._energy_aggregation = EnergyAggregationService(is_sqlite=self._settings.is_sqlite)
 
     async def setup(self) -> None:
-        try:
-            assert_chargeamps_production_safe(app_env=self._settings.app_env.value)
-        except RuntimeError as exc:
-            logger.warning("Charge Amps production guard: %s", exc)
+        assert_chargeamps_production_safe(app_env=self._settings.app_env.value)
         async with self._session_factory() as session:
             await seed_sites(session)
             await self._ev_accounting.setup(session)
@@ -82,6 +82,9 @@ class Collector:
             reading_repo = EnergyReadingRepository(session, is_sqlite=self._settings.is_sqlite)
 
             for raw in heartbeat_readings:
+                if not reading_is_actionable(raw):
+                    logger.warning("Skipping degraded Heartbeat reading for %s", raw.site_slug)
+                    continue
                 normalized = normalize_reading(raw)
                 site = await site_repo.get_by_slug(normalized.site_slug)
                 if site is None:
@@ -96,12 +99,13 @@ class Collector:
                 site_repo = SiteRepository(session)
                 await self._collect_market_prices(session, site_repo)
                 poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
-                await self._run_spa_integration(session, site_repo, poll_ctx)
-                await self._run_ev_accounting(session, site_repo, poll_ctx)
-                await self._run_vehicle_charge_sessions(session, site_repo, poll_ctx)
-                await self._run_energy_balance(session, site_repo, poll_ctx)
-                await self._run_solar_forecast(session, site_repo)
                 sites = await site_repo.list_all()
+                live_overviews = await self._prefetch_live_overviews(sites, poll_ctx)
+                await self._run_spa_integration(session, site_repo, live_overviews)
+                await self._run_ev_accounting(session, site_repo, live_overviews)
+                await self._run_vehicle_charge_sessions(session, site_repo, live_overviews)
+                await self._run_energy_balance(session, site_repo, live_overviews)
+                await self._run_solar_forecast(session, site_repo)
                 for site in sites:
                     await self._energy_aggregation.rollup_site(session, site)
                 await self._snapshot_writer.write_all_sites(session, sites)
@@ -140,6 +144,14 @@ class Collector:
             day_end_local = day_start_local + timedelta(days=1)
             from_time = day_start_local.astimezone(UTC)
             to_time = day_end_local.astimezone(UTC)
+            feed_in_eur = await self._sync_feed_in_tariff(
+                client,
+                site,
+                site_repo,
+                price_repo,
+                from_time,
+                to_time,
+            )
             if await price_repo.has_price_at(site.id, current_hour):
                 continue
             try:
@@ -153,22 +165,63 @@ class Collector:
                 await price_repo.upsert_prices(
                     site.id,
                     [
-                        (point.timestamp, point.spot_eur_kwh, point.all_in_eur_kwh)
+                        (
+                            point.timestamp,
+                            point.spot_eur_kwh,
+                            point.all_in_eur_kwh,
+                            feed_in_eur,
+                        )
                         for point in parsed.points
                     ],
                 )
             except Exception:
                 logger.exception("Failed to collect market prices for site %s", site.slug)
 
-    async def _run_spa_integration(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
+    async def _sync_feed_in_tariff(
+        self,
+        client,
+        site,
+        site_repo: SiteRepository,
+        price_repo: MarketPriceRepository,
+        from_time: datetime,
+        to_time: datetime,
+    ) -> float | None:
+        try:
+            hb_raw = await client.fetch_heartbeat_prices(site.external_system_id)
+            feed_in = parse_feed_in_tariff(hb_raw)
+            feed_in_eur = feed_in.feed_in_tariff_eur_kwh
+            if feed_in_eur is None or feed_in_eur <= 0:
+                return None
+            await price_repo.apply_feed_in_tariff(site.id, from_time, to_time, feed_in_eur)
+            await price_repo.backfill_missing_feed_in(site.id, feed_in_eur)
+            feed_in_sek = stored_eur_to_sek_kwh(feed_in_eur)
+            if feed_in_sek is not None and abs(site.export_compensation_sek_kwh - feed_in_sek) > 0.01:
+                await site_repo.update_site(
+                    site.slug,
+                    export_compensation_sek_kwh=round(feed_in_sek, 4),
+                )
+            return feed_in_eur
+        except Exception:
+            logger.exception("Failed to collect feed-in tariff for site %s", site.slug)
+            return None
+
+    async def _prefetch_live_overviews(self, sites, poll_ctx: SitePollContext) -> dict[str, dict]:
+        live_overviews: dict[str, dict] = {}
+        for site in sites:
+            overview = await poll_ctx.live_overview(site)
+            if overview is not None:
+                live_overviews[site.slug] = overview
+        return live_overviews
+
+    async def _run_spa_integration(
+        self,
+        session,
+        site_repo: SiteRepository,
+        live_overviews: dict[str, dict],
+    ) -> None:
         if not self._settings.arctic_spa_enabled:
             return
         try:
-            live_overviews: dict[str, dict] = {}
-            for site in await site_repo.list_all():
-                overview = await poll_ctx.live_overview(site)
-                if overview is not None:
-                    live_overviews[site.slug] = overview
             polled = await self._spa_polling.poll_due_consumers(
                 session,
                 live_overviews=live_overviews,
@@ -192,39 +245,52 @@ class Collector:
         except Exception:
             logger.exception("Arctic Spa integration failed")
 
-    async def _run_ev_accounting(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
+    async def _run_ev_accounting(
+        self,
+        session,
+        site_repo: SiteRepository,
+        live_overviews: dict[str, dict],
+    ) -> None:
         total = 0
         for site in await site_repo.list_all():
-            live_overview = await poll_ctx.live_overview(site)
             total += await self._ev_accounting.process_site(
                 session,
                 site=site,
-                live_overview=live_overview,
+                live_overview=live_overviews.get(site.slug),
                 is_sqlite=self._settings.is_sqlite,
             )
         if total:
             logger.debug("EV accounting processed %d charger ticks", total)
 
-    async def _run_vehicle_charge_sessions(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
+    async def _run_vehicle_charge_sessions(
+        self,
+        session,
+        site_repo: SiteRepository,
+        live_overviews: dict[str, dict],
+    ) -> None:
         total = 0
         for site in await site_repo.list_all():
-            live_overview = await poll_ctx.live_overview(site)
             total += await self._vehicle_charge_sessions.process_site(
                 session,
                 site=site,
-                live_overview=live_overview,
+                live_overview=live_overviews.get(site.slug),
                 is_sqlite=self._settings.is_sqlite,
             )
         if total:
             logger.debug("Vehicle charge sessions processed %d vehicle ticks", total)
 
-    async def _run_energy_balance(self, session, site_repo: SiteRepository, poll_ctx: SitePollContext) -> None:
+    async def _run_energy_balance(
+        self,
+        session,
+        site_repo: SiteRepository,
+        live_overviews: dict[str, dict],
+    ) -> None:
         from energy_core.db.ev_charger_repo import EvChargerRepository
 
         charger_repo = EvChargerRepository(session)
         total = 0
         for site in await site_repo.list_all():
-            live_overview = await poll_ctx.live_overview(site)
+            live_overview = live_overviews.get(site.slug)
             chargers = await charger_repo.list_for_site(site.id)
             for charger in chargers:
                 if not charger.bridge_enabled and not charger.virtual_evse_enabled:

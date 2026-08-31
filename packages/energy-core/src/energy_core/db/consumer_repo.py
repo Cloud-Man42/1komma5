@@ -19,6 +19,7 @@ from energy_core.db.models import (
     SpaDeviceConfigModel,
     SpaPollStateModel,
 )
+from energy_core.secrets import CredentialCipher
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +49,9 @@ class SpaConfigRecord:
 
 
 class ConsumerRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, credential_cipher: CredentialCipher | None = None) -> None:
         self._session = session
+        self._credentials = credential_cipher or CredentialCipher()
 
     async def get_spa_for_site(self, site_id: int) -> tuple[EnergyConsumerModel, SpaDeviceConfigModel] | None:
         result = await self._session.execute(
@@ -127,7 +129,7 @@ class ConsumerRepository:
         if api_base_url is not None:
             config.api_base_url = api_base_url
         if api_key is not None and api_key.strip():
-            config.api_key = api_key.strip()
+            config.api_key = self._credentials.encrypt(api_key.strip())
         if external_spa_id is not None:
             config.external_spa_id = external_spa_id
         if poll_interval_seconds is not None:
@@ -139,6 +141,9 @@ class ConsumerRepository:
         if power_profiles_json is not None:
             config.power_profiles_json = power_profiles_json
         return config
+
+    def decrypt_spa_api_key(self, config: SpaDeviceConfigModel) -> str:
+        return self._credentials.decrypt(config.api_key)
 
     async def save_status_snapshot(
         self,

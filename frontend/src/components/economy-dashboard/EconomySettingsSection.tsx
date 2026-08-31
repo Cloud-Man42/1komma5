@@ -23,10 +23,12 @@ export function EconomySettingsSection({ siteSlug }: { siteSlug: string }) {
         <article className="edash-panel">
           <h3>Budget &amp; investering</h3>
           <p className="edash-muted">
-            Total investering för {siteSlug}: {formatEconomyKr(resolveSiteInvestmentSek(siteSlug))}.
-            Månadskostnad och investering används för budgetmätare och avkastningsberäkning.
-          </p>
-        </article>
+            Total investering för {siteSlug}:{" "}
+            {resolveSiteInvestmentSek(siteSlug) != null
+              ? formatEconomyKr(resolveSiteInvestmentSek(siteSlug)!)
+              : "Investering ej angiven"}
+            . Månadskostnad och investering används för budgetmätare och avkastningsberäkning.
+          </p>        </article>
       </div>
     </section>
   );

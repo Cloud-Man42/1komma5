@@ -112,15 +112,26 @@ class EvChargingSessionRepository:
         rows = await self._session.scalars(stmt)
         return [self._to_record(r) for r in rows]
 
+    async def update_totals(self, session_id: int, **fields) -> None:
+        """Write derived totals onto a session without ending it.
+
+        Lets an ACTIVE session carry its running energy and source split, so
+        today's figures do not read zero while the car is still charging.
+        """
+        row = await self._session.get(EvChargingSessionModel, session_id)
+        if row is None:
+            return
+        for key, value in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, value)
+        await self._session.flush()
+
     async def complete(self, session_id: int, **fields) -> None:
         row = await self._session.get(EvChargingSessionModel, session_id)
         if row is None:
             return
         row.status = "COMPLETED"
-        for key, value in fields.items():
-            if hasattr(row, key):
-                setattr(row, key, value)
-        await self._session.flush()
+        await self.update_totals(session_id, **fields)
 
     @staticmethod
     def _to_record(row: EvChargingSessionModel) -> EvChargingSessionRecord:

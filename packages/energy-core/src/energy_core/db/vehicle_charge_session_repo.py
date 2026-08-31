@@ -15,8 +15,9 @@ from energy_core.db.models import VehicleChargeSessionModel
 class VehicleChargeSessionRecord:
     id: int
     vehicle_id: int
-    charger_id: int
+    charger_id: int | None
     site_id: int
+    ev_charging_session_id: int | None
     connected_at: datetime
     disconnected_at: datetime | None
     charging_started_at: datetime | None
@@ -46,6 +47,25 @@ class VehicleChargeSessionRecord:
     calculation_version: str
     reconciliation_delta_kwh: float | None
     reconciliation_note: str | None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_id: int | None = None
+    location_name: str | None = None
+    charger_operator: str | None = None
+    charger_network: str | None = None
+    charging_type: str | None = None
+    connector_type: str | None = None
+    home_charging: bool | None = None
+    energy_source: str | None = None
+    estimated_energy_kwh: float | None = None
+    charging_power_avg_kw: float | None = None
+    charging_power_max_kw: float | None = None
+    charging_cost_sek: float | None = None
+    cost_source: str | None = None
+    detection_confidence: str | None = None
+    identification_method: str | None = None
+    vehicle_data_quality: str | None = None
+    charging_state: str | None = None
 
 
 class VehicleChargeSessionRepository:
@@ -56,7 +76,7 @@ class VehicleChargeSessionRepository:
         self,
         *,
         vehicle_id: int,
-        charger_id: int,
+        charger_id: int | None,
         site_id: int,
         connected_at: datetime,
         start_soc: float | None,
@@ -65,6 +85,8 @@ class VehicleChargeSessionRepository:
         identification_confidence: float | None,
         savings_baseline: str,
         calculation_version: str,
+        ev_charging_session_id: int | None = None,
+        **csi_fields,
     ) -> VehicleChargeSessionRecord:
         row = VehicleChargeSessionModel(
             vehicle_id=vehicle_id,
@@ -77,7 +99,9 @@ class VehicleChargeSessionRepository:
             identification_confidence=identification_confidence,
             savings_baseline=savings_baseline,
             calculation_version=calculation_version,
+            ev_charging_session_id=ev_charging_session_id,
             status="ACTIVE",
+            **{k: v for k, v in csi_fields.items() if hasattr(VehicleChargeSessionModel, k)},
         )
         self._session.add(row)
         await self._session.flush()
@@ -142,6 +166,25 @@ class VehicleChargeSessionRepository:
             row.target_soc = target_soc
         await self._session.flush()
 
+    async def update_csi_fields(self, session_id: int, **fields) -> None:
+        row = await self._session.get(VehicleChargeSessionModel, session_id)
+        if row is None:
+            return
+        for key, value in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, value)
+        await self._session.flush()
+
+    async def patch_session(self, session_id: int, **fields) -> VehicleChargeSessionRecord | None:
+        row = await self._session.get(VehicleChargeSessionModel, session_id)
+        if row is None:
+            return None
+        for key, value in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, value)
+        await self._session.flush()
+        return self._to_record(row)
+
     async def complete(self, session_id: int, **fields) -> None:
         row = await self._session.get(VehicleChargeSessionModel, session_id)
         if row is None:
@@ -159,6 +202,7 @@ class VehicleChargeSessionRepository:
             vehicle_id=row.vehicle_id,
             charger_id=row.charger_id,
             site_id=row.site_id,
+            ev_charging_session_id=row.ev_charging_session_id,
             connected_at=row.connected_at,
             disconnected_at=row.disconnected_at,
             charging_started_at=row.charging_started_at,
@@ -188,4 +232,23 @@ class VehicleChargeSessionRepository:
             calculation_version=row.calculation_version,
             reconciliation_delta_kwh=row.reconciliation_delta_kwh,
             reconciliation_note=row.reconciliation_note,
+            latitude=row.latitude,
+            longitude=row.longitude,
+            location_id=row.location_id,
+            location_name=row.location_name,
+            charger_operator=row.charger_operator,
+            charger_network=row.charger_network,
+            charging_type=row.charging_type,
+            connector_type=row.connector_type,
+            home_charging=row.home_charging,
+            energy_source=row.energy_source,
+            estimated_energy_kwh=row.estimated_energy_kwh,
+            charging_power_avg_kw=row.charging_power_avg_kw,
+            charging_power_max_kw=row.charging_power_max_kw,
+            charging_cost_sek=row.charging_cost_sek,
+            cost_source=row.cost_source,
+            detection_confidence=row.detection_confidence,
+            identification_method=row.identification_method,
+            vehicle_data_quality=row.vehicle_data_quality,
+            charging_state=row.charging_state,
         )

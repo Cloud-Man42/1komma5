@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time
+from zoneinfo import ZoneInfo
 
 from energy_core.solar_forecast.open_meteo import OpenMeteoWeatherProvider
 from energy_core.solar_forecast.types import SolarSiteConfiguration
@@ -16,6 +17,10 @@ class OpenMeteoAdapter:
 
     def __init__(self, provider: OpenMeteoWeatherProvider) -> None:
         self._provider = provider
+
+    @property
+    def provider(self) -> OpenMeteoWeatherProvider:
+        return self._provider
 
     async def fetch_weather(
         self,
@@ -113,6 +118,11 @@ class OpenMeteoAdapter:
             enabled=True,
         )
         now = datetime.now(UTC)
-        if from_ts < now - timedelta(hours=6):
+        tz = ZoneInfo(timezone)
+        local_today = now.astimezone(tz).date()
+        local_day_start = datetime.combine(local_today, time.min, tzinfo=tz).astimezone(UTC)
+        if from_ts >= local_day_start:
+            return await self._provider.get_forecast(site, from_ts, to_ts)
+        if to_ts <= local_day_start:
             return await self._provider.get_historical(site, from_ts, to_ts)
-        return await self._provider.get_forecast(site, from_ts, to_ts)
+        return await self._provider.get_forecast(site, local_day_start, to_ts)

@@ -12,6 +12,7 @@ from energy_core.chargers.framework.models import ChargerAdapter, ChargerConfigu
 from energy_core.chargers.halo_adapter import ChargeAmpsHaloAdapter, build_halo_adapter
 from energy_core.chargers.mock import MockChargeAmpsController
 from energy_core.db.models import EvChargerModel
+from energy_core.secrets import CredentialCipher
 
 
 class ChargerAdapterFactory:
@@ -68,7 +69,7 @@ def configuration_from_model(charger: EvChargerModel) -> ChargerConfiguration:
         display_name=charger.name,
         enabled=charger.bridge_enabled,
         external_charger_id=str(external_id) if external_id else None,
-        api_key=charger.chargeamps_api_key or None,
+        api_key=CredentialCipher().decrypt(charger.chargeamps_api_key) or None,
         connection_settings=connection_settings,
         min_current_a=charger.min_current_a,
         max_current_a=charger.max_current_a,

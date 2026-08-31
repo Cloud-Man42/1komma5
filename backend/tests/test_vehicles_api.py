@@ -117,6 +117,26 @@ async def test_vehicle_commands_require_enabled_flag(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_vehicle_sync_endpoint_returns_fresh_list(client, monkeypatch):
+    monkeypatch.setenv("EMIC_SECRET_KEY", Fernet.generate_key().decode("ascii"))
+    ac, _, _ = client
+
+    await ac.put(
+        "/api/sites/akarp/vehicles/integration/config",
+        json={"enabled": True, "username": "user@example.com", "password": "secret"},
+    )
+
+    with patch("app.api.vehicles.VehicleSyncService.sync_site", new=AsyncMock(return_value=())):
+        response = await ac.post("/api/sites/akarp/vehicles/sync")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["site_slug"] == "akarp"
+    assert "synced_at" in body
+    assert body["vehicles_updated"] == 0
+
+
+@pytest.mark.asyncio
 async def test_disable_vehicle_hides_it_from_list(client, monkeypatch):
     monkeypatch.setenv("EMIC_SECRET_KEY", Fernet.generate_key().decode("ascii"))
     ac, session_factory, _ = client
@@ -165,3 +185,51 @@ async def test_disable_vehicle_hides_it_from_list(client, monkeypatch):
     assert listed.status_code == 200
     assert len(listed.json()["vehicles"]) == 1
     assert listed.json()["vehicles"][0]["display_name"] == "EQE"
+
+
+@pytest.mark.asyncio
+async def test_raw_attributes_endpoint_empty(client):
+    ac, _, _ = client
+    response = await ac.get("/api/sites/akarp/vehicles/integration/raw-attributes")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["site_slug"] == "akarp"
+    assert body["observations"] == []
+    assert "token" not in response.text.lower()
+
+    missing = await ac.get("/api/sites/missing/vehicles/integration/raw-attributes")
+    assert missing.status_code == 404
+
+    missing_vehicle = await ac.get("/api/sites/akarp/vehicles/integration/raw-attributes?vehicle_id=9999")
+    assert missing_vehicle.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_integration_diagnostics_and_reset(client):
+    ac, _, _ = client
+    diagnostics = await ac.get("/api/sites/akarp/vehicles/integration/diagnostics")
+    assert diagnostics.status_code == 200
+    body = diagnostics.json()
+    assert body["site_slug"] == "akarp"
+    assert "health_status" in body
+
+    reset = await ac.post("/api/sites/akarp/vehicles/integration/actions/reset")
+    assert reset.status_code == 200
+    assert reset.json()["success"] is True
+
+    unknown = await ac.post("/api/sites/akarp/vehicles/integration/actions/unknown-action")
+    assert unknown.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_vehicle_charging_stats_endpoint(client):
+    ac, _, _ = client
+    response = await ac.get("/api/sites/akarp/vehicles/1/charging-stats?period=month")
+    assert response.status_code in {200, 404}
+    if response.status_code == 200:
+        body = response.json()
+        assert body["period"] == "month"
+        assert "total_energy_kwh" in body
+
+    invalid = await ac.get("/api/sites/akarp/vehicles/1/charging-stats?period=invalid")
+    assert invalid.status_code == 422

@@ -1,7 +1,14 @@
 import type { Reading, SolarForecast } from "@/lib/api";
-import { isAggregated } from "@/lib/api";
+import {
+  formatChartClock,
+  inferForecastIntervalMs,
+  localDateKey,
+  localDayBoundsMs,
+  readingTimestamp,
+  roundKw,
+} from "@/lib/chartTime";
 
-const INTERVAL_MS = 15 * 60 * 1000;
+export { formatChartClock, inferForecastIntervalMs } from "@/lib/chartTime";
 
 export interface ProductionChartRow {
   timestamp: string;
@@ -11,24 +18,51 @@ export interface ProductionChartRow {
   forecastKw: number | null;
 }
 
-function localDateKey(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleDateString("sv-SE", { timeZone: timezone });
+const FINE_CHART_BUCKET_MS = 15 * 60 * 1000;
+
+function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-export function formatChartClock(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleTimeString("sv-SE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: timezone,
+function actualKwInBucket(startMs: number, endMs: number, readings: Reading[]): number | null {
+  const bucketReadings = readings.filter((reading) => {
+    const ts = new Date(readingTimestamp(reading)).getTime();
+    return ts >= startMs && ts < endMs;
   });
+  if (bucketReadings.length === 0) return null;
+  return roundKw(average(bucketReadings.map((reading) => reading.solar_production_w ?? 0)) ?? 0);
 }
 
-function readingTimestamp(reading: Reading): string {
-  return isAggregated(reading) ? reading.bucket_start : reading.recorded_at;
+function forecastKwAt(
+  timestampMs: number,
+  sortedForecast: SolarForecast["points"],
+  forecastStepMs: number,
+): number | null {
+  if (sortedForecast.length === 0) return null;
+
+  for (let i = sortedForecast.length - 1; i >= 0; i -= 1) {
+    const start = new Date(sortedForecast[i].timestamp).getTime();
+    const end =
+      i + 1 < sortedForecast.length
+        ? new Date(sortedForecast[i + 1].timestamp).getTime()
+        : start + forecastStepMs;
+    if (timestampMs >= start && timestampMs < end) {
+      return roundKw(sortedForecast[i].corrected_power_w);
+    }
+  }
+
+  return null;
 }
 
-function roundKw(watts: number): number {
-  return Math.round((watts / 1000) * 100) / 100;
+function resolveChartBucketMs(forecastStepMs: number, bucketMinutes?: number): number {
+  if (bucketMinutes != null) {
+    return bucketMinutes * 60 * 1000;
+  }
+  if (forecastStepMs >= 60 * 60 * 1000) {
+    return FINE_CHART_BUCKET_MS;
+  }
+  return forecastStepMs;
 }
 
 export function buildProductionChartData({
@@ -36,11 +70,13 @@ export function buildProductionChartData({
   forecast,
   timezone,
   now = new Date().toISOString(),
+  bucketMinutes,
 }: {
   readings: Reading[];
   forecast: SolarForecast | null;
   timezone: string;
   now?: string;
+  bucketMinutes?: number;
 }): ProductionChartRow[] {
   const todayKey = localDateKey(now, timezone);
   const forecastPoints = (forecast?.points ?? []).filter(
@@ -66,32 +102,43 @@ export function buildProductionChartData({
       .sort((a, b) => a.sort - b.sort);
   }
 
-  return forecastPoints
-    .map((point) => {
-      const start = new Date(point.timestamp).getTime();
-      const end = start + INTERVAL_MS;
-      const bucketReadings = todayReadings.filter((reading) => {
-        const ts = new Date(readingTimestamp(reading)).getTime();
-        return ts >= start && ts < end;
-      });
+  const sortedForecast = [...forecastPoints].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+  const forecastStepMs = inferForecastIntervalMs(sortedForecast);
+  const bucketMs = resolveChartBucketMs(forecastStepMs, bucketMinutes);
 
-      const actualKw =
-        bucketReadings.length > 0
-          ? roundKw(
-              bucketReadings.reduce((sum, reading) => sum + (reading.solar_production_w ?? 0), 0) /
-                bucketReadings.length,
-            )
-          : null;
+  const { startMs: dayStartMs, endMs: dayEndMs } = localDayBoundsMs(now, timezone);
+  const forecastEndMs =
+    Math.max(...sortedForecast.map((point) => new Date(point.timestamp).getTime())) + forecastStepMs;
+  const readingEndMs =
+    todayReadings.length > 0
+      ? Math.max(...todayReadings.map((reading) => new Date(readingTimestamp(reading)).getTime())) +
+        bucketMs
+      : dayStartMs;
 
-      return {
-        timestamp: point.timestamp,
-        time: formatChartClock(point.timestamp, timezone),
-        sort: start,
-        actualKw,
-        forecastKw: roundKw(point.corrected_power_w),
-      };
-    })
-    .sort((a, b) => a.sort - b.sort);
+  const gridStart = dayStartMs;
+  const gridEnd = Math.max(dayEndMs, forecastEndMs, readingEndMs);
+
+  const rows: ProductionChartRow[] = [];
+  for (let bucketStart = gridStart; bucketStart < gridEnd; bucketStart += bucketMs) {
+    const bucketEnd = bucketStart + bucketMs;
+    const actualKw = actualKwInBucket(bucketStart, bucketEnd, todayReadings);
+    const forecastKw = forecastKwAt(bucketStart, sortedForecast, forecastStepMs);
+
+    if (actualKw == null && forecastKw == null) continue;
+
+    const iso = new Date(bucketStart).toISOString();
+    rows.push({
+      timestamp: iso,
+      time: formatChartClock(iso, timezone),
+      sort: bucketStart,
+      actualKw,
+      forecastKw,
+    });
+  }
+
+  return rows;
 }
 
 export function chartYMax(rows: ProductionChartRow[]): number {
@@ -106,4 +153,10 @@ export function chartYMax(rows: ProductionChartRow[]): number {
 
 export function hasForecastSeries(rows: ProductionChartRow[]): boolean {
   return rows.some((row) => row.forecastKw != null && row.forecastKw > 0);
+}
+
+export function hasOverlappingSeries(rows: ProductionChartRow[]): boolean {
+  return rows.some(
+    (row) => row.actualKw != null && row.forecastKw != null && row.actualKw > 0 && row.forecastKw > 0,
+  );
 }

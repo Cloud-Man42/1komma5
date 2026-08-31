@@ -1,38 +1,11 @@
-import {
-  evSectionHref,
+export {
+  EV_SIDEBAR_SUBNAV,
   EV_SECTION_LABELS,
-  isEvSectionActive,
+  evSectionHref,
+  isEvSidebarNavActive,
   type EvSectionId,
+  type EvSidebarNavItem,
 } from "./evSection";
 
-export interface EvSidebarNavItem {
-  id: EvSectionId;
-  label: string;
-  href: (slug: string) => string;
-}
-
-export const EV_SIDEBAR_NAV: EvSidebarNavItem[] = (
-  [
-    "overview",
-    "charging",
-    "schedules",
-    "history",
-    "statistics",
-    "settings",
-    "access",
-    "diagnostics",
-  ] as EvSectionId[]
-).map((id) => ({
-  id,
-  label: EV_SECTION_LABELS[id],
-  href: (slug: string) => evSectionHref(slug, id),
-}));
-
-export function isEvSidebarNavActive(
-  pathname: string,
-  slug: string,
-  item: EvSidebarNavItem,
-  hash = "",
-): boolean {
-  return isEvSectionActive(pathname, slug, item.id, hash);
-}
+/** @deprecated Use EV_SIDEBAR_SUBNAV */
+export { EV_SIDEBAR_SUBNAV as EV_SIDEBAR_NAV } from "./evSection";

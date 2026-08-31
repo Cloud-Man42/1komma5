@@ -18,6 +18,7 @@ from energy_core.vehicles.mercedes.commands.response import MercedesCommandStatu
 from energy_core.vehicles.mercedes.mapping.vehicle_mapper import MercedesCapabilityMapper, MercedesVehicleMapper
 from energy_core.vehicles.mercedes.protocol.decoder import MercedesMessageDecoder
 from energy_core.vehicles.mercedes.transport.backoff import MercedesBackoffPolicy
+from energy_core.vehicles.mercedes.transport.connection_manager import MercedesConnectionManager
 from energy_core.vehicles.mercedes.transport.rest_client import MercedesRestClient
 from energy_core.vehicles.mercedes.transport.websocket_client import MercedesWebSocketClient
 from energy_core.vehicles.vin import mask_vin
@@ -55,8 +56,25 @@ class MercedesProvider:
         self._backoff = MercedesBackoffPolicy()
         self._subscribers: list[asyncio.Queue[VehicleStateChangedEvent | None]] = []
         self._watch_task: asyncio.Task | None = None
+        self._connection_manager = MercedesConnectionManager()
         self.reconnect_count = 0
         self.http_429_count = 0
+
+    @property
+    def mapper(self) -> MercedesVehicleMapper:
+        return self._mapper
+
+    @property
+    def connection_manager(self) -> MercedesConnectionManager:
+        return self._connection_manager
+
+    @property
+    def token_store(self) -> MercedesTokenStore:
+        return self._token_store
+
+    @property
+    def rest_client(self) -> MercedesRestClient:
+        return self._rest
 
     @property
     def device_guid(self) -> str:
@@ -116,22 +134,43 @@ class MercedesProvider:
             )
         self._vehicles = discovered
 
-    async def _hydrate_vehicle_snapshots(self) -> None:
+    async def _hydrate_vehicle_snapshots(self, *, vins: tuple[str, ...] | None = None) -> None:
+        vin_filter = set(vins) if vins else None
         for vehicle_id, state in list(self._vehicles.items()):
             vin = state.vin or vehicle_id
             if not vin:
                 continue
+            if vin_filter is not None and vin not in vin_filter:
+                continue
             try:
                 payload = await self._rest.get_vehicle_attributes(vin)
-            except Exception:
-                logger.debug("Mercedes REST snapshot unavailable for %s", mask_vin(vin))
+            except Exception as exc:
+                logger.warning("Mercedes REST snapshot unavailable for %s: %s", mask_vin(vin), exc)
                 continue
-            message = self._decoder.decode_vep_update(payload)
+            message = self._decoder.decode_vehicle_status(payload)
+            if message is None or not message.attributes:
+                message = self._decoder.decode_vep_update(payload)
+            if message is None or not message.attributes:
+                message = self._decoder.decode(payload)
             if message is None:
+                logger.warning("Mercedes REST snapshot for %s could not be decoded", mask_vin(vin))
                 continue
-            updated = self._mapper.apply_push(state, message)
+            if not message.attributes:
+                logger.warning("Mercedes REST snapshot for %s contained no attributes", mask_vin(vin))
+                continue
+            updated = self._mapper.apply_push(state, message, source="REST")
             self._vehicles[vehicle_id] = updated
             logger.info("Mercedes hydrated snapshot for %s (soc=%s)", mask_vin(vin), updated.state_of_charge_percent)
+
+    async def sync_from_rest(self, *, vins: tuple[str, ...] | None = None) -> tuple[VehicleState, ...]:
+        """Fetch the latest vehicle attributes over REST and return normalized states."""
+        if self._token_store._token is None:  # noqa: SLF001
+            raise RuntimeError("Mercedes provider is not authenticated")
+        if not self._vehicles:
+            await self._discover_vehicles()
+        await self._app_version.refresh(self._rest.get_config, force=True)
+        await self._hydrate_vehicle_snapshots(vins=vins)
+        return await self.get_vehicles()
 
     async def get_vehicles(self) -> tuple[VehicleState, ...]:
         if not self._vehicles:
@@ -197,22 +236,28 @@ class MercedesProvider:
             if queue in self._subscribers:
                 self._subscribers.remove(queue)
 
-    async def _watch_loop(self) -> None:
+    async def run_connected_watch(self) -> None:
+        """Process websocket frames until failure. Used by connection manager."""
         assert self._websocket is not None
-        try:
-            async for frame in self._websocket.messages():
-                message = self._decoder.decode(frame)
-                if message is None:
+        async for frame in self._websocket.messages():
+            self._connection_manager.record_frame()
+            message = self._decoder.decode(frame)
+            if message is None:
+                self._connection_manager.record_decode_failure()
+                continue
+            for vehicle_id, state in list(self._vehicles.items()):
+                if message.vin and state.vin and message.vin != state.vin:
                     continue
-                for vehicle_id, state in list(self._vehicles.items()):
-                    if message.vin and state.vin and message.vin != state.vin:
-                        continue
-                    updated = self._mapper.apply_push(state, message)
-                    previous = self._vehicles[vehicle_id]
-                    self._vehicles[vehicle_id] = updated
-                    event = VehicleStateChangedEvent(state=updated, previous_state=previous)
-                    for queue in self._subscribers:
-                        await queue.put(event)
+                updated = self._mapper.apply_push(state, message, source="WS")
+                previous = self._vehicles[vehicle_id]
+                self._vehicles[vehicle_id] = updated
+                event = VehicleStateChangedEvent(state=updated, previous_state=previous)
+                for queue in self._subscribers:
+                    await queue.put(event)
+
+    async def _watch_loop(self) -> None:
+        try:
+            await self.run_connected_watch()
         except Exception:
             logger.exception("Mercedes watch loop failed")
             self._connected = False
@@ -222,6 +267,7 @@ class MercedesProvider:
                     state,
                     connection_state=VehicleConnectionState.RECONNECTING,
                 )
+            raise
 
     async def close(self) -> None:
         self._connected = False

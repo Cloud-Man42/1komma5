@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from statistics import mean
+from zoneinfo import ZoneInfo
 
 from energy_core.solar_forecast.constants import (
     MAX_CORRECTION_FACTOR,
@@ -80,11 +81,12 @@ class SolarForecastCorrectionEngine:
         profile: SitePerformanceProfile,
         point: WeatherForecastPoint,
         timestamp: datetime,
+        timezone: str = "UTC",
     ) -> float:
         if profile.sample_count < MIN_SAMPLES_FOR_CORRECTION:
             return 1.0
 
-        local = timestamp.astimezone(UTC)
+        local = timestamp.astimezone(ZoneInfo(timezone))
         month = local.month
         hour = local.hour
         irr = point.gti_wm2 or point.ghi_wm2 or 0.0
@@ -111,7 +113,8 @@ class SolarForecastCorrectionEngine:
         profile: SitePerformanceProfile,
         point: WeatherForecastPoint,
         timestamp: datetime,
+        timezone: str = "UTC",
     ) -> tuple[float, float]:
-        factor = self.correction_factor(profile, point, timestamp)
+        factor = self.correction_factor(profile, point, timestamp, timezone)
         corrected = max(0.0, baseline_power_w * factor)
         return corrected, factor

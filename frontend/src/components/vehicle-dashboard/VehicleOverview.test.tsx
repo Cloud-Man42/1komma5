@@ -10,6 +10,7 @@ const mockFetchCurrentVehicleChargeSession = vi.fn();
 const mockFetchEnergyReasoning = vi.fn();
 const mockStopVehicleCharging = vi.fn();
 const mockStartVehicleCharging = vi.fn();
+const mockSyncVehicles = vi.fn();
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -22,6 +23,7 @@ vi.mock("@/lib/api", async () => {
     fetchEnergyReasoning: (...args: unknown[]) => mockFetchEnergyReasoning(...args),
     stopVehicleCharging: (...args: unknown[]) => mockStopVehicleCharging(...args),
     startVehicleCharging: (...args: unknown[]) => mockStartVehicleCharging(...args),
+    syncVehicles: (...args: unknown[]) => mockSyncVehicles(...args),
   };
 });
 
@@ -143,6 +145,12 @@ describe("VehicleOverview sections", () => {
     });
     mockStopVehicleCharging.mockResolvedValue({ success: true, vehicle_id: 1, message: "Laddning stoppad", command: "stop" });
     mockStartVehicleCharging.mockResolvedValue({ success: true, vehicle_id: 1, message: "Laddning startad", command: "start" });
+    mockSyncVehicles.mockResolvedValue({
+      site_slug: "akarp",
+      synced_at: "2026-08-31T10:00:00Z",
+      vehicles_updated: 1,
+      vehicles: [vehicle],
+    });
   });
 
   it("renders overview section by default", async () => {
@@ -241,6 +249,22 @@ describe("VehicleOverview sections", () => {
 
     await waitFor(() => {
       expect(mockStopVehicleCharging).toHaveBeenCalledWith("akarp", 1);
+    });
+  });
+
+  it("calls Mercedes sync before reloading dashboard data", async () => {
+    const user = userEvent.setup();
+    render(<VehicleOverview siteSlug="akarp" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Synkronisera nu/i })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole("button", { name: /Synkronisera nu/i }));
+
+    await waitFor(() => {
+      expect(mockSyncVehicles).toHaveBeenCalledWith("akarp");
+      expect(mockFetchVehicles).toHaveBeenCalled();
     });
   });
 

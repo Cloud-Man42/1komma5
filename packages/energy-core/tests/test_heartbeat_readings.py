@@ -61,3 +61,4 @@ def test_live_overview_handles_missing_optional_fields():
     assert reading.grid_import_w == 0
     assert reading.grid_export_w == 0
     assert reading.battery_soc_pct == 0
+    assert reading.present_fields == frozenset()

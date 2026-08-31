@@ -78,6 +78,9 @@ export function chargingSubtitle(
   reasoning: EnergyReasoning | null,
 ): string {
   if (reasoning?.decision_reason_sv) return reasoning.decision_reason_sv;
+  if (vehicle?.freshness_label === "INAKTUELL" || vehicle?.freshness_label === "OFFLINE") {
+    return "Ingen färsk fordonsdata från Mercedes me";
+  }
   if (vehicle?.is_charging) {
     if (session && totalRenewableKwh(session) > 0) return "Laddar med överskott från solen";
     return "Laddning pågår";
@@ -150,6 +153,27 @@ export function averageRenewableSharePct(sessions: VehicleChargeSession[]): numb
   return shares.reduce((a, b) => a + b, 0) / shares.length;
 }
 
+/**
+ * Pick the first target SoC worth showing.
+ *
+ * The EQE reports 0 % when it cannot read a charge limit at all, and a plain
+ * `??` chain lets that 0 win over a real target from the session or the plan.
+ * A target of 0 % is never a real goal, so treat it as unknown.
+ */
+export function resolveTargetSocPct(
+  vehicle: VehicleListItem | null,
+  session: VehicleChargeSession | null,
+  reasoning: EnergyReasoning | null,
+): number | null {
+  const fromVehicle = vehicle?.capabilities?.can_read_target_soc
+    ? vehicle?.target_soc_percent
+    : null;
+  for (const candidate of [fromVehicle, session?.target_soc, reasoning?.vehicle_target_soc_pct]) {
+    if (candidate != null && candidate > 0) return candidate;
+  }
+  return null;
+}
+
 export function buildVehicleDisplay({
   vehicle,
   session,
@@ -184,7 +208,7 @@ export function buildVehicleDisplay({
     energyKwh,
     capacityKwh: capacity,
     rangeKm: vehicle?.electric_range_km ?? null,
-    targetSocPct: vehicle?.target_soc_percent ?? session?.target_soc ?? reasoning?.vehicle_target_soc_pct ?? null,
+    targetSocPct: resolveTargetSocPct(vehicle, session, reasoning),
     chargingPowerKw: vehicle?.charging_power_kw ?? vehicle?.halo_correlation?.vehicle_power_kw ?? null,
     isCharging: vehicle?.is_charging ?? session?.status === "ACTIVE",
     isPluggedIn: vehicle?.is_plugged_in,

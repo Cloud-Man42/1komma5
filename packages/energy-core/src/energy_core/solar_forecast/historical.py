@@ -82,6 +82,7 @@ def build_performance_sample(
     baseline_kwh: float,
     weather: WeatherForecastPoint | None,
     coverage: float,
+    timezone: str = "UTC",
 ) -> PerformanceSample | None:
     if baseline_kwh <= 0 or coverage < MIN_COVERAGE_FRACTION:
         return None
@@ -99,7 +100,7 @@ def build_performance_sample(
     if anomaly:
         return None
 
-    local = bucket_start.astimezone(UTC)
+    local = bucket_start.astimezone(ZoneInfo(timezone))
     return PerformanceSample(
         timestamp=bucket_start,
         baseline_energy_kwh=baseline_kwh,

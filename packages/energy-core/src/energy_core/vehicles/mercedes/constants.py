@@ -49,6 +49,9 @@ ATTRIBUTE_CHARGING_POWER_KW = "chargingpowerkw"
 ATTRIBUTE_RANGE_ELECTRIC_KM = "rangeElectricKm"
 ATTRIBUTE_CHARGING_STATUS = "chargingstatus"
 ATTRIBUTE_CHARGING_ACTIVE = "chargingactive"
+ATTRIBUTE_POSITION_LAT = "positionlat"
+ATTRIBUTE_POSITION_LONG = "positionlong"
+ATTRIBUTE_ODOMETER = "odo"
 
 
 def login_base_url(region: str) -> str:

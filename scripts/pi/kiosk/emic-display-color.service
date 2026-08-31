@@ -1,0 +1,22 @@
+[Unit]
+Description=EMIC display colour temperature (DRM gamma)
+After=emic-kiosk.service graphical.target
+Wants=emic-kiosk.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=hm
+# kiosk.env is root-only (it holds the token) and unreadable for this unit's
+# user; the colour settings live in the world-readable display.env instead.
+EnvironmentFile=-/etc/emic/display.env
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=XDG_SESSION_TYPE=wayland
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+# Wait for Chromium/compositor to bring up the CRTC before applying gamma.
+ExecStartPre=/bin/sleep 12
+ExecStart=/home/hm/emic-kiosk/start-display-color.sh
+
+[Install]
+WantedBy=graphical.target

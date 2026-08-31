@@ -159,6 +159,15 @@ def evaluate_smart_charging(
     if abs(next_current - runtime.requested_current_a) < 0.01:
         runtime.state = SmartChargingState.CHARGING_STABLE
         runtime.target_current_a = desired
+        if not is_charging:
+            # The ramp has nothing left to change, but the charger is idle, so
+            # "no change needed" would keep us here forever: the requested
+            # current already equals the target, so no later cycle can escape
+            # either. Re-issuing the current is what reaches the charger's start
+            # command; the controller only sends it alongside a set_current.
+            return runtime, _set_decision(
+                runtime.requested_current_a, policy_mode, reason=optimizer_reason
+            )
         return runtime, _none_decision(runtime.requested_current_a, policy_mode, reason=optimizer_reason)
 
     if next_current < runtime.requested_current_a:

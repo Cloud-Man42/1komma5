@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime, timedelta
-from itertools import pairwise
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,8 +20,10 @@ from app.schemas import (
     DashboardSiteSection,
     DashboardSolarSection,
     DashboardTodaySection,
+    DashboardVehicleSection,
 )
 from energy_core.charging.engine import bridge_status_from_charger
+from energy_core.energy.integration import integrate_site_energy
 from energy_core.charging.reasoning import build_energy_reasoning
 from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.config import Settings
@@ -30,6 +31,7 @@ from energy_core.db.energy_balance_repo import EnergyBalanceRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel
 from energy_core.db.repositories import EnergyReadingRepository, MarketPriceRepository, SiteRepository
+from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
 from energy_core.energy.state import EnergyState
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -108,22 +110,11 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
         _cache_set(site.slug, "today", section)
         return section
 
-    produced = consumed = imported = exported = 0.0
-    for previous, current in pairwise(readings):
-        started_at = previous.recorded_at
-        ended_at = current.recorded_at
-        if started_at.tzinfo is None:
-            started_at = started_at.replace(tzinfo=UTC)
-        if ended_at.tzinfo is None:
-            ended_at = ended_at.replace(tzinfo=UTC)
-        seconds = (ended_at - started_at).total_seconds()
-        if seconds <= 0 or seconds > 300:
-            continue
-        hours = seconds / 3600.0
-        produced += max(0.0, float(previous.solar_production_w or 0.0)) * hours / 1000.0
-        consumed += max(0.0, float(previous.consumption_w or 0.0)) * hours / 1000.0
-        imported += max(0.0, float(previous.grid_import_w or 0.0)) * hours / 1000.0
-        exported += max(0.0, float(previous.grid_export_w or 0.0)) * hours / 1000.0
+    totals = integrate_site_energy(readings)
+    produced = totals.solar_kwh
+    consumed = totals.consumption_kwh
+    imported = totals.import_kwh
+    exported = totals.export_kwh
 
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
     stats = await reading_repo.list_financial_stats(
@@ -134,6 +125,7 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
         export_compensation_sek_kwh=site.export_compensation_sek_kwh,
         from_time=start_utc,
         to_time=now_utc + timedelta(seconds=1),
+        sell_config=sell_price_config_from_site(site),
     )
     today_key = now_local.strftime("%Y-%m-%d")
     stat = next((row for row in stats if row.period_start == today_key), None)
@@ -168,11 +160,11 @@ async def _price_from_db(session: AsyncSession, site, settings: Settings) -> tup
         return None, (), section
 
     forecast = tuple(
-        (row.recorded_at, row.all_in_price_sek_kwh or row.spot_price_sek_kwh) for row in prices
+        (row.recorded_at, row.all_in_price_eur_kwh or row.spot_price_eur_kwh) for row in prices
     )
     current_row = next((row for row in prices if row.recorded_at <= now), prices[0])
-    current = current_row.all_in_price_sek_kwh or current_row.spot_price_sek_kwh
-    all_in_values = [row.all_in_price_sek_kwh or row.spot_price_sek_kwh for row in prices]
+    current = current_row.all_in_price_eur_kwh or current_row.spot_price_eur_kwh
+    all_in_values = [row.all_in_price_eur_kwh or row.spot_price_eur_kwh for row in prices]
     avg = sum(all_in_values) / len(all_in_values)
     tier = "normal"
     if current <= avg * 0.85:
@@ -261,6 +253,57 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
         charging_mode=status_record.charging_mode,
         display_status_sv=status_record.display_status_sv,
         power_w=power_w,
+    )
+
+
+async def _compute_vehicle(session: AsyncSession, site) -> DashboardVehicleSection:
+    from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRepository
+    from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
+    from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+
+    provider = await VehicleProviderRepository(session).get_for_site(site.id)
+    if provider is None or not provider.enabled:
+        return DashboardVehicleSection(unavailable_reason="Mercedes-integration är avstängd")
+
+    vehicles = await VehicleRepository(session).list_for_site(site.id)
+    if not vehicles:
+        return DashboardVehicleSection(unavailable_reason="Inget fordon registrerat")
+
+    vehicle = vehicles[0]
+    latest = await VehicleRepository(session).get_latest_state(vehicle.id)
+    active = await VehicleChargeSessionRepository(session).get_active_for_vehicle(vehicle.id)
+
+    is_charging = bool(latest and latest.is_charging)
+    is_plugged = bool(latest and latest.is_plugged_in)
+    stale = False
+    freshness = "LIVE"
+    if latest and latest.last_vehicle_update:
+        ts = latest.last_vehicle_update
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - ts).total_seconds()
+        stale = age > STALE_TELEMETRY_SECONDS
+        freshness = "INAKTUELL" if stale else "LIVE"
+
+    mode = "charging" if is_charging else "parked"
+    session_energy = None
+    if active is not None:
+        session_energy = active.halo_energy_kwh or active.estimated_energy_kwh
+
+    return DashboardVehicleSection(
+        available=True,
+        display_name=vehicle.display_name,
+        mode=mode,
+        state_of_charge_percent=latest.state_of_charge_percent if latest and not stale else None,
+        electric_range_km=latest.electric_range_km if latest and not stale else None,
+        is_plugged_in=is_plugged if latest and not stale else None,
+        is_charging=is_charging if latest and not stale else None,
+        charging_power_kw=latest.charging_power_kw if latest and not stale else None,
+        location_name=active.location_name if active else None,
+        charging_type=active.charging_type if active else None,
+        session_energy_kwh=session_energy,
+        data_quality=active.vehicle_data_quality if active else (latest.data_quality if latest else None),
+        freshness_label=freshness,
     )
 
 
@@ -436,6 +479,7 @@ async def get_site_dashboard(
         )
 
     ev_section = await _compute_ev(session, site, settings)
+    vehicle_section = await _compute_vehicle(session, site)
     if live is not None and ev_section.power_w is not None:
         live = live.model_copy(update={"ev_power_w": ev_section.power_w})
 
@@ -462,6 +506,7 @@ async def get_site_dashboard(
         live=live,
         today=today_section,
         ev=ev_section,
+        vehicle=vehicle_section,
         solar=solar_section,
         price=price_section,
         optimization=optimization_section,
