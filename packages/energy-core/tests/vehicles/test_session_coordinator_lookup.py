@@ -69,15 +69,17 @@ def test_lookup_skips_when_unplugged(coordinator):
     assert _lookup(coordinator, 1, is_plugged=False, is_charging=False) is False
 
 
-def test_lookup_resets_on_unplug_for_next_session(coordinator):
+def test_lookup_keeps_resolution_until_next_plug_in(coordinator):
     _lookup(coordinator, 1, is_plugged=True, is_charging=False)
     coordinator._lookup_state[1].lookup_done_for_session = True
     coordinator._lookup_state[1].last_resolution = _FakeResolution(StationResolutionStatus.OK)
 
     assert _lookup(coordinator, 1, is_plugged=False, is_charging=False) is False
-    assert coordinator._lookup_state[1].last_resolution is None
+    assert coordinator._lookup_state[1].last_resolution is not None
+    assert coordinator._lookup_state[1].pending_finalize is True
 
     assert _lookup(coordinator, 1, is_plugged=True, is_charging=False) is True
+    assert coordinator._lookup_state[1].last_resolution is None
 
 
 def test_uncertain_retry_while_plugged_not_charging(coordinator):

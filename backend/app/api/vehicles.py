@@ -42,6 +42,7 @@ from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.connection_signals import resolve_effective_connection
 from energy_core.vehicles.mercedes.provider import MercedesProvider
 from energy_core.vehicles.health import MercedesIntegrationHealthService
+from energy_core.vehicles.sessions.repair import repair_completed_sessions
 from energy_core.vehicles.vin import mask_vin
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -686,6 +687,12 @@ async def list_vehicle_charge_sessions(
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
+    await repair_completed_sessions(
+        session,
+        site_id=site.id,
+        vehicle_id=vehicle_id,
+        settings=get_settings(),
+    )
     repo = VehicleChargeSessionRepository(session)
     records = await repo.list_for_vehicle(vehicle_id)
     return VehicleChargeSessionListResponse(

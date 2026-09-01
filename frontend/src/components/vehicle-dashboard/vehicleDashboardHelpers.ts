@@ -133,7 +133,11 @@ export function lastCompletedSession(sessions: VehicleChargeSession[]): VehicleC
 }
 
 export function sessionEnergyKwh(session: VehicleChargeSession): number {
-  return session.halo_energy_kwh ?? session.estimated_battery_energy_delta_kwh ?? 0;
+  const measured = session.halo_energy_kwh ?? 0;
+  const estimated = session.estimated_battery_energy_delta_kwh ?? 0;
+  if (measured > 0) return measured;
+  if (estimated > 0) return estimated;
+  return 0;
 }
 
 export function recentSessionEnergyBars(sessions: VehicleChargeSession[], count = 7): number[] {

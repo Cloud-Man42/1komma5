@@ -42,6 +42,7 @@ class _VehicleLookupState:
     was_charging: bool = False
     lookup_done_for_session: bool = False
     uncertain_retry_done: bool = False
+    pending_finalize: bool = False
     last_resolution: object | None = None
 
 
@@ -275,15 +276,19 @@ class VehicleChargeSessionCoordinator:
         if unplug:
             state.lookup_done_for_session = False
             state.uncertain_retry_done = False
-            state.last_resolution = None
+            state.pending_finalize = True
             return False
 
         if not is_plugged:
+            if state.pending_finalize and not state.lookup_done_for_session:
+                return True
             return False
 
         if plug_in:
             state.lookup_done_for_session = False
             state.uncertain_retry_done = False
+            state.pending_finalize = False
+            state.last_resolution = None
             return True
 
         if not state.lookup_done_for_session:
@@ -326,6 +331,9 @@ class VehicleChargeSessionCoordinator:
             is_charging=is_charging,
             last_resolution=state.last_resolution,
         ):
+            if state.pending_finalize and state.last_resolution is not None:
+                state.pending_finalize = False
+                return state.last_resolution
             if not is_plugged:
                 return None
             return state.last_resolution
@@ -364,6 +372,7 @@ class VehicleChargeSessionCoordinator:
                 await status_repo.record_success(latency_ms=0, lookup_mode="WEB")
 
         state.lookup_done_for_session = True
+        state.pending_finalize = False
         state.last_resolution = resolved
         await db.flush()
         return resolved

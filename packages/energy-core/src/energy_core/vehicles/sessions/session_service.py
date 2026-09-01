@@ -25,6 +25,11 @@ from energy_core.vehicles.sessions.constants import (
     DEFAULT_SAVINGS_BASELINE,
     estimate_battery_delta_kwh,
 )
+from energy_core.vehicles.sessions.finalization import (
+    apply_station_resolution_to_csi,
+    finalize_away_session_energy,
+    merge_csi_fields,
+)
 from energy_core.vehicles.sessions.models import VehicleSessionRuntimeState
 
 logger = logging.getLogger(__name__)
@@ -170,6 +175,7 @@ class VehicleChargeSessionService:
             station_resolution=station_resolution,
         )
         csi_fields = _csi_fields(context, latest=latest)
+        csi_fields = apply_station_resolution_to_csi(csi_fields, station_resolution, latest=latest)
 
         if is_plugged and not was_plugged and active is None:
             record = await repo.create(
@@ -191,7 +197,7 @@ class VehicleChargeSessionService:
             return record.id
 
         if active is not None:
-            update_fields = dict(csi_fields)
+            update_fields = merge_csi_fields(active, dict(csi_fields))
             if is_away_charging(
                 halo=halo,
                 mercedes_plugged=is_plugged,
@@ -202,7 +208,16 @@ class VehicleChargeSessionService:
                 update_fields["charger_id"] = None
             await repo.update_csi_fields(active.id, **update_fields)
             if not is_plugged:
-                await self._complete_away_session(db, repo, active, runtime, end_soc=soc, context=context)
+                await self._complete_away_session(
+                    db,
+                    repo,
+                    active,
+                    runtime,
+                    end_soc=soc,
+                    context=context,
+                    latest=latest,
+                    station_resolution=station_resolution,
+                )
             elif _vehicle_data_stale(latest) and (is_charging or was_plugged):
                 await repo.update_csi_fields(active.id, vehicle_data_quality="STALE")
 
@@ -275,6 +290,7 @@ class VehicleChargeSessionService:
             station_resolution=station_resolution,
         )
         csi_fields = _csi_fields(context, latest=latest)
+        csi_fields = apply_station_resolution_to_csi(csi_fields, station_resolution, latest=latest)
 
         active = await repo.get_active_for_vehicle(vehicle.id)
 
@@ -323,7 +339,7 @@ class VehicleChargeSessionService:
             return active.id
 
         if active is not None:
-            await repo.update_csi_fields(active.id, **csi_fields)
+            await repo.update_csi_fields(active.id, **merge_csi_fields(active, csi_fields))
             if stale and (is_charging or was_charging or charger_active):
                 await repo.update_csi_fields(active.id, vehicle_data_quality="STALE")
             if is_charging and not was_charging:
@@ -356,9 +372,20 @@ class VehicleChargeSessionService:
         *,
         end_soc: float | None,
         context,
+        latest: VehicleStateLatestModel | None = None,
+        station_resolution=None,
     ) -> None:
-        estimated_delta = estimate_battery_delta_kwh(active.start_soc, end_soc)
-        energy = context.estimated_energy_kwh or estimated_delta
+        csi_fields = apply_station_resolution_to_csi(
+            _csi_fields(context, latest=latest),
+            station_resolution,
+            latest=latest,
+        )
+        csi_fields = merge_csi_fields(active, csi_fields)
+        energy, estimated_delta, energy_quality = finalize_away_session_energy(
+            active,
+            end_soc=end_soc,
+            context_estimated_kwh=context.estimated_energy_kwh,
+        )
         await repo.complete(
             active.id,
             disconnected_at=datetime.now(UTC),
@@ -367,10 +394,10 @@ class VehicleChargeSessionService:
             estimated_battery_energy_delta_kwh=estimated_delta,
             charging_cost_sek=context.charging_cost_sek,
             cost_source=context.cost_source,
-            energy_quality="ESTIMATED",
+            energy_quality=energy_quality,
             cost_quality="ESTIMATED" if context.charging_cost_sek else "INCOMPLETE",
             attribution_quality="UNAVAILABLE",
-            **_csi_fields(context, latest=None),
+            **csi_fields,
         )
         runtime.last_plugged_in = False
         runtime.last_charging = False

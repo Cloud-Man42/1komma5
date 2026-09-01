@@ -123,6 +123,17 @@ describe("vehicleDashboardHelpers", () => {
     expect(estimateCo2SavedKg(28.7)).toBeCloseTo(4.305);
     expect(surplusLabel(session)).toBe("100% förnybar");
   });
+
+  it("uses estimated battery delta when measured energy is zero", () => {
+    expect(
+      sessionEnergyKwh({
+        ...session,
+        status: "COMPLETED",
+        halo_energy_kwh: 0,
+        estimated_battery_energy_delta_kwh: 13.5,
+      }),
+    ).toBe(13.5);
+  });
 });
 
 describe("resolveTargetSocPct", () => {
