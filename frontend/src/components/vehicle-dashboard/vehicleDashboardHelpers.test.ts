@@ -6,6 +6,8 @@ import {
   recentSessionEnergyBars,
   resolveTargetSocPct,
   sessionEnergyKwh,
+  sessionLocationSubtitle,
+  sessionLocationTitle,
   surplusLabel,
 } from "./vehicleDashboardHelpers";
 import type {
@@ -133,6 +135,28 @@ describe("vehicleDashboardHelpers", () => {
         estimated_battery_energy_delta_kwh: 13.5,
       }),
     ).toBe(13.5);
+  });
+
+  it("formats session location labels", () => {
+    expect(
+      sessionLocationTitle({
+        ...session,
+        home_charging: false,
+        location_name: "Unknown",
+        station_name: "Hotell Corallen",
+        charger_operator: "ChargeNode",
+      }),
+    ).toBe("Hotell Corallen");
+    expect(
+      sessionLocationSubtitle({
+        ...session,
+        home_charging: false,
+        location_name: "Unknown",
+        station_name: "Hotell Corallen",
+        charger_operator: "ChargeNode",
+        charging_type: "AC",
+      }),
+    ).toBe("ChargeNode · AC");
   });
 });
 

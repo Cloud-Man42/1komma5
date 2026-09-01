@@ -140,6 +140,44 @@ export function sessionEnergyKwh(session: VehicleChargeSession): number {
   return 0;
 }
 
+const UNKNOWN_LOCATION_LABELS = new Set(["Unknown", "Borta (ej hemma)"]);
+
+export function sessionLocationTitle(session: VehicleChargeSession): string {
+  if (session.home_charging) return "Hemma";
+  const station = session.station_name?.trim();
+  const location = session.location_name?.trim();
+  if (station && !UNKNOWN_LOCATION_LABELS.has(station)) return station;
+  if (location && !UNKNOWN_LOCATION_LABELS.has(location)) return location;
+  return "Okänd plats";
+}
+
+export function sessionLocationSubtitle(session: VehicleChargeSession): string | null {
+  const parts: string[] = [];
+  const operator = session.charger_operator?.trim();
+  const location = session.location_name?.trim();
+  const station = session.station_name?.trim();
+  if (operator) parts.push(operator);
+  if (session.charging_type) parts.push(session.charging_type);
+  if (
+    location &&
+    station &&
+    location !== station &&
+    !UNKNOWN_LOCATION_LABELS.has(location)
+  ) {
+    parts.unshift(location);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+export function sessionEnergyEstimated(session: VehicleChargeSession): boolean {
+  return (
+    session.energy_quality === "ESTIMATED" ||
+    session.vehicle_data_quality === "STALE" ||
+    session.energy_source === "SOC_ESTIMATE" ||
+    ((session.halo_energy_kwh ?? 0) <= 0 && (session.estimated_battery_energy_delta_kwh ?? 0) > 0)
+  );
+}
+
 export function recentSessionEnergyBars(sessions: VehicleChargeSession[], count = 7): number[] {
   const values = sessions
     .slice(0, count)
