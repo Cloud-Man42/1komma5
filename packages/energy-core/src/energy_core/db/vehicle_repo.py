@@ -71,6 +71,8 @@ def _merge_last_known_good(
         and (incoming.get("charging_power_kw") or 0) < 0.3
     ):
         merged["is_plugged_in"] = False
+    if incoming.get("is_charging") is False and (incoming.get("charging_power_kw") or 0) > 0:
+        merged["charging_power_kw"] = 0.0
     return merged
 
 

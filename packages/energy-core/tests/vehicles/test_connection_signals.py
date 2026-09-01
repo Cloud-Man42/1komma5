@@ -53,6 +53,28 @@ def test_correlation_mismatch_closes_effective_connection():
     assert effective.is_plugged_in is False
 
 
+def test_stale_plugged_flag_healed_when_idle_without_halo():
+    effective = resolve_effective_connection(
+        _latest(is_plugged_in=True, is_charging=False, charging_power_kw=10.9),
+    )
+    assert effective.is_plugged_in is False
+
+
+def test_charge_break_keeps_plugged_without_power():
+    effective = resolve_effective_connection(
+        _latest(is_plugged_in=True, is_charging=False, charging_power_kw=0.0),
+    )
+    assert effective.is_plugged_in is True
+
+
+def test_stale_power_ignored_when_not_charging():
+    effective = resolve_effective_connection(
+        _latest(is_plugged_in=None, is_charging=False, charging_power_kw=10.9),
+    )
+    assert effective.is_plugged_in is False
+    assert effective.is_charging is False
+
+
 def test_ambiguous_idle_without_halo_is_unplugged():
     effective = resolve_effective_connection(
         _latest(is_plugged_in=None, is_charging=False, charging_power_kw=0.0),

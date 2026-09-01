@@ -9,6 +9,17 @@ from energy_core.db.models import VehicleStateLatestModel
 POWER_CHARGING_THRESHOLD_KW = 0.3
 
 
+def _trusted_power_kw(
+    *,
+    is_charging: bool | None,
+    charging_power_kw: float | None,
+) -> float:
+    """Ignore stale positive kW when Mercedes explicitly reports not charging."""
+    if is_charging is False:
+        return 0.0
+    return charging_power_kw or 0.0
+
+
 @dataclass(frozen=True, slots=True)
 class EffectiveConnection:
     is_plugged_in: bool
@@ -30,7 +41,10 @@ def infer_plugged_in_from_mercedes(
     if is_charging is True:
         return True
 
-    power_kw = charging_power_kw or 0.0
+    power_kw = _trusted_power_kw(
+        is_charging=is_charging,
+        charging_power_kw=charging_power_kw,
+    )
     if power_kw >= POWER_CHARGING_THRESHOLD_KW:
         return True
 
@@ -52,18 +66,25 @@ def resolve_effective_connection(
     if latest is None:
         return EffectiveConnection(False, False)
 
-    power_kw = latest.charging_power_kw
-    mercedes_charging = latest.is_charging is True or (power_kw or 0.0) >= POWER_CHARGING_THRESHOLD_KW
+    power_kw = _trusted_power_kw(
+        is_charging=latest.is_charging,
+        charging_power_kw=latest.charging_power_kw,
+    )
+    mercedes_charging = latest.is_charging is True or power_kw >= POWER_CHARGING_THRESHOLD_KW
     mercedes_plugged = infer_plugged_in_from_mercedes(
         is_plugged_in=latest.is_plugged_in,
         is_charging=latest.is_charging,
         charging_power_kw=power_kw,
     )
 
+    raw_power_kw = latest.charging_power_kw or 0.0
+    if latest.is_charging is False and raw_power_kw >= POWER_CHARGING_THRESHOLD_KW:
+        return EffectiveConnection(False, False)
+
     if plugged_agreement is False and not mercedes_charging:
         return EffectiveConnection(False, False)
 
-    if halo_vehicle_connected is False and not mercedes_charging and (power_kw or 0.0) < POWER_CHARGING_THRESHOLD_KW:
+    if halo_vehicle_connected is False and not mercedes_charging and power_kw < POWER_CHARGING_THRESHOLD_KW:
         return EffectiveConnection(False, False)
 
     if mercedes_plugged is False:
