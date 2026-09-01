@@ -81,7 +81,7 @@ def upgrade() -> None:
                 expected_operator, expected_charging_type, price_model, enabled
             )
             SELECT 1, 'Hotel', 'HOTEL', 59.3293, 18.0686, 150,
-                   'ChargeNode', 'AC', 'UNKNOWN', 1
+                   'ChargeNode', 'AC', 'UNKNOWN', TRUE
             WHERE EXISTS (SELECT 1 FROM sites WHERE id = 1)
               AND NOT EXISTS (
                 SELECT 1 FROM charging_locations WHERE site_id = 1 AND name = 'Hotel'
@@ -97,7 +97,7 @@ def upgrade() -> None:
                 expected_operator, expected_charging_type, price_model, enabled
             )
             SELECT 1, 'Summer House Denmark', 'HOME_SECONDARY', 55.6761, 12.5683, 150,
-                   NULL, 'AC', 'UNKNOWN', 1
+                   NULL, 'AC', 'UNKNOWN', TRUE
             WHERE EXISTS (SELECT 1 FROM sites WHERE id = 1)
               AND NOT EXISTS (
                 SELECT 1 FROM charging_locations WHERE site_id = 1 AND name = 'Summer House Denmark'
