@@ -96,3 +96,44 @@ def test_vehicle_mapper_marks_stale_data():
         )
     )
     assert stale.data_quality == DataQuality.STALE
+
+
+def test_vehicle_mapper_partial_update_does_not_replay_soc():
+    mapper = MercedesVehicleMapper()
+    base = mapper.apply_discovery(
+        vehicle_id="vin-1",
+        vin="W1K12345678901234",
+        manufacturer="Mercedes-Benz",
+        model="EQE 500",
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+    with_soc = mapper.apply_push(
+        base,
+        MercedesPushMessage(attributes=(MercedesAttributeUpdate(name="soc", value=31),)),
+    )
+    assert with_soc.state_of_charge_percent == 31
+
+    charging_only = mapper.apply_push(
+        with_soc,
+        MercedesPushMessage(attributes=(MercedesAttributeUpdate(name="chargingstatus", value=8),)),
+    )
+    assert charging_only.state_of_charge_percent is None
+    assert charging_only.is_charging is False
+
+
+def test_vehicle_mapper_rest_snapshot_replaces_stale_bucket_soc():
+    mapper = MercedesVehicleMapper()
+    base = mapper.apply_discovery(
+        vehicle_id="vin-1",
+        vin="W1K12345678901234",
+        manufacturer="Mercedes-Benz",
+        model="EQE 500",
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+    mapper.apply_push(base, MercedesPushMessage(attributes=(MercedesAttributeUpdate(name="soc", value=31),)))
+    refreshed = mapper.apply_push(
+        base,
+        MercedesPushMessage(attributes=(MercedesAttributeUpdate(name="soc", value=37),)),
+        source="REST",
+    )
+    assert refreshed.state_of_charge_percent == 37

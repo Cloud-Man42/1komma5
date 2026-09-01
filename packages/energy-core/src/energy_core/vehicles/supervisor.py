@@ -40,6 +40,7 @@ class _PollingContext:
     is_plugged_in: bool | None = None
     charging_power_kw: float | None = None
     last_vehicle_update: datetime | None = None
+    soc_updated_at: datetime | None = None
     missing_gps: bool = True
     away_from_home: bool = False
 
@@ -72,6 +73,7 @@ def _build_polling_context(db_latest, latest_state, correlation, charger) -> _Po
         if db_latest is not None
         else (latest_state.last_vehicle_update if latest_state else None)
     )
+    soc_updated_at = getattr(db_latest, "soc_updated_at", None) if db_latest is not None else None
     latitude = db_latest.latitude if db_latest is not None else (latest_state.latitude if latest_state else None)
     longitude = db_latest.longitude if db_latest is not None else (latest_state.longitude if latest_state else None)
     halo = (
@@ -84,6 +86,7 @@ def _build_polling_context(db_latest, latest_state, correlation, charger) -> _Po
         is_plugged_in=is_plugged_in,
         charging_power_kw=charging_power_kw,
         last_vehicle_update=last_vehicle_update,
+        soc_updated_at=soc_updated_at,
         missing_gps=latitude is None or longitude is None,
         away_from_home=is_away_charging(
             halo=halo,
@@ -365,6 +368,7 @@ class VehicleIntegrationSupervisor:
                 is_plugged_in=polling_context.is_plugged_in,
                 charging_power_kw=polling_context.charging_power_kw,
                 last_vehicle_update=polling_context.last_vehicle_update,
+                soc_updated_at=polling_context.soc_updated_at,
                 missing_gps=polling_context.missing_gps,
                 away_from_home=polling_context.away_from_home,
             )

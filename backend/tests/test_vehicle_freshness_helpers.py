@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.api.vehicles import _freshness_label, _guard_stale_connection_fields, _latest_signal_timestamp
+from app.api.vehicles import _field_is_stale, _freshness_label, _guard_stale_connection_fields, _latest_signal_timestamp
 from energy_core.db.models import VehicleStateLatestModel
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleConnectionState
 
@@ -50,3 +50,8 @@ def test_guard_stale_hides_old_charging_last_known_good():
     assert is_plugged_in is None
     assert is_charging is None
     assert power is None
+
+
+def test_field_is_stale_uses_soc_timestamp():
+    assert _field_is_stale(datetime.now(UTC) - timedelta(minutes=20)) is True
+    assert _field_is_stale(datetime.now(UTC) - timedelta(minutes=2)) is False

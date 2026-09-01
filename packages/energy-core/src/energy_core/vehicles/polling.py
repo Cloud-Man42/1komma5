@@ -47,6 +47,7 @@ class AdaptivePollingPlanner:
         is_plugged_in: bool | None,
         last_vehicle_update: datetime | None,
         vehicle_data_age_seconds: float | None = None,
+        soc_updated_at: datetime | None = None,
         charging_power_kw: float | None = None,
         missing_gps: bool = False,
         away_from_home: bool = False,
@@ -62,6 +63,10 @@ class AdaptivePollingPlanner:
         if age is None and last_vehicle_update is not None:
             ts = last_vehicle_update if last_vehicle_update.tzinfo else last_vehicle_update.replace(tzinfo=UTC)
             age = max(0.0, (current - ts).total_seconds())
+        if soc_updated_at is not None:
+            soc_ts = soc_updated_at if soc_updated_at.tzinfo else soc_updated_at.replace(tzinfo=UTC)
+            soc_age = max(0.0, (current - soc_ts).total_seconds())
+            age = max(age or 0.0, soc_age)
 
         if missing_gps and away_from_home and (is_charging is True or is_plugged_in is True):
             return PollingDecision(

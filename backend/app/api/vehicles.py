@@ -73,6 +73,13 @@ async def _site_or_404(session: AsyncSession, slug: str):
     return site
 
 
+def _field_is_stale(updated_at: datetime | None) -> bool:
+    if updated_at is None:
+        return True
+    age = (datetime.now(UTC) - updated_at).total_seconds()
+    return age > STALE_TELEMETRY_SECONDS
+
+
 def _freshness_label(
     *,
     connection_state: str,
@@ -191,6 +198,14 @@ def _vehicle_item(
         charging_power_kw=latest.charging_power_kw if latest else None,
         charging_updated_at=getattr(latest, "charging_updated_at", None) if latest else None,
     )
+    soc_updated_at = getattr(latest, "soc_updated_at", None) if latest else None
+    range_updated_at = getattr(latest, "range_updated_at", None) if latest else None
+    soc = latest.state_of_charge_percent if latest else None
+    electric_range_km = latest.electric_range_km if latest else None
+    if _field_is_stale(soc_updated_at):
+        soc = None
+    if _field_is_stale(range_updated_at):
+        electric_range_km = None
     return VehicleListItemResponse(
         id=vehicle.id,
         site_id=vehicle.site_id,
@@ -203,24 +218,26 @@ def _vehicle_item(
         connection_state=connection_state,
         data_quality=data_quality,
         freshness_label=freshness_label,
-        state_of_charge_percent=latest.state_of_charge_percent if latest else None,
+        state_of_charge_percent=soc,
         target_soc_percent=latest.target_soc_percent if latest else None,
-        electric_range_km=latest.electric_range_km if latest else None,
+        electric_range_km=electric_range_km,
         is_plugged_in=is_plugged_in,
         is_charging=is_charging,
         charging_power_kw=charging_power_kw,
         last_vehicle_update=latest.last_vehicle_update if latest else None,
         state_of_charge=_value_response(
-            latest.state_of_charge_percent if latest else None,
-            updated_at=getattr(latest, "soc_updated_at", None) or (latest.last_vehicle_update if latest else None),
+            soc,
+            updated_at=soc_updated_at or (latest.last_vehicle_update if latest else None),
+            estimated=_field_is_stale(soc_updated_at),
         ),
         charging_power=_value_response(
             latest.charging_power_kw if latest else None,
             updated_at=getattr(latest, "charging_updated_at", None) or (latest.last_vehicle_update if latest else None),
         ),
         electric_range=_value_response(
-            latest.electric_range_km if latest else None,
-            updated_at=getattr(latest, "range_updated_at", None) or (latest.last_vehicle_update if latest else None),
+            electric_range_km,
+            updated_at=range_updated_at or (latest.last_vehicle_update if latest else None),
+            estimated=_field_is_stale(range_updated_at),
         ),
         capabilities=VehicleCapabilitiesResponse.from_rows(caps),
         halo_correlation=_correlation_response(correlation),

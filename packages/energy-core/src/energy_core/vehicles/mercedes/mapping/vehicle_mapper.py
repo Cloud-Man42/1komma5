@@ -25,9 +25,32 @@ from energy_core.vehicles.mercedes.telemetry_plausibility import sanitize_vehicl
 from energy_core.vehicles.mercedes.commands.features import MercedesCommandFeatures
 from energy_core.vehicles.mercedes.mapping.observer import MercedesAttributeRecorder
 from energy_core.vehicles.mercedes.protocol.decoder import MercedesPushMessage
-from energy_core.vehicles.vin import mask_vin
 
 logger = logging.getLogger(__name__)
+
+_TELEMETRY_ATTRIBUTE_KEYS = frozenset(
+    {
+        ATTRIBUTE_SOC,
+        "soc",
+        ATTRIBUTE_MAX_SOC,
+        "max_soc",
+        "maxsoc",
+        ATTRIBUTE_RANGE_ELECTRIC_KM.lower(),
+        "rangeelectrickm",
+        ATTRIBUTE_CHARGING_POWER_KW.lower(),
+        "chargingpowerkw",
+        ATTRIBUTE_POSITION_LAT,
+        "positionlat",
+        ATTRIBUTE_POSITION_LONG,
+        "positionlong",
+        ATTRIBUTE_ODOMETER,
+        "odometer",
+        ATTRIBUTE_CHARGING_STATUS,
+        "chargingstatus",
+        ATTRIBUTE_CHARGING_ACTIVE,
+        "chargingactive",
+    }
+)
 
 
 class MercedesCapabilityMapper:
@@ -96,47 +119,75 @@ class MercedesVehicleMapper:
 
     def apply_push(self, base: VehicleState, message: MercedesPushMessage, *, source: str = "WS") -> VehicleState:
         bucket = self._attributes.setdefault(base.vehicle_id, {})
+        if source == "REST":
+            bucket.clear()
+        present: set[str] = set()
         for attr in message.attributes:
             self._attribute_recorder.observe(name=attr.name, value=attr.value, source=source)
-            bucket[attr.name.lower()] = attr.value
+            key = attr.name.lower()
+            bucket[key] = attr.value
+            present.add(key)
+
         now = datetime.now(UTC)
-        soc = _to_float(bucket.get(ATTRIBUTE_SOC))
-        target_soc = _to_float(bucket.get(ATTRIBUTE_MAX_SOC))
-        range_km = _to_float(bucket.get(ATTRIBUTE_RANGE_ELECTRIC_KM.lower()))
-        power_kw = _to_float(bucket.get(ATTRIBUTE_CHARGING_POWER_KW.lower()))
-        latitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LAT)) or _to_float(bucket.get("positionlat"))
-        longitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LONG)) or _to_float(bucket.get("positionlong"))
-        odometer_km = _to_float(bucket.get(ATTRIBUTE_ODOMETER)) or _to_float(bucket.get("odometer"))
-        charging_status_raw = bucket.get(ATTRIBUTE_CHARGING_STATUS)
-        charging_active = _to_bool(bucket.get(ATTRIBUTE_CHARGING_ACTIVE))
-        status = interpret_charging_status(charging_status_raw)
-        is_charging = charging_active
+        telemetry_present = bool(present & _TELEMETRY_ATTRIBUTE_KEYS) or source == "REST"
+
+        soc = _bucket_float(bucket, present, ATTRIBUTE_SOC, "soc")
+        target_soc = _bucket_float(bucket, present, ATTRIBUTE_MAX_SOC, "max_soc", "maxsoc")
+        range_km = _bucket_float(bucket, present, ATTRIBUTE_RANGE_ELECTRIC_KM.lower(), "rangeelectrickm")
+        power_kw = _bucket_float(bucket, present, ATTRIBUTE_CHARGING_POWER_KW.lower(), "chargingpowerkw")
+        latitude = _bucket_float(bucket, present, ATTRIBUTE_POSITION_LAT, "positionlat")
+        longitude = _bucket_float(bucket, present, ATTRIBUTE_POSITION_LONG, "positionlong")
+        odometer_km = _bucket_float(bucket, present, ATTRIBUTE_ODOMETER, "odometer")
+
+        charging_status_raw = _bucket_raw(bucket, present, ATTRIBUTE_CHARGING_STATUS, "chargingstatus")
+        charging_active_raw = _bucket_raw(bucket, present, ATTRIBUTE_CHARGING_ACTIVE, "chargingactive")
+        charging_active = _to_bool(charging_active_raw) if charging_active_raw is not None else None
+
+        is_charging = None
         is_plugged_in = None
-        if status is not None:
-            is_charging = status.is_charging if status.is_charging is not None else is_charging
-            is_plugged_in = status.is_plugged_in
-            if (
-                status.label == "not_charging"
-                and is_plugged_in is None
-                and (power_kw or 0) < 0.3
-                and is_charging is not True
-            ):
-                is_plugged_in = False
-        elif charging_status_raw:
-            charging_status = str(charging_status_raw).lower()
-            is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}
-            normalized = charging_status.replace("_", "").replace("-", "").replace(" ", "")
-            is_plugged_in = normalized not in {
-                "unplugged",
-                "none",
-                "invalid",
-                "notplugged",
-                "disconnected",
-                "nocharging",
-                "notconnected",
-                "notcharging",
-            }
-        quality = DataQuality.MEASURED if soc is not None and soc > 0 else DataQuality.UNKNOWN
+        if charging_status_raw is not None or charging_active is not None:
+            status = interpret_charging_status(charging_status_raw)
+            is_charging = charging_active
+            if status is not None:
+                is_charging = status.is_charging if status.is_charging is not None else is_charging
+                is_plugged_in = status.is_plugged_in
+                if (
+                    status.label == "not_charging"
+                    and is_plugged_in is None
+                    and (power_kw or 0) < 0.3
+                    and is_charging is not True
+                ):
+                    is_plugged_in = False
+            elif charging_status_raw:
+                charging_status = str(charging_status_raw).lower()
+                is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}
+                normalized = charging_status.replace("_", "").replace("-", "").replace(" ", "")
+                is_plugged_in = normalized not in {
+                    "unplugged",
+                    "none",
+                    "invalid",
+                    "notplugged",
+                    "disconnected",
+                    "nocharging",
+                    "notconnected",
+                    "notcharging",
+                }
+        elif power_kw is not None:
+            is_charging = power_kw >= 0.3
+
+        quality = base.data_quality
+        if soc is not None and soc > 0:
+            quality = DataQuality.MEASURED
+        elif telemetry_present and base.data_quality == DataQuality.UNKNOWN:
+            quality = DataQuality.MEASURED
+
+        last_vehicle_update = now if telemetry_present else base.last_vehicle_update
+        location_timestamp = (
+            now
+            if latitude is not None and longitude is not None
+            else base.location_timestamp
+        )
+
         state = VehicleState(
             vehicle_id=base.vehicle_id,
             provider=base.provider,
@@ -148,14 +199,14 @@ class MercedesVehicleMapper:
             electric_range_km=range_km,
             latitude=latitude,
             longitude=longitude,
-            location_timestamp=now if latitude is not None and longitude is not None else base.location_timestamp,
+            location_timestamp=location_timestamp,
             is_plugged_in=is_plugged_in,
             is_charging=is_charging,
             charging_power_kw=power_kw,
             odometer_km=odometer_km,
             connection_state=VehicleConnectionState.CONNECTED,
             data_quality=quality,
-            last_vehicle_update=now,
+            last_vehicle_update=last_vehicle_update,
             last_provider_update=now,
             soc_quality=DataQuality.MEASURED if soc is not None else DataQuality.UNKNOWN,
             charging_power_quality=DataQuality.MEASURED if power_kw is not None else DataQuality.UNKNOWN,
@@ -175,6 +226,24 @@ class MercedesVehicleMapper:
             data_quality=DataQuality.STALE,
             connection_state=VehicleConnectionState.DEGRADED,
         )
+
+
+def _present(bucket: dict[str, Any], present: set[str], *keys: str) -> bool:
+    return any(key in present for key in keys)
+
+
+def _bucket_raw(bucket: dict[str, Any], present: set[str], *keys: str) -> Any:
+    if not _present(bucket, present, *keys):
+        return None
+    for key in keys:
+        if key in bucket:
+            return bucket[key]
+    return None
+
+
+def _bucket_float(bucket: dict[str, Any], present: set[str], *keys: str) -> float | None:
+    value = _bucket_raw(bucket, present, *keys)
+    return _to_float(value)
 
 
 def _to_float(value: Any) -> float | None:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from dataclasses import replace
 from cryptography.fernet import Fernet
 from energy_core.db.models import Base, SiteModel
 from energy_core.db.session import create_engine, create_session_factory
@@ -288,6 +289,48 @@ async def test_a_real_reading_still_overwrites_an_older_one(stored_vehicle):
         assert latest.state_of_charge_percent == 42.0
         assert latest.electric_range_km == 250.0
         assert latest.is_plugged_in is False
+
+
+@pytest.mark.asyncio
+async def test_soc_updated_at_only_changes_when_soc_changes(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    first_at = datetime.now(UTC) - timedelta(minutes=10)
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(first_at), state_of_charge_percent=31.0),
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        original_soc_ts = latest.soc_updated_at
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(datetime.now(UTC)), state_of_charge_percent=31.0),
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.soc_updated_at == original_soc_ts
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(datetime.now(UTC)), state_of_charge_percent=37.0),
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.state_of_charge_percent == 37.0
+        assert latest.soc_updated_at > original_soc_ts
 
 
 @pytest.mark.asyncio

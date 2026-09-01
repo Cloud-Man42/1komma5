@@ -446,11 +446,19 @@ class VehicleRepository:
             "updated_at": now,
         }
         if state.state_of_charge_percent is not None:
-            incoming["soc_updated_at"] = now
-        if state.charging_power_kw is not None or state.is_charging is not None or state.is_plugged_in is not None:
+            prior_soc = latest.state_of_charge_percent if latest else None
+            if prior_soc is None or prior_soc != state.state_of_charge_percent:
+                incoming["soc_updated_at"] = now
+        if (
+            state.charging_power_kw is not None
+            or state.is_charging is not None
+            or state.is_plugged_in is not None
+        ):
             incoming["charging_updated_at"] = now
         if state.electric_range_km is not None:
-            incoming["range_updated_at"] = now
+            prior_range = latest.electric_range_km if latest else None
+            if prior_range is None or prior_range != state.electric_range_km:
+                incoming["range_updated_at"] = now
         if state.latitude is not None and state.longitude is not None:
             incoming["location_updated_at"] = now
 
