@@ -65,6 +65,12 @@ def _merge_last_known_good(
             existing = getattr(latest, ts_field, None)
             if existing is not None:
                 merged[ts_field] = existing
+    if (
+        incoming.get("is_plugged_in") is None
+        and incoming.get("is_charging") is False
+        and (incoming.get("charging_power_kw") or 0) < 0.3
+    ):
+        merged["is_plugged_in"] = False
     return merged
 
 

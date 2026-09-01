@@ -39,6 +39,7 @@ from energy_core.vehicles.abstractions.models import DataQuality, VehicleConnect
 from energy_core.vehicles.mercedes.auth.errors import MercedesAuthError, MercedesTwoFactorUnsupported
 from energy_core.vehicles.mercedes.auth.login import MercedesLoginFlow
 from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.vehicles.connection_signals import resolve_effective_connection
 from energy_core.vehicles.mercedes.provider import MercedesProvider
 from energy_core.vehicles.health import MercedesIntegrationHealthService
 from energy_core.vehicles.vin import mask_vin
@@ -178,10 +179,14 @@ def _vehicle_item(
         data_quality=data_quality,
         last_vehicle_update=_latest_signal_timestamp(latest),
     )
+    effective = resolve_effective_connection(
+        latest,
+        plugged_agreement=getattr(correlation, "plugged_agreement", None) if correlation else None,
+    )
     is_plugged_in, is_charging, charging_power_kw = _guard_stale_connection_fields(
         freshness_label,
-        is_plugged_in=latest.is_plugged_in if latest else None,
-        is_charging=latest.is_charging if latest else None,
+        is_plugged_in=effective.is_plugged_in,
+        is_charging=effective.is_charging,
         charging_power_kw=latest.charging_power_kw if latest else None,
         charging_updated_at=getattr(latest, "charging_updated_at", None) if latest else None,
     )
@@ -705,6 +710,14 @@ async def get_current_vehicle_charge_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
     record = await VehicleChargeSessionRepository(session).get_current_for_vehicle(vehicle_id)
     if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session")
+    latest = await VehicleRepository(session).get_latest_state(vehicle_id)
+    correlation = await VehicleHaloCorrelationRepository(session).get(vehicle_id)
+    effective = resolve_effective_connection(
+        latest,
+        plugged_agreement=getattr(correlation, "plugged_agreement", None) if correlation else None,
+    )
+    if not effective.is_plugged_in and not effective.is_charging:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active session")
     return _vehicle_session_response(record)
 

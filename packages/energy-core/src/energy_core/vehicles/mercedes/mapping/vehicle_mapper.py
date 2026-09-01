@@ -115,6 +115,13 @@ class MercedesVehicleMapper:
         if status is not None:
             is_charging = status.is_charging if status.is_charging is not None else is_charging
             is_plugged_in = status.is_plugged_in
+            if (
+                status.label == "not_charging"
+                and is_plugged_in is None
+                and (power_kw or 0) < 0.3
+                and is_charging is not True
+            ):
+                is_plugged_in = False
         elif charging_status_raw:
             charging_status = str(charging_status_raw).lower()
             is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}

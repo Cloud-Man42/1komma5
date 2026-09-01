@@ -17,6 +17,9 @@ export function VehicleChargingWidget({ vehicle }: { vehicle: DashboardVehicleSe
   }
 
   const charging = vehicle.mode === "charging" || vehicle.is_charging;
+  const showSessionDetails =
+    Boolean(vehicle.location_name || vehicle.charging_type || vehicle.session_energy_kwh != null) &&
+    (vehicle.is_plugged_in === true || vehicle.is_charging === true);
   const title = vehicle.display_name ?? "Mercedes EQE";
 
   return (
@@ -33,10 +36,10 @@ export function VehicleChargingWidget({ vehicle }: { vehicle: DashboardVehicleSe
           <Metric label="Effekt" value={vehicle.charging_power_kw != null ? `${vehicle.charging_power_kw.toFixed(1)} kW` : "—"} />
         ) : null}
       </div>
-      {vehicle.location_name ? (
+      {showSessionDetails && vehicle.location_name ? (
         <p className="dashboard-muted">Plats: {vehicle.location_name}{vehicle.charging_type ? ` · ${vehicle.charging_type}` : ""}</p>
       ) : null}
-      {charging && vehicle.session_energy_kwh != null ? (
+      {showSessionDetails && charging && vehicle.session_energy_kwh != null ? (
         <Metric label="Session" value={`${vehicle.session_energy_kwh.toFixed(1)} kWh`} />
       ) : null}
       {vehicle.freshness_label ? (

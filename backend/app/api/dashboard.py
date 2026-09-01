@@ -259,6 +259,7 @@ async def _compute_ev(session: AsyncSession, site, settings: Settings) -> Dashbo
 async def _compute_vehicle(session: AsyncSession, site) -> DashboardVehicleSection:
     from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRepository
     from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
+    from energy_core.vehicles.connection_signals import resolve_effective_connection
     from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 
     provider = await VehicleProviderRepository(session).get_for_site(site.id)
@@ -274,7 +275,7 @@ async def _compute_vehicle(session: AsyncSession, site) -> DashboardVehicleSecti
     active = await VehicleChargeSessionRepository(session).get_active_for_vehicle(vehicle.id)
 
     is_charging = bool(latest and latest.is_charging)
-    is_plugged = bool(latest and latest.is_plugged_in)
+    is_plugged = resolve_effective_connection(latest).is_plugged_in if latest else False
     stale = False
     freshness = "LIVE"
     if latest and latest.last_vehicle_update:
@@ -286,8 +287,9 @@ async def _compute_vehicle(session: AsyncSession, site) -> DashboardVehicleSecti
         freshness = "INAKTUELL" if stale else "LIVE"
 
     mode = "charging" if is_charging else "parked"
+    session_active = active is not None and (is_plugged or is_charging) and not stale
     session_energy = None
-    if active is not None:
+    if session_active:
         session_energy = active.halo_energy_kwh or active.estimated_energy_kwh
 
     return DashboardVehicleSection(
@@ -299,10 +301,10 @@ async def _compute_vehicle(session: AsyncSession, site) -> DashboardVehicleSecti
         is_plugged_in=is_plugged if latest and not stale else None,
         is_charging=is_charging if latest and not stale else None,
         charging_power_kw=latest.charging_power_kw if latest and not stale else None,
-        location_name=active.location_name if active else None,
-        charging_type=active.charging_type if active else None,
+        location_name=active.location_name if session_active else None,
+        charging_type=active.charging_type if session_active else None,
         session_energy_kwh=session_energy,
-        data_quality=active.vehicle_data_quality if active else (latest.data_quality if latest else None),
+        data_quality=active.vehicle_data_quality if session_active else (latest.data_quality if latest else None),
         freshness_label=freshness,
     )
 

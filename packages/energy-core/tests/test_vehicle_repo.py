@@ -291,6 +291,40 @@ async def test_a_real_reading_still_overwrites_an_older_one(stored_vehicle):
 
 
 @pytest.mark.asyncio
+async def test_not_charging_signal_clears_stale_plugged_state(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(vehicle_id, _measured_state(datetime.now(UTC)))
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        idle = VehicleState(
+            vehicle_id="mock-1",
+            provider="mock",
+            manufacturer="Mercedes-Benz",
+            model="EQE",
+            state_of_charge_percent=100.0,
+            electric_range_km=604.0,
+            is_plugged_in=None,
+            is_charging=False,
+            charging_power_kw=0.0,
+            connection_state=VehicleConnectionState.CONNECTED,
+            data_quality=DataQuality.MEASURED,
+            last_vehicle_update=datetime.now(UTC),
+            capabilities=VehicleCapabilities(can_read_soc=True),
+        )
+        await repo.persist_state(vehicle_id, idle)
+        await session.commit()
+
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.is_plugged_in is False
+
+
+@pytest.mark.asyncio
 async def test_a_discovery_writes_no_history_row(stored_vehicle):
     session_factory, vehicle_id = stored_vehicle
     async with session_factory() as session:

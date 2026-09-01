@@ -135,7 +135,7 @@ export function VehicleOverview({ siteSlug }: { siteSlug: string }) {
           <div className="vdash-section-layout" data-testid="vehicle-section-charging">
             <VehicleChargingSessionPanel
               subtitle={display.chargingSubtitle}
-              session={data.session}
+              session={display.activeSession}
               chargingPowerKw={display.chargingPowerKw}
               onStop={() => void handleStop()}
               onStart={() => void handleStart()}

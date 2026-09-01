@@ -72,7 +72,7 @@ def test_vehicle_mapper_interprets_chargingstatus_code_8_as_not_charging():
         ),
     )
     assert updated.is_charging is False
-    assert updated.is_plugged_in is None
+    assert updated.is_plugged_in is False
     assert updated.state_of_charge_percent is None
     assert updated.electric_range_km is None
 

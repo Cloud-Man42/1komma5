@@ -208,4 +208,20 @@ describe("resolveTargetSocPct", () => {
     expect(display.chargingPowerKw).toBe(10.9);
     expect(display.isCharging).toBe(true);
   });
+
+  it("ignores orphaned active sessions when the car is unplugged", () => {
+    const display = buildVehicleDisplay({
+      vehicle: { ...vehicle, is_plugged_in: false, is_charging: false, charging_power_kw: 0 },
+      session,
+      sessions: [session],
+      integration,
+      reasoning: null,
+      refreshIntervalSec: 15,
+      siteSlug: "akarp",
+    });
+
+    expect(display.activeSession).toBeNull();
+    expect(display.chargedTodayKwh).toBe(0);
+    expect(display.isCharging).toBe(false);
+  });
 });

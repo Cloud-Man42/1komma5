@@ -201,8 +201,6 @@ export function buildVehicleDisplay({
   const capacity = EQE_USABLE_KWH;
   const energyKwh = soc != null ? (capacity * soc) / 100 : null;
   const completed = lastCompletedSession(sessions);
-  const renewableKwh = totalRenewableKwh(session);
-  const chargedKwh = session ? sessionEnergyKwh(session) : 0;
   const chargingPowerKw =
     vehicle?.charging_power_kw ??
     envelopeNumber(vehicle?.charging_power) ??
@@ -210,7 +208,13 @@ export function buildVehicleDisplay({
     null;
   const isCharging =
     vehicle?.is_charging ??
-    ((chargingPowerKw != null && chargingPowerKw >= 0.3) || session?.status === "ACTIVE");
+    (chargingPowerKw != null && chargingPowerKw >= 0.3);
+  const activeSession =
+    session?.status === "ACTIVE" && (vehicle?.is_plugged_in === true || vehicle?.is_charging === true || isCharging)
+      ? session
+      : null;
+  const renewableKwh = totalRenewableKwh(activeSession);
+  const chargedKwh = activeSession ? sessionEnergyKwh(activeSession) : 0;
 
   return {
     siteSlug,
@@ -222,19 +226,19 @@ export function buildVehicleDisplay({
     energyKwh,
     capacityKwh: capacity,
     rangeKm: vehicle?.electric_range_km ?? envelopeNumber(vehicle?.electric_range) ?? null,
-    targetSocPct: resolveTargetSocPct(vehicle, session, reasoning),
+    targetSocPct: resolveTargetSocPct(vehicle, activeSession, reasoning),
     chargingPowerKw,
     isCharging,
     isPluggedIn: vehicle?.is_plugged_in,
     freshnessLabel: vehicle?.freshness_label ?? "—",
     dataQuality: vehicle?.data_quality ?? "—",
-    startedAt: formatIsoTime(session?.charging_started_at ?? session?.connected_at),
+    startedAt: formatIsoTime(activeSession?.charging_started_at ?? activeSession?.connected_at),
     chargedTodayKwh: chargedKwh,
-    costKr: session?.actual_cost_sek ?? null,
-    savingsKr: session?.savings_sek ?? null,
-    surplusLabel: surplusLabel(session),
+    costKr: activeSession?.actual_cost_sek ?? null,
+    savingsKr: activeSession?.savings_sek ?? null,
+    surplusLabel: surplusLabel(activeSession),
     co2SavedKg: estimateCo2SavedKg(renewableKwh),
-    chargingSubtitle: chargingSubtitle(vehicle, session, reasoning),
+    chargingSubtitle: chargingSubtitle(vehicle, activeSession, reasoning),
     vehicleId: vehicle?.id ?? null,
     capabilities: vehicle?.capabilities ?? null,
     halo: vehicle?.halo_correlation ?? null,
@@ -265,6 +269,7 @@ export function buildVehicleDisplay({
     canStopCharging: vehicle?.capabilities.can_stop_charging ?? false,
     canStartCharging: vehicle?.capabilities.can_start_charging ?? false,
     canSetTargetSoc: vehicle?.capabilities.can_set_target_soc ?? false,
+    activeSession,
   };
 }
 

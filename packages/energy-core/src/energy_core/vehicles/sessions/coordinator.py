@@ -28,6 +28,7 @@ from energy_core.vehicles.charging_intelligence.station_resolver import (
     ChargingStationResolver,
     VehicleResolutionContext,
 )
+from energy_core.vehicles.connection_signals import resolve_effective_connection
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
 from energy_core.vehicles.sessions.sampler import VehicleChargeSessionSampler
 from energy_core.vehicles.sessions.session_service import VehicleChargeSessionService
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _VehicleLookupState:
+    was_plugged_in: bool = False
     was_charging: bool = False
     lookup_done_for_session: bool = False
     uncertain_retry_done: bool = False
@@ -255,17 +257,31 @@ class VehicleChargeSessionCoordinator:
             duration_hours=duration_hours,
         )
 
-    def _should_lookup(self, vehicle_id: int, *, is_charging: bool, last_resolution) -> bool:
+    def _should_lookup(
+        self,
+        vehicle_id: int,
+        *,
+        is_plugged: bool,
+        is_charging: bool,
+        last_resolution,
+    ) -> bool:
         state = self._lookup_state.setdefault(vehicle_id, _VehicleLookupState())
-        session_started = is_charging and not state.was_charging
+        plug_in = is_plugged and not state.was_plugged_in
+        unplug = not is_plugged and state.was_plugged_in
+
+        state.was_plugged_in = is_plugged
         state.was_charging = is_charging
 
-        if not is_charging:
+        if unplug:
             state.lookup_done_for_session = False
             state.uncertain_retry_done = False
+            state.last_resolution = None
             return False
 
-        if session_started:
+        if not is_plugged:
+            return False
+
+        if plug_in:
             state.lookup_done_for_session = False
             state.uncertain_retry_done = False
             return True
@@ -298,9 +314,20 @@ class VehicleChargeSessionCoordinator:
         if latest is None or latest.latitude is None or latest.longitude is None:
             return None
 
+        is_plugged = resolve_effective_connection(
+            latest,
+            plugged_agreement=getattr(correlation, "plugged_agreement", None) if correlation else None,
+        ).is_plugged_in
         is_charging = bool(latest.is_charging)
         state = self._lookup_state.setdefault(vehicle_id, _VehicleLookupState())
-        if not self._should_lookup(vehicle_id, is_charging=is_charging, last_resolution=state.last_resolution):
+        if not self._should_lookup(
+            vehicle_id,
+            is_plugged=is_plugged,
+            is_charging=is_charging,
+            last_resolution=state.last_resolution,
+        ):
+            if not is_plugged:
+                return None
             return state.last_resolution
 
         halo = None

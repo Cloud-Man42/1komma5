@@ -154,6 +154,56 @@ async def test_session_complete_on_unplug(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_orphaned_active_session_closes_without_unplug_transition(monkeypatch):
+    service = VehicleChargeSessionService()
+    runtime = service.get_runtime_state(1)
+    runtime.last_plugged_in = True
+
+    active = MagicMock(
+        id=10,
+        vehicle_id=1,
+        meter_start_kwh=100.0,
+        start_soc=40.0,
+        charging_started_at=datetime(2026, 8, 23, 11, 0, tzinfo=UTC),
+        charging_stopped_at=None,
+        ev_charging_session_id=None,
+    )
+    repo = AsyncMock()
+    repo.get_active_for_vehicle = AsyncMock(return_value=active)
+    repo.update_csi_fields = AsyncMock()
+    repo.complete = AsyncMock()
+    interval_repo = AsyncMock()
+    interval_repo.list_for_session = AsyncMock(return_value=[])
+
+    vehicle = MagicMock(id=1)
+    charger = MagicMock(id=2)
+    site = MagicMock(id=3)
+    db = AsyncMock()
+
+    monkeypatch.setattr(
+        "energy_core.vehicles.sessions.session_service.VehicleChargeSessionRepository",
+        lambda _session: repo,
+    )
+    monkeypatch.setattr(
+        "energy_core.vehicles.sessions.session_service.VehicleChargingIntervalRepository",
+        lambda _session: interval_repo,
+    )
+
+    await service.process_vehicle(
+        db,
+        vehicle=vehicle,
+        charger=charger,
+        site=site,
+        latest=_latest(plugged=False, charging=False, soc=55.0),
+        meter=_meter(kwh=100.0, connected=False),
+        identification_confidence=0.9,
+        csi=_csi(),
+    )
+
+    repo.complete.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_sampler_skips_when_ev_session_linked():
     from energy_core.vehicles.sessions.sampler import VehicleChargeSessionSampler
 
