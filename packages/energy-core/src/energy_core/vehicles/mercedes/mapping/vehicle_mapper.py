@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleCapabilities, VehicleConnectionState, VehicleState
+from energy_core.vehicles.mercedes.charging_status import interpret_charging_status
 from energy_core.vehicles.mercedes.constants import (
     ATTRIBUTE_CHARGING_ACTIVE,
     ATTRIBUTE_CHARGING_POWER_KW,
@@ -20,6 +21,7 @@ from energy_core.vehicles.mercedes.constants import (
     ATTRIBUTE_SOC,
     STALE_TELEMETRY_SECONDS,
 )
+from energy_core.vehicles.mercedes.telemetry_plausibility import sanitize_vehicle_state
 from energy_core.vehicles.mercedes.commands.features import MercedesCommandFeatures
 from energy_core.vehicles.mercedes.mapping.observer import MercedesAttributeRecorder
 from energy_core.vehicles.mercedes.protocol.decoder import MercedesPushMessage
@@ -105,14 +107,18 @@ class MercedesVehicleMapper:
         latitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LAT)) or _to_float(bucket.get("positionlat"))
         longitude = _to_float(bucket.get(ATTRIBUTE_POSITION_LONG)) or _to_float(bucket.get("positionlong"))
         odometer_km = _to_float(bucket.get(ATTRIBUTE_ODOMETER)) or _to_float(bucket.get("odometer"))
-        charging_status = str(bucket.get(ATTRIBUTE_CHARGING_STATUS, "") or "").lower()
+        charging_status_raw = bucket.get(ATTRIBUTE_CHARGING_STATUS)
         charging_active = _to_bool(bucket.get(ATTRIBUTE_CHARGING_ACTIVE))
+        status = interpret_charging_status(charging_status_raw)
         is_charging = charging_active
-        if charging_status:
-            is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}
         is_plugged_in = None
-        if charging_status:
-            normalized = charging_status.lower().replace("_", "").replace("-", "").replace(" ", "")
+        if status is not None:
+            is_charging = status.is_charging if status.is_charging is not None else is_charging
+            is_plugged_in = status.is_plugged_in
+        elif charging_status_raw:
+            charging_status = str(charging_status_raw).lower()
+            is_charging = charging_status in {"charging", "active", "quickcharging", "accharging", "dccharging"}
+            normalized = charging_status.replace("_", "").replace("-", "").replace(" ", "")
             is_plugged_in = normalized not in {
                 "unplugged",
                 "none",
@@ -121,9 +127,10 @@ class MercedesVehicleMapper:
                 "disconnected",
                 "nocharging",
                 "notconnected",
+                "notcharging",
             }
-        quality = DataQuality.MEASURED if soc is not None else DataQuality.UNKNOWN
-        return VehicleState(
+        quality = DataQuality.MEASURED if soc is not None and soc > 0 else DataQuality.UNKNOWN
+        state = VehicleState(
             vehicle_id=base.vehicle_id,
             provider=base.provider,
             manufacturer=base.manufacturer,
@@ -148,6 +155,7 @@ class MercedesVehicleMapper:
             range_quality=DataQuality.MEASURED if range_km is not None else DataQuality.UNKNOWN,
             capabilities=base.capabilities,
         )
+        return sanitize_vehicle_state(state)
 
     def mark_stale(self, state: VehicleState) -> VehicleState:
         if state.last_vehicle_update is None:

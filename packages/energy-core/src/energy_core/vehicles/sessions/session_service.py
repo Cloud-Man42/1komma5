@@ -16,6 +16,7 @@ from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecor
 from energy_core.ev_accounting.models import EnergyAttribution
 from energy_core.ev_accounting.reconciliation import SessionReconciliationService
 from energy_core.ev_accounting.session_totals import session_totals_from_intervals
+from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
 from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
 from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.sessions.constants import (
@@ -56,7 +57,32 @@ def _csi_fields(context, *, latest: VehicleStateLatestModel | None) -> dict:
         "identification_method": context.identification_method,
         "vehicle_data_quality": context.vehicle_data_quality,
         "charging_state": context.charging_state,
+        "connector_type": context.connector_type,
+        "station_name": context.station_name,
+        "station_provider": context.station_provider,
+        "station_provider_id": context.station_provider_id,
+        "distance_from_vehicle_m": context.distance_from_vehicle_m,
+        "station_confidence": context.station_confidence,
+        "station_resolution_status": context.station_resolution_status,
+        "station_candidates_json": context.station_candidates_json,
+        "charging_station_id": context.charging_station_id,
     }
+
+
+def _halo_charger_active(meter) -> bool | None:
+    if meter is None:
+        return None
+    return bool(meter.is_charging or meter.vehicle_connected or (meter.power_w or 0) > 300)
+
+
+def _halo_hint(correlation) -> HaloCorrelationHint | None:
+    if correlation is None:
+        return None
+    status = getattr(correlation, "status", None)
+    plugged_agreement = getattr(correlation, "plugged_agreement", None)
+    if status is None and plugged_agreement is None:
+        return None
+    return HaloCorrelationHint(status=status, plugged_agreement=plugged_agreement)
 
 
 class VehicleChargeSessionService:
@@ -97,6 +123,9 @@ class VehicleChargeSessionService:
         latest: VehicleStateLatestModel | None,
         csi: ChargingSessionService,
         identification_confidence: float | None,
+        halo_correlation=None,
+        halo_charger_active: bool | None = None,
+        station_resolution=None,
     ) -> int | None:
         now = datetime.now(UTC)
         repo = VehicleChargeSessionRepository(db)
@@ -106,6 +135,7 @@ class VehicleChargeSessionService:
         was_plugged = runtime.last_plugged_in
         soc = latest.state_of_charge_percent if latest else None
         active = await repo.get_active_for_vehicle(vehicle.id)
+        halo = _halo_hint(halo_correlation)
         context = csi.build_context(
             vehicle=vehicle,
             site=site,
@@ -113,6 +143,9 @@ class VehicleChargeSessionService:
             charger=None,
             meter=None,
             previous_soc=runtime.last_soc,
+            halo=halo,
+            halo_charger_active=halo_charger_active,
+            station_resolution=station_resolution,
         )
         csi_fields = _csi_fields(context, latest=latest)
 
@@ -136,7 +169,16 @@ class VehicleChargeSessionService:
             return record.id
 
         if active is not None:
-            await repo.update_csi_fields(active.id, **csi_fields)
+            update_fields = dict(csi_fields)
+            if is_away_charging(
+                halo=halo,
+                mercedes_plugged=is_plugged,
+                mercedes_charging=is_charging,
+                mercedes_power_kw=latest.charging_power_kw if latest else None,
+                halo_charger_active=halo_charger_active,
+            ):
+                update_fields["charger_id"] = None
+            await repo.update_csi_fields(active.id, **update_fields)
             if not is_plugged and was_plugged and not _vehicle_data_stale(latest):
                 await self._complete_away_session(db, repo, active, runtime, end_soc=soc, context=context)
             elif _vehicle_data_stale(latest) and (is_charging or was_plugged):
@@ -159,6 +201,8 @@ class VehicleChargeSessionService:
         meter: MeterSnapshot,
         identification_confidence: float | None,
         csi: ChargingSessionService,
+        halo_correlation=None,
+        station_resolution=None,
     ) -> int | None:
         repo = VehicleChargeSessionRepository(db)
         runtime = self.get_runtime_state(vehicle.id)
@@ -171,6 +215,27 @@ class VehicleChargeSessionService:
         target_soc = latest.target_soc_percent if latest else None
         stale = _vehicle_data_stale(latest)
         charger_active = bool(meter.is_charging or meter.vehicle_connected or (meter.power_w or 0) > 0)
+        halo = _halo_hint(halo_correlation)
+        halo_active = _halo_charger_active(meter)
+        away = is_away_charging(
+            halo=halo,
+            mercedes_plugged=is_plugged,
+            mercedes_charging=is_charging,
+            mercedes_power_kw=latest.charging_power_kw if latest else None,
+            halo_charger_active=halo_active,
+        )
+        if away:
+            return await self.process_vehicle_without_charger(
+                db,
+                vehicle=vehicle,
+                site=site,
+                latest=latest,
+                csi=csi,
+                identification_confidence=identification_confidence,
+                halo_correlation=halo_correlation,
+                halo_charger_active=halo_active,
+                station_resolution=station_resolution,
+            )
 
         context = csi.build_context(
             vehicle=vehicle,
@@ -179,6 +244,9 @@ class VehicleChargeSessionService:
             charger=charger,
             meter=meter,
             previous_soc=runtime.last_soc,
+            halo=halo,
+            halo_charger_active=halo_active,
+            station_resolution=station_resolution,
         )
         csi_fields = _csi_fields(context, latest=latest)
 

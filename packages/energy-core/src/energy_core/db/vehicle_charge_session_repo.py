@@ -66,6 +66,14 @@ class VehicleChargeSessionRecord:
     identification_method: str | None = None
     vehicle_data_quality: str | None = None
     charging_state: str | None = None
+    charging_station_id: int | None = None
+    station_provider: str | None = None
+    station_provider_id: str | None = None
+    station_name: str | None = None
+    distance_from_vehicle_m: float | None = None
+    station_confidence: int | None = None
+    station_resolution_status: str | None = None
+    station_candidates_json: list | None = None
 
 
 class VehicleChargeSessionRepository:
@@ -251,4 +259,12 @@ class VehicleChargeSessionRepository:
             identification_method=row.identification_method,
             vehicle_data_quality=row.vehicle_data_quality,
             charging_state=row.charging_state,
+            charging_station_id=row.charging_station_id,
+            station_provider=row.station_provider,
+            station_provider_id=row.station_provider_id,
+            station_name=row.station_name,
+            distance_from_vehicle_m=row.distance_from_vehicle_m,
+            station_confidence=row.station_confidence,
+            station_resolution_status=row.station_resolution_status,
+            station_candidates_json=row.station_candidates_json,
         )

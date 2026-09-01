@@ -52,6 +52,31 @@ def test_vehicle_mapper_applies_push_values():
     assert updated.data_quality == DataQuality.MEASURED
 
 
+def test_vehicle_mapper_interprets_chargingstatus_code_8_as_not_charging():
+    mapper = MercedesVehicleMapper()
+    base = mapper.apply_discovery(
+        vehicle_id="vin-1",
+        vin="W1K12345678901234",
+        manufacturer="Mercedes-Benz",
+        model="EQE 500",
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+    updated = mapper.apply_push(
+        base,
+        MercedesPushMessage(
+            attributes=(
+                MercedesAttributeUpdate(name="soc", value=0),
+                MercedesAttributeUpdate(name="rangeElectricKm", value=0),
+                MercedesAttributeUpdate(name="chargingstatus", value=8),
+            ),
+        ),
+    )
+    assert updated.is_charging is False
+    assert updated.is_plugged_in is None
+    assert updated.state_of_charge_percent is None
+    assert updated.electric_range_km is None
+
+
 def test_vehicle_mapper_marks_stale_data():
     mapper = MercedesVehicleMapper()
     now = datetime.now(UTC)

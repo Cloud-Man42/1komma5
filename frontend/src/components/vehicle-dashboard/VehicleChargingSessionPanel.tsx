@@ -80,6 +80,24 @@ export function VehicleChargingSessionPanel({
               <span>Sol via batteri: {(session.energy_sources.solar_battery_kwh ?? 0).toFixed(1)} kWh</span>
               <span>Nät: {(session.energy_sources.grid_direct_kwh ?? 0).toFixed(1)} kWh</span>
             </div>
+            {(session.station_name || session.charger_operator || session.station_resolution_status) ? (
+              <div className="vdash-session-station" data-testid="vehicle-session-station">
+                {session.station_name || session.location_name ? (
+                  <span>Station: {session.station_name ?? session.location_name}</span>
+                ) : null}
+                {session.charger_operator ? <span>Operatör: {session.charger_operator}</span> : null}
+                {session.charging_type ? <span>{session.charging_type}{session.charging_power_avg_kw ? ` · ${session.charging_power_avg_kw.toFixed(1)} kW` : ""}</span> : null}
+                {session.distance_from_vehicle_m != null ? <span>{Math.round(session.distance_from_vehicle_m)} m</span> : null}
+                {session.detection_confidence ? <span>Confidence: {session.detection_confidence}</span> : null}
+                {session.station_resolution_status === "MULTIPLE_CANDIDATES" && session.station_candidates?.length ? (
+                  <ul>
+                    {session.station_candidates.map((c) => (
+                      <li key={c.provider_station_id ?? c.label}>{c.label}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="vdash-session-actions">
             <button

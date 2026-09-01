@@ -22,6 +22,7 @@ from energy_core.db.models import (
 from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleCapabilities, VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
+from energy_core.vehicles.mercedes.telemetry_plausibility import has_plausible_vehicle_telemetry
 
 HISTORY_MIN_INTERVAL = timedelta(minutes=5)
 
@@ -41,8 +42,10 @@ _TELEMETRY_FIELDS = (
 
 
 def _carries_telemetry(state: VehicleState) -> bool:
-    """True when the state says anything about the car itself, not just the link."""
-    return any(getattr(state, field) is not None for field in _TELEMETRY_FIELDS)
+    """True when the state says anything plausible about the car itself, not just the link."""
+    if not any(getattr(state, field) is not None for field in _TELEMETRY_FIELDS):
+        return False
+    return has_plausible_vehicle_telemetry(state)
 
 
 def _merge_last_known_good(

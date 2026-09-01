@@ -3,6 +3,7 @@ import type {
   VehicleChargeSession,
   VehicleIntegrationStatus,
   VehicleListItem,
+  VehicleValueEnvelope,
 } from "@/lib/api";
 
 /** Mercedes EQE 500 usable battery capacity (kWh). */
@@ -174,6 +175,11 @@ export function resolveTargetSocPct(
   return null;
 }
 
+function envelopeNumber(envelope?: VehicleValueEnvelope | null): number | null {
+  if (envelope?.value == null || envelope.quality === "UNAVAILABLE") return null;
+  return typeof envelope.value === "number" ? envelope.value : null;
+}
+
 export function buildVehicleDisplay({
   vehicle,
   session,
@@ -191,12 +197,20 @@ export function buildVehicleDisplay({
   refreshIntervalSec: number;
   siteSlug: string;
 }) {
-  const soc = vehicle?.state_of_charge_percent ?? null;
+  const soc = vehicle?.state_of_charge_percent ?? envelopeNumber(vehicle?.state_of_charge) ?? null;
   const capacity = EQE_USABLE_KWH;
   const energyKwh = soc != null ? (capacity * soc) / 100 : null;
   const completed = lastCompletedSession(sessions);
   const renewableKwh = totalRenewableKwh(session);
   const chargedKwh = session ? sessionEnergyKwh(session) : 0;
+  const chargingPowerKw =
+    vehicle?.charging_power_kw ??
+    envelopeNumber(vehicle?.charging_power) ??
+    vehicle?.halo_correlation?.vehicle_power_kw ??
+    null;
+  const isCharging =
+    vehicle?.is_charging ??
+    ((chargingPowerKw != null && chargingPowerKw >= 0.3) || session?.status === "ACTIVE");
 
   return {
     siteSlug,
@@ -207,10 +221,10 @@ export function buildVehicleDisplay({
     socPct: soc,
     energyKwh,
     capacityKwh: capacity,
-    rangeKm: vehicle?.electric_range_km ?? null,
+    rangeKm: vehicle?.electric_range_km ?? envelopeNumber(vehicle?.electric_range) ?? null,
     targetSocPct: resolveTargetSocPct(vehicle, session, reasoning),
-    chargingPowerKw: vehicle?.charging_power_kw ?? vehicle?.halo_correlation?.vehicle_power_kw ?? null,
-    isCharging: vehicle?.is_charging ?? session?.status === "ACTIVE",
+    chargingPowerKw,
+    isCharging,
     isPluggedIn: vehicle?.is_plugged_in,
     freshnessLabel: vehicle?.freshness_label ?? "—",
     dataQuality: vehicle?.data_quality ?? "—",

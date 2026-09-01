@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     )
     open_meteo_api_key: str = Field(default="", alias="OPEN_METEO_API_KEY")
     open_meteo_timeout_seconds: float = Field(default=30.0, ge=5.0, alias="OPEN_METEO_TIMEOUT_SECONDS")
+    chargefinder_enabled: bool = Field(default=True, alias="CHARGEFINDER_ENABLED")
+    chargefinder_mode: str = Field(default="WEB", alias="CHARGEFINDER_MODE")
+    chargefinder_timeout_seconds: float = Field(default=15.0, ge=3.0, alias="CHARGEFINDER_TIMEOUT_SECONDS")
+    chargefinder_search_radius_m: int = Field(default=150, ge=50, alias="CHARGEFINDER_SEARCH_RADIUS_M")
+    chargefinder_cache_ttl_seconds: float = Field(default=604800.0, ge=3600.0, alias="CHARGEFINDER_CACHE_TTL_SECONDS")
+    chargefinder_cooldown_seconds: float = Field(default=900.0, ge=60.0, alias="CHARGEFINDER_COOLDOWN_SECONDS")
+    chargefinder_allowed_radius_options: str = Field(
+        default="50,100,150,250,500",
+        alias="CHARGEFINDER_ALLOWED_RADIUS_OPTIONS",
+    )
 
     # Solar forecast v2 calibration thresholds
     solar_forecast_min_samples_preliminary: int = Field(default=7, ge=1, alias="SOLAR_FORECAST_MIN_SAMPLES_PRELIMINARY")

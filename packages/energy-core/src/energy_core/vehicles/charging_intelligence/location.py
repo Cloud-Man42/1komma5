@@ -22,6 +22,10 @@ class IdentificationMethod(StrEnum):
     CHARGER_ONLY = "CHARGER_ONLY"
     MERCEDES_ONLY = "MERCEDES_ONLY"
     MANUAL = "MANUAL"
+    CHARGEFINDER = "CHARGEFINDER"
+    CHARGEFINDER_AND_GEOFENCE = "CHARGEFINDER_AND_GEOFENCE"
+    KNOWN_STATION = "KNOWN_STATION"
+    MULTIPLE_CANDIDATES = "MULTIPLE_CANDIDATES"
     UNKNOWN = "UNKNOWN"
 
 
@@ -61,6 +65,15 @@ class LocationMatch:
     confidence_score: int
 
 
+AWAY_LOCATION_NAME = "Borta (ej hemma)"
+
+
+@dataclass(frozen=True, slots=True)
+class HaloCorrelationHint:
+    status: str | None = None
+    plugged_agreement: bool | None = None
+
+
 class ChargingLocationResolver:
     def __init__(self, locations: list[ChargingLocationDefinition]) -> None:
         self._locations = locations
@@ -70,8 +83,22 @@ class ChargingLocationResolver:
         *,
         latitude: float | None,
         longitude: float | None,
+        halo: HaloCorrelationHint | None = None,
+        mercedes_plugged: bool | None = None,
+        mercedes_charging: bool | None = None,
+        mercedes_power_kw: float | None = None,
+        halo_charger_active: bool | None = None,
     ) -> LocationMatch:
         if latitude is None or longitude is None:
+            away = infer_away_from_home(
+                halo=halo,
+                mercedes_plugged=mercedes_plugged,
+                mercedes_charging=mercedes_charging,
+                mercedes_power_kw=mercedes_power_kw,
+                halo_charger_active=halo_charger_active,
+            )
+            if away is not None:
+                return away
             return LocationMatch(
                 location=None,
                 location_name="Unknown",
@@ -112,6 +139,59 @@ class ChargingLocationResolver:
             confidence_score=85,
         )
 
+
+def infer_away_from_home(
+    *,
+    halo: HaloCorrelationHint | None,
+    mercedes_plugged: bool | None,
+    mercedes_charging: bool | None,
+    mercedes_power_kw: float | None = None,
+    halo_charger_active: bool | None = None,
+) -> LocationMatch | None:
+    """Infer away-from-home charging when Mercedes reports activity but Halo at home does not."""
+    charging = mercedes_charging
+    plugged = mercedes_plugged
+    if charging is None and mercedes_power_kw is not None and mercedes_power_kw >= 0.3:
+        charging = True
+    if plugged is None and charging:
+        plugged = True
+    if not (plugged or charging):
+        return None
+    if halo is not None and halo.status == "MISMATCH":
+        return _away_match()
+    if halo_charger_active is False:
+        return _away_match()
+    return None
+
+
+def is_away_charging(
+    *,
+    halo: HaloCorrelationHint | None,
+    mercedes_plugged: bool | None,
+    mercedes_charging: bool | None,
+    mercedes_power_kw: float | None = None,
+    halo_charger_active: bool | None = None,
+) -> bool:
+    return infer_away_from_home(
+        halo=halo,
+        mercedes_plugged=mercedes_plugged,
+        mercedes_charging=mercedes_charging,
+        mercedes_power_kw=mercedes_power_kw,
+        halo_charger_active=halo_charger_active,
+    ) is not None
+
+
+def _away_match() -> LocationMatch:
+    return LocationMatch(
+        location=None,
+        location_name=AWAY_LOCATION_NAME,
+        charger_operator=None,
+        charger_network=None,
+        home_charging=False,
+        identification_method=IdentificationMethod.MERCEDES_ONLY,
+        confidence_band=ConfidenceBand.MEDIUM,
+        confidence_score=55,
+    )
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius = 6_371_000.0

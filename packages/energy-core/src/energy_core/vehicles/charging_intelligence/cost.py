@@ -12,6 +12,8 @@ class CostSource(StrEnum):
     CONFIGURED_PER_KWH = "CONFIGURED_PER_KWH"
     CONFIGURED_FIXED = "CONFIGURED_FIXED"
     OPERATOR = "OPERATOR"
+    OPEN_CHARGE_MAP = "OPEN_CHARGE_MAP"
+    CHARGEFINDER = "CHARGEFINDER"
     MANUAL = "MANUAL"
     UNKNOWN = "UNKNOWN"
 
@@ -37,5 +39,6 @@ def resolve_session_cost(
     if price_model == "FIXED" and price_value is not None:
         return SessionCostEstimate(price_value, CostSource.CONFIGURED_FIXED)
     if price_model == "PER_KWH" and price_value is not None and energy_kwh is not None:
-        return SessionCostEstimate(round(energy_kwh * price_value, 2), CostSource.CONFIGURED_PER_KWH)
+        source = CostSource.OPERATOR if home_charging is False else CostSource.CONFIGURED_PER_KWH
+        return SessionCostEstimate(round(energy_kwh * price_value, 2), source)
     return SessionCostEstimate(None, CostSource.UNKNOWN)

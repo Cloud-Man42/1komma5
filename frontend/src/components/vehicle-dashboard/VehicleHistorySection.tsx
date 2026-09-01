@@ -32,16 +32,19 @@ export function VehicleHistorySection({ sessions }: { sessions: VehicleChargeSes
             <tr>
               <th>Datum</th>
               <th>Plats</th>
+              <th>Station</th>
               <th>Operatör</th>
               <th>Typ</th>
+              <th>Källa</th>
+              <th>Confidence</th>
               <th>Start</th>
               <th>Slut</th>
               <th>SoC</th>
               <th>Energi</th>
               <th>Kostnad</th>
               <th>Effekt</th>
-              <th>Confidence</th>
               <th>Källa</th>
+              <th>Energi källa</th>
             </tr>
           </thead>
           <tbody>
@@ -52,15 +55,18 @@ export function VehicleHistorySection({ sessions }: { sessions: VehicleChargeSes
                 <tr key={session.id}>
                   <td>{formatIsoTime(session.connected_at)}</td>
                   <td>{session.location_name ?? (session.home_charging ? "Hemma" : "—")}</td>
+                  <td>{session.station_name ?? "—"}</td>
                   <td>{session.charger_operator ?? "—"}</td>
                   <td>{session.charging_type ?? "—"}</td>
+                  <td>{session.station_provider ?? session.station_provider_id ?? "—"}</td>
+                  <td>{formatConfidence(session.detection_confidence)}{session.station_confidence != null ? ` (${session.station_confidence})` : ""}</td>
                   <td>{formatIsoTime(session.charging_started_at ?? session.connected_at)}</td>
                   <td>{formatIsoTime(session.charging_stopped_at ?? session.disconnected_at)}</td>
                   <td>{formatPercent(session.start_soc)} → {formatPercent(session.end_soc)}</td>
                   <td>{energy.toFixed(1)} kWh{estimated ? " (est.)" : ""}</td>
                   <td>{formatSek(session.charging_cost_sek ?? session.actual_cost_sek)}</td>
                   <td>{session.charging_power_avg_kw != null ? `${session.charging_power_avg_kw.toFixed(1)} kW` : "—"}</td>
-                  <td>{formatConfidence(session.detection_confidence)}</td>
+                  <td>{session.identification_method ?? "—"}</td>
                   <td>{session.energy_source ?? session.energy_quality ?? "—"}</td>
                 </tr>
               );

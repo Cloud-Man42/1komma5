@@ -61,6 +61,44 @@ def test_decoder_vehicle_status_returns_none_for_invalid_payload():
     assert decoder.decode_vehicle_status(b"not-protobuf") is None
 
 
+def test_decoder_prefers_display_value_for_chargingstatus():
+    decoder = MercedesMessageDecoder()
+    status_msg = vehicle_events_pb2.VehicleStatus()
+    status_msg.vin = "W1KTESTVIN1234567"
+    status_msg.attributes["chargingstatus"].int_value = 8
+    status_msg.attributes["chargingstatus"].display_value = "Not charging"
+    mapped = decoder.decode_vehicle_status(status_msg.SerializeToString())
+    assert mapped is not None
+    assert any(attr.name == "chargingstatus" and attr.value == "Not charging" for attr in mapped.attributes)
+
+
+def test_decoder_maps_vehicle_status_update_rest_payload():
+    decoder = MercedesMessageDecoder()
+    update = vehicle_events_pb2.VehicleStatusUpdate()
+    update.fin_or_vin = "W1KTESTVIN1234567"
+    update.soc.value = 27
+    update.position_lat.value = 57.2610544
+    update.position_long.value = 16.4806263
+    update.rangeelectric.value = 113
+    mapped = decoder.decode_vehicle_status(update.SerializeToString())
+    assert mapped is not None
+    assert mapped.vin == "W1KTESTVIN1234567"
+    assert any(attr.name == ATTRIBUTE_SOC and attr.value == 27 for attr in mapped.attributes)
+    assert any(attr.name == "positionlat" and attr.value == 57.2610544 for attr in mapped.attributes)
+    assert any(attr.name == "positionlong" and attr.value == 16.4806263 for attr in mapped.attributes)
+    assert any(attr.name == "rangeelectrickm" and attr.value == 113 for attr in mapped.attributes)
+
+
+def test_decoder_skips_unavailable_vehicle_status_update_fields():
+    decoder = MercedesMessageDecoder()
+    update = vehicle_events_pb2.VehicleStatusUpdate()
+    update.fin_or_vin = "W1KTESTVIN1234567"
+    update.rangeliquid.metadata.status = 4
+    mapped = decoder.decode_vehicle_status(update.SerializeToString())
+    assert mapped is not None
+    assert mapped.attributes == ()
+
+
 def test_decoder_reads_display_value_when_numeric_oneof_unset():
     decoder = MercedesMessageDecoder()
     status_msg = vehicle_events_pb2.VehicleStatus()

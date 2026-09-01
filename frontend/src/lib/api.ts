@@ -2104,6 +2104,56 @@ export interface VehicleChargeSession {
   vehicle_data_quality?: string | null;
   charging_power_avg_kw?: number | null;
   charging_power_max_kw?: number | null;
+  connector_type?: string | null;
+  station_name?: string | null;
+  station_provider?: string | null;
+  station_provider_id?: string | null;
+  distance_from_vehicle_m?: number | null;
+  station_confidence?: number | null;
+  station_resolution_status?: string | null;
+  station_candidates?: StationCandidate[];
+}
+
+export interface StationCandidate {
+  score: number;
+  label: string;
+  provider_station_id?: string | null;
+}
+
+export interface ChargeFinderStatusResponse {
+  health_status: string;
+  enabled: boolean;
+  mode: string;
+  search_radius_m: number;
+  cache_ttl_seconds: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_lookup_at: string | null;
+  last_latency_ms: number | null;
+  consecutive_failures: number;
+  last_error: string | null;
+  cache_hits: number;
+  cache_misses: number;
+  parser_failures: number;
+  blocked_until: string | null;
+  browser_status: string | null;
+  parsing_version: string;
+  metrics: Record<string, number>;
+}
+
+export interface ChargeFinderDiagnosticsResponse extends ChargeFinderStatusResponse {}
+
+export interface ChargeFinderRawStation {
+  provider_station_id: string;
+  operator: string | null;
+  station_name: string | null;
+  network_name?: string | null;
+  distance_m: number | null;
+  charging_type: string | null;
+  max_power_kw: number | null;
+  connector_type: string | null;
+  external_url?: string | null;
+  raw_provider_data?: Record<string, unknown>;
 }
 
 export interface VehicleChargingStats {
@@ -2283,7 +2333,19 @@ export async function patchVehicleChargeSession(
   slug: string,
   vehicleId: number,
   sessionId: number,
-  payload: Partial<Pick<VehicleChargeSession, "location_name" | "charger_operator" | "charging_type" | "charging_cost_sek" | "home_charging">>,
+  payload: Partial<
+    Pick<
+      VehicleChargeSession,
+      | "location_name"
+      | "charger_operator"
+      | "charging_type"
+      | "charging_cost_sek"
+      | "home_charging"
+      | "station_provider_id"
+      | "station_name"
+      | "station_provider"
+    >
+  >,
 ): Promise<VehicleChargeSession> {
   const res = await fetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/${sessionId}`,
@@ -2293,6 +2355,49 @@ export async function patchVehicleChargeSession(
       body: JSON.stringify(payload),
     },
   );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchChargeFinderStatus(): Promise<ChargeFinderStatusResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchChargeFinderDiagnostics(): Promise<ChargeFinderDiagnosticsResponse> {
+  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/diagnostics`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function runChargeFinderTestLookup(payload: {
+  latitude?: number;
+  longitude?: number;
+  radius_m?: number;
+  use_mercedes_position?: boolean;
+  site_slug?: string;
+}): Promise<{ latitude: number; longitude: number; radius_m: number; candidate_count: number; candidates: unknown[] }> {
+  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/test-lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchChargeFinderRawLookup(
+  latitude: number,
+  longitude: number,
+  radius_m?: number,
+): Promise<{ latitude: number; longitude: number; radius_m: number; stations: ChargeFinderRawStation[] }> {
+  const params = new URLSearchParams({
+    latitude: String(latitude),
+    longitude: String(longitude),
+  });
+  if (radius_m != null) params.set("radius_m", String(radius_m));
+  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/raw-lookup?${params}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }

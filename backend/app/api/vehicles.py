@@ -12,6 +12,7 @@ from app.schemas import (
     VehicleChargeSessionPatchRequest,
     VehicleChargeSessionResponse,
     VehicleChargingStatsResponse,
+    StationCandidateResponse,
     VehicleCommandResponse,
     VehicleDetailResponse,
     VehicleIntegrationConfigResponse,
@@ -54,6 +55,7 @@ from energy_core.vehicles.value_envelope import build_timed_value
 from energy_core.vehicles.charging_intelligence.statistics import compute_charging_statistics
 from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
 from energy_core.db.charging_location_repo import ChargingLocationRepository
+from energy_core.db.charging_station_repo import ChargingStationRepository
 from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecord, VehicleChargeSessionRepository
 from energy_core.db.repositories import SiteRepository
 from sqlalchemy import select
@@ -80,17 +82,34 @@ def _freshness_label(
         VehicleConnectionState.BACKOFF.value,
     }:
         return "OFFLINE"
-    if data_quality == DataQuality.STALE.value:
-        return "INAKTUELL"
     if last_vehicle_update is not None:
         age = (datetime.now(UTC) - last_vehicle_update).total_seconds()
         if age > STALE_TELEMETRY_SECONDS:
             return "INAKTUELL"
+        if data_quality in {DataQuality.ESTIMATED.value, DataQuality.CALCULATED.value}:
+            return "UPPSKATTAT"
+        return "LIVE"
+    if data_quality == DataQuality.STALE.value:
+        return "INAKTUELL"
     if data_quality in {DataQuality.ESTIMATED.value, DataQuality.CALCULATED.value}:
         return "UPPSKATTAT"
     if data_quality == DataQuality.MEASURED.value:
         return "LIVE"
     return "OFFLINE"
+
+
+def _latest_signal_timestamp(latest: VehicleStateLatestModel | None) -> datetime | None:
+    if latest is None:
+        return None
+    candidates = [
+        latest.last_vehicle_update,
+        getattr(latest, "soc_updated_at", None),
+        getattr(latest, "charging_updated_at", None),
+        getattr(latest, "range_updated_at", None),
+        getattr(latest, "location_updated_at", None),
+    ]
+    known = [ts for ts in candidates if ts is not None]
+    return max(known) if known else None
 
 
 def _guard_stale_connection_fields(
@@ -99,10 +118,15 @@ def _guard_stale_connection_fields(
     is_plugged_in: bool | None,
     is_charging: bool | None,
     charging_power_kw: float | None,
+    charging_updated_at: datetime | None = None,
 ) -> tuple[bool | None, bool | None, float | None]:
     """Do not present plug/charge state from stale telemetry as current fact."""
     if freshness_label not in {"INAKTUELL", "OFFLINE"}:
         return is_plugged_in, is_charging, charging_power_kw
+    if charging_updated_at is not None:
+        age = (datetime.now(UTC) - charging_updated_at).total_seconds()
+        if age <= STALE_TELEMETRY_SECONDS:
+            return is_plugged_in, is_charging, charging_power_kw
     return None, None, None
 
 
@@ -152,13 +176,14 @@ def _vehicle_item(
     freshness_label = _freshness_label(
         connection_state=connection_state,
         data_quality=data_quality,
-        last_vehicle_update=latest.last_vehicle_update if latest else None,
+        last_vehicle_update=_latest_signal_timestamp(latest),
     )
     is_plugged_in, is_charging, charging_power_kw = _guard_stale_connection_fields(
         freshness_label,
         is_plugged_in=latest.is_plugged_in if latest else None,
         is_charging=latest.is_charging if latest else None,
         charging_power_kw=latest.charging_power_kw if latest else None,
+        charging_updated_at=getattr(latest, "charging_updated_at", None) if latest else None,
     )
     return VehicleListItemResponse(
         id=vehicle.id,
@@ -625,6 +650,21 @@ def _vehicle_session_response(record: VehicleChargeSessionRecord) -> VehicleChar
         vehicle_data_quality=record.vehicle_data_quality,
         charging_power_avg_kw=record.charging_power_avg_kw,
         charging_power_max_kw=record.charging_power_max_kw,
+        connector_type=record.connector_type,
+        station_name=record.station_name,
+        station_provider=record.station_provider,
+        station_provider_id=record.station_provider_id,
+        distance_from_vehicle_m=record.distance_from_vehicle_m,
+        station_confidence=record.station_confidence,
+        station_resolution_status=record.station_resolution_status,
+        station_candidates=[
+            StationCandidateResponse(
+                score=item.get("score", 0),
+                label=item.get("label", ""),
+                provider_station_id=item.get("provider_station_id"),
+            )
+            for item in (record.station_candidates_json or [])
+        ],
     )
 
 
@@ -693,16 +733,39 @@ async def patch_vehicle_charge_session(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No fields to update")
     updated = await repo.patch_session(session_id, identification_method="MANUAL", **fields)
     assert updated is not None
-    if payload.location_name and record.latitude is not None and record.longitude is not None:
-        await ChargingLocationRepository(session).record_observation(
-            site_id=site.id,
-            latitude=record.latitude,
-            longitude=record.longitude,
-            radius_m=100,
-            location_name=payload.location_name,
-            charger_operator=payload.charger_operator,
-            charging_type=payload.charging_type,
-        )
+    station_repo = ChargingStationRepository(session)
+    if record.latitude is not None and record.longitude is not None:
+        if payload.location_name:
+            await ChargingLocationRepository(session).record_observation(
+                site_id=site.id,
+                latitude=record.latitude,
+                longitude=record.longitude,
+                radius_m=100,
+                location_name=payload.location_name,
+                charger_operator=payload.charger_operator,
+                charging_type=payload.charging_type,
+            )
+        if payload.station_provider_id or payload.station_name or payload.charger_operator:
+            confirmed = await station_repo.confirm_station(
+                provider=payload.station_provider or "CHARGEFINDER",
+                provider_station_id=payload.station_provider_id or f"manual-{session_id}",
+                operator=payload.charger_operator,
+                station_name=payload.station_name or payload.location_name,
+                latitude=record.latitude,
+                longitude=record.longitude,
+                charging_type=payload.charging_type,
+            )
+            await repo.patch_session(
+                session_id,
+                charging_station_id=confirmed.id,
+                station_provider=confirmed.provider,
+                station_provider_id=confirmed.provider_station_id,
+                station_name=confirmed.station_name,
+                station_resolution_status="OK",
+                identification_method="MANUAL",
+            )
+            updated = await repo.get_by_id(session_id)
+            assert updated is not None
     await session.commit()
     return _vehicle_session_response(updated)
 

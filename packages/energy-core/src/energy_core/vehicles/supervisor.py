@@ -13,6 +13,7 @@ from energy_core.config import Settings
 from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
+from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
@@ -31,6 +32,67 @@ class _SiteRuntime:
     site_slug: str
     provider: object
     task: asyncio.Task | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PollingContext:
+    is_charging: bool | None = None
+    is_plugged_in: bool | None = None
+    charging_power_kw: float | None = None
+    last_vehicle_update: datetime | None = None
+    missing_gps: bool = True
+    away_from_home: bool = False
+
+
+def _halo_charger_active(charger) -> bool | None:
+    if charger is None:
+        return None
+    if charger.last_vehicle_connected is True:
+        return True
+    if charger.last_actual_power_w is not None and charger.last_actual_power_w > 300:
+        return True
+    if charger.last_vehicle_connected is False:
+        if charger.last_actual_power_w is None or charger.last_actual_power_w <= 300:
+            return False
+    return None
+
+
+def _build_polling_context(db_latest, latest_state, correlation, charger) -> _PollingContext:
+    is_charging = db_latest.is_charging if db_latest is not None else (latest_state.is_charging if latest_state else None)
+    is_plugged_in = (
+        db_latest.is_plugged_in if db_latest is not None else (latest_state.is_plugged_in if latest_state else None)
+    )
+    charging_power_kw = (
+        db_latest.charging_power_kw
+        if db_latest is not None
+        else (latest_state.charging_power_kw if latest_state else None)
+    )
+    last_vehicle_update = (
+        db_latest.last_vehicle_update
+        if db_latest is not None
+        else (latest_state.last_vehicle_update if latest_state else None)
+    )
+    latitude = db_latest.latitude if db_latest is not None else (latest_state.latitude if latest_state else None)
+    longitude = db_latest.longitude if db_latest is not None else (latest_state.longitude if latest_state else None)
+    halo = (
+        HaloCorrelationHint(status=correlation.status, plugged_agreement=correlation.plugged_agreement)
+        if correlation is not None
+        else None
+    )
+    return _PollingContext(
+        is_charging=is_charging,
+        is_plugged_in=is_plugged_in,
+        charging_power_kw=charging_power_kw,
+        last_vehicle_update=last_vehicle_update,
+        missing_gps=latitude is None or longitude is None,
+        away_from_home=is_away_charging(
+            halo=halo,
+            mercedes_plugged=is_plugged_in,
+            mercedes_charging=is_charging,
+            mercedes_power_kw=charging_power_kw,
+            halo_charger_active=_halo_charger_active(charger),
+        ),
+    )
 
 
 class VehicleIntegrationSupervisor:
@@ -282,10 +344,29 @@ class VehicleIntegrationSupervisor:
         planner = AdaptivePollingPlanner()
         while True:
             latest_state = next(iter(provider._vehicles.values()), None)  # noqa: SLF001
+            db_latest = None
+            polling_context = _PollingContext()
+            async with self._session_factory() as session:
+                vehicle_repo = VehicleRepository(session, is_sqlite=self._settings.is_sqlite)
+                correlation_repo = VehicleHaloCorrelationRepository(session)
+                vehicles = await vehicle_repo.list_for_site(runtime.site_id)
+                if vehicles:
+                    db_latest = await vehicle_repo.get_latest_state(vehicles[0].id)
+                    correlation = await correlation_repo.get(vehicles[0].id)
+                    vehicle = await vehicle_repo.get(vehicles[0].id)
+                    charger = await correlation_repo.resolve_charger(vehicle) if vehicle else None
+                    polling_context = _build_polling_context(db_latest, latest_state, correlation, charger)
+                row = await VehicleProviderRepository(session, secret_box=self._secret_box).get_for_site(runtime.site_id)
+                if row is not None:
+                    await session.commit()
+
             decision = planner.decide(
-                is_charging=latest_state.is_charging if latest_state else None,
-                is_plugged_in=latest_state.is_plugged_in if latest_state else None,
-                last_vehicle_update=latest_state.last_vehicle_update if latest_state else None,
+                is_charging=polling_context.is_charging,
+                is_plugged_in=polling_context.is_plugged_in,
+                charging_power_kw=polling_context.charging_power_kw,
+                last_vehicle_update=polling_context.last_vehicle_update,
+                missing_gps=polling_context.missing_gps,
+                away_from_home=polling_context.away_from_home,
             )
             async with self._session_factory() as session:
                 repo = VehicleProviderRepository(session, secret_box=self._secret_box)
@@ -296,9 +377,17 @@ class VehicleIntegrationSupervisor:
                         current_polling_interval_seconds=decision.interval_seconds,
                     )
                     await session.commit()
-            await asyncio.sleep(decision.interval_seconds)
             try:
                 states = await provider.sync_from_rest()
+                if decision.mode.value == "POSITION_RECOVERY":
+                    for state in states:
+                        if state.latitude is not None and state.longitude is not None:
+                            logger.info(
+                                "Mercedes GPS recovered via REST for site %s (%.5f, %.5f)",
+                                runtime.site_slug,
+                                state.latitude,
+                                state.longitude,
+                            )
                 await self._persist_vehicle_states(runtime.site_id, states, provider=provider)
             except asyncio.CancelledError:
                 raise
@@ -315,6 +404,7 @@ class VehicleIntegrationSupervisor:
                             last_error=str(exc)[:512],
                         )
                         await session.commit()
+            await asyncio.sleep(decision.interval_seconds)
 
     async def _stop_site(self, runtime: _SiteRuntime) -> None:
         if runtime.task is not None:

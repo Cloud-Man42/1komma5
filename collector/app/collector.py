@@ -59,7 +59,7 @@ class Collector:
         self._solar_forecast = SolarForecastCoordinator()
         self._energy_balance = EnergyBalanceCoordinator()
         self._vehicle_supervisor = VehicleIntegrationSupervisor(self._session_factory, self._settings)
-        self._vehicle_charge_sessions = VehicleChargeSessionCoordinator()
+        self._vehicle_charge_sessions = VehicleChargeSessionCoordinator(self._settings)
         self._snapshot_writer = SnapshotWriter(self._settings)
         self._energy_aggregation = EnergyAggregationService(is_sqlite=self._settings.is_sqlite)
 

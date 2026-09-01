@@ -181,4 +181,31 @@ describe("resolveTargetSocPct", () => {
       ),
     ).toContain("Ingen färsk fordonsdata");
   });
+
+  it("uses value envelopes when top-level charging fields are nulled for stale guard", () => {
+    const display = buildVehicleDisplay({
+      vehicle: {
+        ...vehicle,
+        freshness_label: "INAKTUELL",
+        is_charging: null,
+        charging_power_kw: null,
+        charging_power: {
+          value: 10.9,
+          source_timestamp: "2026-08-31T18:57:43.397287Z",
+          received_timestamp: "2026-08-31T18:57:43.397287Z",
+          age_seconds: 120,
+          quality: "RECENT",
+        },
+      },
+      session: null,
+      sessions: [],
+      integration,
+      reasoning: null,
+      refreshIntervalSec: 15,
+      siteSlug: "akarp",
+    });
+
+    expect(display.chargingPowerKw).toBe(10.9);
+    expect(display.isCharging).toBe(true);
+  });
 });

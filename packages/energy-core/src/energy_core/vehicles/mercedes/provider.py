@@ -153,7 +153,11 @@ class MercedesProvider:
             if message is None or not message.attributes:
                 message = self._decoder.decode(payload)
             if message is None:
-                logger.warning("Mercedes REST snapshot for %s could not be decoded", mask_vin(vin))
+                logger.warning(
+                    "Mercedes REST snapshot for %s could not be decoded (%d bytes)",
+                    mask_vin(vin),
+                    len(payload),
+                )
                 continue
             if not message.attributes:
                 logger.warning("Mercedes REST snapshot for %s contained no attributes", mask_vin(vin))

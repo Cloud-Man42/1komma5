@@ -381,6 +381,9 @@ export default function ConfigPage() {
           <li>
             <Link href="/admin/integrations/mercedes">Mercedes me — diagnostik och råattribut</Link>
           </li>
+          <li>
+            <Link href="/admin/integrations/chargefinder">ChargeFinder — laddstationslookup och diagnostik</Link>
+          </li>
         </ul>
       </div>
 
