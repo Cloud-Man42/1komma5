@@ -2243,6 +2243,16 @@ export interface VehicleRawAttributesResponse {
   observations: VehicleAttributeObservation[];
 }
 
+export interface VehicleIntegrationEvent {
+  id: number;
+  event_type: string;
+  severity: string;
+  message: string;
+  details_json: string;
+  vehicle_id?: number | null;
+  recorded_at: string;
+}
+
 export interface VehicleIntegrationDiagnosticsResponse {
   site_slug: string;
   health_status: string;
@@ -2257,6 +2267,8 @@ export interface VehicleIntegrationDiagnosticsResponse {
   current_polling_interval_seconds?: number | null;
   vehicle_data_age_seconds?: number | null;
   api_data_age_seconds?: number | null;
+  soc_updated_at?: string | null;
+  soc_age_seconds?: number | null;
   recent_events: Array<{
     endpoint: string;
     method: string;
@@ -2266,6 +2278,7 @@ export interface VehicleIntegrationDiagnosticsResponse {
     retry_count: number;
     recorded_at: string;
   }>;
+  integration_events: VehicleIntegrationEvent[];
 }
 
 export interface VehicleIntegrationActionResponse {

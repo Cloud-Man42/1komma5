@@ -72,6 +72,7 @@ export default function MercedesAdminPage() {
             <dt>Reconnect count</dt><dd>{status.reconnect_count}</dd>
             <dt>Polling interval</dt><dd>{diagnostics?.current_polling_interval_seconds ? `${diagnostics.current_polling_interval_seconds}s` : "—"}</dd>
             <dt>Vehicle data age</dt><dd>{diagnostics?.vehicle_data_age_seconds != null ? `${Math.round(diagnostics.vehicle_data_age_seconds)}s` : "—"}</dd>
+            <dt>SoC age</dt><dd>{diagnostics?.soc_age_seconds != null ? `${Math.round(diagnostics.soc_age_seconds)}s` : "—"}</dd>
             <dt>API data age</dt><dd>{diagnostics?.api_data_age_seconds != null ? `${Math.round(diagnostics.api_data_age_seconds)}s` : "—"}</dd>
           </dl>
           <div className="button-row">
@@ -109,6 +110,35 @@ export default function MercedesAdminPage() {
                   <td>{obs.masked_sample}</td>
                   <td>{obs.sample_count}</td>
                   <td>{new Date(obs.last_seen_at).toLocaleString("sv-SE")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Self-heal logg</h2>
+        <p>Senaste diagnostik- och själv-läkningshändelser från collector (SoC, REST-sync, anslutning).</p>
+        {(diagnostics?.integration_events?.length ?? 0) === 0 ? (
+          <p>Inga händelser ännu.</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Tid</th>
+                <th>Typ</th>
+                <th>Allvar</th>
+                <th>Meddelande</th>
+              </tr>
+            </thead>
+            <tbody>
+              {diagnostics?.integration_events.map((event) => (
+                <tr key={event.id}>
+                  <td>{new Date(event.recorded_at).toLocaleString("sv-SE")}</td>
+                  <td>{event.event_type}</td>
+                  <td>{event.severity}</td>
+                  <td>{event.message}</td>
                 </tr>
               ))}
             </tbody>

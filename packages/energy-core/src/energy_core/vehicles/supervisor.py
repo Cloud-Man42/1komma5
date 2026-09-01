@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from energy_core.config import Settings
 from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
+from energy_core.db.integration_event_repo import VehicleIntegrationEventRepository
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
@@ -18,6 +19,13 @@ from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
 from energy_core.vehicles.polling import AdaptivePollingPlanner
+from energy_core.vehicles.diagnostics.events import (
+    IntegrationEventDraft,
+    IntegrationEventSeverity,
+    IntegrationEventType,
+    SelfHealAction,
+)
+from energy_core.vehicles.diagnostics.self_heal import evaluate_vehicle_self_heal
 from energy_core.vehicles.mercedes.provider import MercedesProvider
 from energy_core.vehicles.mock.provider import MockVehicleProvider, MockVehicleScenario
 
@@ -318,7 +326,14 @@ class VehicleIntegrationSupervisor:
                     display_name=state.model,
                 )
                 await vehicle_repo.upsert_capabilities(db_vehicle.id, state.capabilities)
-                await vehicle_repo.persist_state(db_vehicle.id, state)
+                diagnostics = await vehicle_repo.persist_state(db_vehicle.id, state)
+                event_repo = VehicleIntegrationEventRepository(session)
+                if diagnostics.events:
+                    await event_repo.record_events(
+                        site_id=site_id,
+                        vehicle_id=db_vehicle.id,
+                        events=diagnostics.events,
+                    )
                 if isinstance(provider, MercedesProvider):
                     observations = provider.mapper.attribute_recorder.drain()
                     if observations:
@@ -349,11 +364,14 @@ class VehicleIntegrationSupervisor:
             latest_state = next(iter(provider._vehicles.values()), None)  # noqa: SLF001
             db_latest = None
             polling_context = _PollingContext()
+            vehicle_id: int | None = None
+            correlation = None
             async with self._session_factory() as session:
                 vehicle_repo = VehicleRepository(session, is_sqlite=self._settings.is_sqlite)
                 correlation_repo = VehicleHaloCorrelationRepository(session)
                 vehicles = await vehicle_repo.list_for_site(runtime.site_id)
                 if vehicles:
+                    vehicle_id = vehicles[0].id
                     db_latest = await vehicle_repo.get_latest_state(vehicles[0].id)
                     correlation = await correlation_repo.get(vehicles[0].id)
                     vehicle = await vehicle_repo.get(vehicles[0].id)
@@ -372,17 +390,75 @@ class VehicleIntegrationSupervisor:
                 missing_gps=polling_context.missing_gps,
                 away_from_home=polling_context.away_from_home,
             )
+            heal = evaluate_vehicle_self_heal(
+                latest=db_latest,
+                correlation=correlation,
+                polling_mode=decision.mode.value,
+                polling_interval_seconds=decision.interval_seconds,
+            )
+            force_sync = SelfHealAction.FORCE_REST_SYNC in heal.actions
             async with self._session_factory() as session:
                 repo = VehicleProviderRepository(session, secret_box=self._secret_box)
+                event_repo = VehicleIntegrationEventRepository(session)
+                if heal.events:
+                    await event_repo.record_events(
+                        site_id=runtime.site_id,
+                        vehicle_id=vehicle_id,
+                        events=heal.events,
+                    )
                 row = await repo.get_for_site(runtime.site_id)
                 if row is not None:
                     await repo.update_runtime_status(
                         row,
                         current_polling_interval_seconds=decision.interval_seconds,
                     )
-                    await session.commit()
+                await session.commit()
             try:
+                if force_sync:
+                    async with self._session_factory() as session:
+                        await VehicleIntegrationEventRepository(session).record_events(
+                            site_id=runtime.site_id,
+                            vehicle_id=vehicle_id,
+                            events=(
+                                IntegrationEventDraft(
+                                    event_type=IntegrationEventType.REST_SYNC_FORCED,
+                                    severity=IntegrationEventSeverity.ACTION,
+                                    message="Self-heal triggered Mercedes REST sync for stale SoC",
+                                    details={"polling_mode": decision.mode.value},
+                                ),
+                            ),
+                        )
+                        await session.commit()
                 states = await provider.sync_from_rest()
+                if states:
+                    await self._persist_vehicle_states(runtime.site_id, states, provider=provider)
+                    soc_values = [
+                        state.state_of_charge_percent
+                        for state in states
+                        if state.state_of_charge_percent is not None
+                    ]
+                    if force_sync or decision.mode.value in {"STALE_RECOVERY", "POSITION_RECOVERY"} or soc_values:
+                        async with self._session_factory() as session:
+                            await VehicleIntegrationEventRepository(session).record_events(
+                                site_id=runtime.site_id,
+                                vehicle_id=vehicle_id,
+                                events=(
+                                    IntegrationEventDraft(
+                                        event_type=IntegrationEventType.REST_SYNC,
+                                        severity=IntegrationEventSeverity.INFO,
+                                        message=(
+                                            f"REST sync ({decision.mode.value}); "
+                                            f"soc={soc_values[0] if soc_values else 'unchanged'}"
+                                        ),
+                                        details={
+                                            "mode": decision.mode.value,
+                                            "forced": force_sync,
+                                            "soc_values": soc_values,
+                                        },
+                                    ),
+                                ),
+                            )
+                            await session.commit()
                 if decision.mode.value == "POSITION_RECOVERY":
                     for state in states:
                         if state.latitude is not None and state.longitude is not None:
@@ -392,13 +468,24 @@ class VehicleIntegrationSupervisor:
                                 state.latitude,
                                 state.longitude,
                             )
-                await self._persist_vehicle_states(runtime.site_id, states, provider=provider)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 logger.exception("Mercedes periodic REST refresh failed for site %s", runtime.site_slug)
                 async with self._session_factory() as session:
                     repo = VehicleProviderRepository(session, secret_box=self._secret_box)
+                    await VehicleIntegrationEventRepository(session).record_events(
+                        site_id=runtime.site_id,
+                        vehicle_id=vehicle_id,
+                        events=(
+                            IntegrationEventDraft(
+                                event_type=IntegrationEventType.REST_SYNC_FAILED,
+                                severity=IntegrationEventSeverity.ERROR,
+                                message=f"REST sync failed: {exc.__class__.__name__}",
+                                details={"error": str(exc)[:512]},
+                            ),
+                        ),
+                    )
                     row = await repo.get_for_site(runtime.site_id)
                     if row is not None:
                         await repo.update_runtime_status(

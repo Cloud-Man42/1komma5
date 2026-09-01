@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from dataclasses import replace
 from cryptography.fernet import Fernet
+from energy_core.db.integration_event_repo import VehicleIntegrationEventRepository
 from energy_core.db.models import Base, SiteModel
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
@@ -331,6 +332,30 @@ async def test_soc_updated_at_only_changes_when_soc_changes(stored_vehicle):
         assert latest is not None
         assert latest.state_of_charge_percent == 37.0
         assert latest.soc_updated_at > original_soc_ts
+
+
+@pytest.mark.asyncio
+async def test_persist_state_emits_soc_updated_event(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        diagnostics = await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(datetime.now(UTC)), state_of_charge_percent=37.0),
+        )
+        assert any(event.event_type.value == "SOC_UPDATED" for event in diagnostics.events)
+        vehicle = await repo.get(vehicle_id)
+        await VehicleIntegrationEventRepository(session).record_events(
+            site_id=vehicle.site_id,
+            vehicle_id=vehicle_id,
+            events=diagnostics.events,
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        vehicle = await VehicleRepository(session, is_sqlite=True).get(vehicle_id)
+        events = await VehicleIntegrationEventRepository(session).list_recent(site_id=vehicle.site_id)
+        assert any(event.event_type == "SOC_UPDATED" for event in events)
 
 
 @pytest.mark.asyncio

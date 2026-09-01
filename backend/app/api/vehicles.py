@@ -22,6 +22,7 @@ from app.schemas import (
     VehicleRawAttributesResponse,
     VehicleAttributeObservationResponse,
     VehicleIntegrationDiagnosticsResponse,
+    VehicleIntegrationEventResponse,
     VehicleApiEventResponse,
     VehicleIntegrationActionResponse,
     VehicleSetTargetSocRequest,
@@ -56,6 +57,7 @@ from energy_core.vehicles.sync_service import VehicleSyncError, VehicleSyncServi
 from energy_core.vehicles.value_envelope import build_timed_value
 from energy_core.vehicles.charging_intelligence.statistics import compute_charging_statistics
 from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
+from energy_core.db.integration_event_repo import VehicleIntegrationEventRepository
 from energy_core.db.charging_location_repo import ChargingLocationRepository
 from energy_core.db.charging_station_repo import ChargingStationRepository
 from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecord, VehicleChargeSessionRepository
@@ -552,11 +554,17 @@ async def get_integration_diagnostics(
     row = await repo.get_or_create(site.id)
     record = repo.to_record(row)
     latest_vehicle_update = None
+    soc_updated_at = None
+    soc_age_seconds = None
     vehicles = await VehicleRepository(session).list_for_site(site.id)
     if vehicles:
         latest = await VehicleRepository(session).get_latest_state(vehicles[0].id)
         if latest is not None:
             latest_vehicle_update = latest.last_vehicle_update
+            soc_updated_at = getattr(latest, "soc_updated_at", None)
+            if soc_updated_at is not None:
+                soc_age_seconds = (datetime.now(UTC) - soc_updated_at).total_seconds()
+    integration_events = await VehicleIntegrationEventRepository(session).list_recent(site_id=site.id, limit=50)
     health = MercedesIntegrationHealthService().evaluate(
         enabled=record.enabled,
         connection_state=record.connection_state,
@@ -585,8 +593,45 @@ async def get_integration_diagnostics(
         current_polling_interval_seconds=record.current_polling_interval_seconds,
         vehicle_data_age_seconds=health.vehicle_data_age_seconds,
         api_data_age_seconds=health.api_data_age_seconds,
+        soc_updated_at=soc_updated_at,
+        soc_age_seconds=soc_age_seconds,
         recent_events=[],
+        integration_events=[
+            VehicleIntegrationEventResponse(
+                id=event.id,
+                event_type=event.event_type,
+                severity=event.severity,
+                message=event.message,
+                details_json=event.details_json,
+                vehicle_id=event.vehicle_id,
+                recorded_at=event.recorded_at,
+            )
+            for event in integration_events
+        ],
     )
+
+
+@router.get("/sites/{slug}/vehicles/integration/events", response_model=list[VehicleIntegrationEventResponse])
+async def list_integration_events(
+    slug: str,
+    limit: int = 100,
+    session: AsyncSession = Depends(get_db_session),
+) -> list[VehicleIntegrationEventResponse]:
+    site = await _site_or_404(session, slug)
+    capped = max(1, min(limit, 200))
+    events = await VehicleIntegrationEventRepository(session).list_recent(site_id=site.id, limit=capped)
+    return [
+        VehicleIntegrationEventResponse(
+            id=event.id,
+            event_type=event.event_type,
+            severity=event.severity,
+            message=event.message,
+            details_json=event.details_json,
+            vehicle_id=event.vehicle_id,
+            recorded_at=event.recorded_at,
+        )
+        for event in events
+    ]
 
 
 @router.post("/sites/{slug}/vehicles/integration/actions/{action}", response_model=VehicleIntegrationActionResponse)

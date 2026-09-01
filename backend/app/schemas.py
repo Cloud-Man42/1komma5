@@ -1637,6 +1637,16 @@ class VehicleApiEventResponse(BaseModel):
     recorded_at: datetime
 
 
+class VehicleIntegrationEventResponse(BaseModel):
+    id: int
+    event_type: str
+    severity: str
+    message: str
+    details_json: str = "{}"
+    vehicle_id: int | None = None
+    recorded_at: datetime
+
+
 class VehicleIntegrationDiagnosticsResponse(BaseModel):
     site_slug: str
     health_status: str
@@ -1651,7 +1661,10 @@ class VehicleIntegrationDiagnosticsResponse(BaseModel):
     current_polling_interval_seconds: int | None = None
     vehicle_data_age_seconds: float | None = None
     api_data_age_seconds: float | None = None
+    soc_updated_at: datetime | None = None
+    soc_age_seconds: float | None = None
     recent_events: list[VehicleApiEventResponse] = Field(default_factory=list)
+    integration_events: list[VehicleIntegrationEventResponse] = Field(default_factory=list)
 
 
 class VehicleIntegrationActionResponse(BaseModel):

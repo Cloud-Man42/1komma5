@@ -23,6 +23,12 @@ from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleCapabilities, VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
 from energy_core.vehicles.mercedes.telemetry_plausibility import has_plausible_vehicle_telemetry
+from energy_core.vehicles.diagnostics.events import (
+    IntegrationEventDraft,
+    IntegrationEventSeverity,
+    IntegrationEventType,
+    PersistStateDiagnostics,
+)
 
 HISTORY_MIN_INTERVAL = timedelta(minutes=5)
 
@@ -424,9 +430,12 @@ class VehicleRepository:
         )
         return result.scalar_one_or_none()
 
-    async def persist_state(self, vehicle_id: int, state: VehicleState) -> None:
+    async def persist_state(self, vehicle_id: int, state: VehicleState) -> PersistStateDiagnostics:
         now = datetime.now(UTC)
         latest = await self.get_latest_state(vehicle_id)
+        prior_soc = latest.state_of_charge_percent if latest else None
+        incoming_had_soc = state.state_of_charge_percent is not None
+        events: list[IntegrationEventDraft] = []
         incoming = {
             "state_of_charge_percent": state.state_of_charge_percent,
             "target_soc_percent": state.target_soc_percent,
@@ -465,9 +474,44 @@ class VehicleRepository:
         values = _merge_last_known_good(latest, incoming)
         telemetry_only_update = latest is not None and not _carries_telemetry(state)
         if telemetry_only_update:
+            events.append(
+                IntegrationEventDraft(
+                    event_type=IntegrationEventType.TELEMETRY_SKIPPED,
+                    severity=IntegrationEventSeverity.INFO,
+                    message="Discovery-only update; kept last-known-good telemetry",
+                    details={"data_quality": state.data_quality.value},
+                )
+            )
             for field in (*_TELEMETRY_FIELDS, "data_quality", "last_vehicle_update"):
                 values.pop(field, None)
                 values.pop(f"{field}_updated_at", None)
+        merged_soc = values.get("state_of_charge_percent")
+        if incoming_had_soc and merged_soc is not None and (prior_soc is None or prior_soc != merged_soc):
+            events.append(
+                IntegrationEventDraft(
+                    event_type=IntegrationEventType.SOC_UPDATED,
+                    severity=IntegrationEventSeverity.INFO,
+                    message=f"SoC updated to {merged_soc}%",
+                    details={"prior_soc": prior_soc, "new_soc": merged_soc},
+                )
+            )
+        elif not incoming_had_soc and prior_soc is not None and merged_soc == prior_soc:
+            soc_ts = getattr(latest, "soc_updated_at", None) if latest else None
+            soc_age = None
+            if soc_ts is not None:
+                soc_age = max(0.0, (now - soc_ts).total_seconds())
+            if soc_age is None or soc_age > 120:
+                events.append(
+                    IntegrationEventDraft(
+                        event_type=IntegrationEventType.SOC_LKG_KEPT,
+                        severity=IntegrationEventSeverity.INFO,
+                        message=f"Partial update without soc; kept {prior_soc}%",
+                        details={
+                            "soc": prior_soc,
+                            "soc_age_seconds": round(soc_age, 1) if soc_age is not None else None,
+                        },
+                    )
+                )
         if latest is None:
             self._session.add(VehicleStateLatestModel(vehicle_id=vehicle_id, **values))
         else:
@@ -490,6 +534,7 @@ class VehicleRepository:
                 )
             )
         await self._session.flush()
+        return PersistStateDiagnostics(events=tuple(events))
 
     def _should_write_history(self, previous: VehicleStateLatestModel | None, values: dict) -> bool:
         if previous is None:

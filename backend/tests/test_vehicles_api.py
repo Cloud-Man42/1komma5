@@ -212,6 +212,7 @@ async def test_integration_diagnostics_and_reset(client):
     body = diagnostics.json()
     assert body["site_slug"] == "akarp"
     assert "health_status" in body
+    assert "integration_events" in body
 
     reset = await ac.post("/api/sites/akarp/vehicles/integration/actions/reset")
     assert reset.status_code == 200
