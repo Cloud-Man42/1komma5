@@ -145,6 +145,14 @@
   color: #94a3b8;
 }
 
+.idash-elprice-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: #64748b;
+  font-weight: 500;
+}
+
 .idash-elprice-live {
   display: inline-flex;
   align-items: center;
@@ -267,8 +275,187 @@
 }
 
 .idash-elprice-trend.is-rising .idash-elprice-trend-icon {
-  background: rgba(251, 146, 60, 0.12);
-  color: #fb923c;
+  color: #f87171;
+}
+
+.idash-elprice-triple {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.idash-elprice-triple div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.idash-elprice-triple span {
+  font-size: 0.62rem;
+  color: #64748b;
+  letter-spacing: 0.04em;
+}
+
+.idash-elprice-triple strong {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+
+.idash-strategy-card {
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(74, 222, 128, 0.18);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(8, 16, 28, 0.98));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.idash-strategy-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.idash-strategy-header h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #86efac;
+}
+
+.idash-strategy-mode {
+  margin: 0.2rem 0 0;
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.idash-strategy-now {
+  text-align: right;
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+.idash-strategy-now strong {
+  display: block;
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.idash-strategy-prices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.idash-strategy-prices div {
+  padding: 0.55rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.idash-strategy-label {
+  display: block;
+  font-size: 0.62rem;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+
+.idash-strategy-prices strong {
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.idash-strategy-state {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  min-height: 44px;
+}
+
+.idash-strategy-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: #4ade80;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.65);
+}
+
+.idash-strategy-state strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: #ecfccb;
+}
+
+.idash-strategy-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.idash-strategy-metrics div {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.idash-strategy-metrics span {
+  display: block;
+  font-size: 0.62rem;
+  color: #64748b;
+}
+
+.idash-strategy-metrics strong {
+  font-size: 0.92rem;
+  color: #e2e8f0;
+}
+
+.idash-strategy-saving,
+.idash-strategy-reason,
+.idash-strategy-quality,
+.idash-strategy-empty,
+.idash-strategy-tariff,
+.idash-strategy-peak-banner {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.idash-strategy-tariff strong {
+  color: #e2e8f0;
+}
+
+.idash-strategy-peak-banner {
+  color: #fcd34d;
+  font-weight: 600;
+}
+
+.idash-strategy-ev-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.idash-strategy-ev-list strong {
+  color: #e2e8f0;
+}
+
+.idash-strategy-saving strong {
+  color: #bbf7d0;
+}
+
+.idash-overview-main .idash-strategy-card {
+  margin-bottom: 0.85rem;
 }
 
 .idash-sidebar-nav {
@@ -495,6 +682,47 @@
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.idash-health-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.55);
+  font-size: 0.9rem;
+}
+
+.idash-health-strip-ok {
+  color: #86efac;
+}
+
+.idash-health-strip-warn {
+  color: #fcd34d;
+}
+
+.idash-health-strip-link {
+  font-size: 0.85rem;
+}
+
+.idash-charge-window-headline {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.35rem 0;
+}
+
+.idash-charge-window-saving {
+  margin: 0.35rem 0 0;
+  color: #86efac;
+}
+
+.idash-today-yesterday {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
 }
 
 .idash-site-title {
@@ -1035,6 +1263,47 @@
 .idash-confidence-body strong {
   display: block;
   margin-bottom: 0.15rem;
+}
+
+/* ── Forecast learning ── */
+.idash-forecast-learning-grid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.idash-forecast-learning-row {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.idash-forecast-learning-row:last-child {
+  border-bottom: none;
+}
+
+.idash-forecast-learning-kind {
+  display: block;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-bottom: 0.35rem;
+}
+
+.idash-forecast-learning-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.idash-forecast-learning-stats dt {
+  font-size: 0.65rem;
+  color: #64748b;
+  letter-spacing: 0.04em;
+}
+
+.idash-forecast-learning-stats dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 /* ── Production chart ── */

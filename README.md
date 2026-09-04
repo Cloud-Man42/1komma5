@@ -146,6 +146,34 @@ docker compose up -d
 
 Only **Caddy** publishes ports (80/443) to the host. Backend, frontend, collector, and PostgreSQL are internal.
 
+### HTTPS (`emic.inacloud.se`)
+
+Set in `.env` before `docker compose up`:
+
+```bash
+CADDY_DOMAIN=emic.inacloud.se
+CADDY_LAN_HOST=192.168.50.54    # optional HTTP fallback for direct IP access
+CADDY_ACME_EMAIL=admin@inacloud.se
+```
+
+Requirements:
+
+- **DNS** — `emic.inacloud.se` must resolve to your server (public IP externally; same name can point to the LAN IP internally via split-horizon DNS).
+- **Ports** — forward **80** and **443** to the host (80 is used for Let's Encrypt HTTP-01 and redirects to HTTPS).
+- **Frontend** — leave `NEXT_PUBLIC_API_BASE_URL` empty so the browser calls `/api/*` on the same HTTPS origin through Caddy.
+
+Caddy obtains and renews Let's Encrypt certificates automatically when the domain has a **public** DNS record and ports 80/443 are reachable from the internet.
+
+Until public DNS exists, the default `Caddyfile` uses `tls internal` (Caddy's local CA). HTTPS works on the LAN, but browsers show an untrusted-certificate warning unless you install the CA:
+
+```bash
+docker compose exec caddy cat /data/caddy/pki/ca/root.crt
+```
+
+Import that root certificate on client machines (or click through the browser warning once). When `emic.inacloud.se` has a public A-record, remove `tls internal` from the `Caddyfile` site block for automatic Let's Encrypt instead.
+
+The backend trusts `X-Forwarded-Proto` from Caddy so secure cookies and HTTPS-aware behavior work behind TLS termination.
+
 ### Verify TimescaleDB storage
 
 ```bash
@@ -177,7 +205,7 @@ make docker-test
 | Frontend | `npm run dev` (hot reload) | Next.js standalone in Docker |
 | Database | SQLite (default) or local PostgreSQL | PostgreSQL + TimescaleDB |
 | Heartbeat | MockHeartbeatProvider | OneKommaFiveHeartbeatProvider (live-overview) |
-| HTTPS | none | Caddy reverse proxy |
+| HTTPS | none | Caddy reverse proxy (Let's Encrypt on `CADDY_DOMAIN`) |
 
 Same application code runs in both modes. Differences are configuration only.
 

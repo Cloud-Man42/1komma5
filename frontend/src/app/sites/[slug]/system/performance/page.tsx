@@ -41,6 +41,8 @@ export default function PerformanceCenterPage() {
       <p>
         Cache hit rate: {metrics.cache.hit_rate_pct}% ({metrics.cache.hits}/
         {metrics.cache.hits + metrics.cache.misses})
+        {metrics.cache.backend ? ` · ${metrics.cache.backend}` : null}
+        {metrics.cache.redis_configured && !metrics.cache.redis_available ? " · Redis otillgänglig" : null}
       </p>
 
       <h2>Snapshot per site</h2>
@@ -62,6 +64,37 @@ export default function PerformanceCenterPage() {
           ))}
         </tbody>
       </table>
+
+      <h2>Collector lanes</h2>
+      {metrics.tasks && metrics.tasks.sample_size > 0 ? (
+        <>
+          <p>
+            Samples: {metrics.tasks.sample_size}, failures: {metrics.tasks.failures}
+          </p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>Runs</th>
+                <th>p50</th>
+                <th>p95</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(metrics.tasks.lanes).map(([lane, stats]) => (
+                <tr key={lane}>
+                  <td>{lane}</td>
+                  <td>{stats.count}</td>
+                  <td>{stats.p50_ms} ms</td>
+                  <td>{stats.p95_ms} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : (
+        <p>Ingen collector-taskdata ännu.</p>
+      )}
 
       <h2>Långsammaste routes</h2>
       <ul>

@@ -10,8 +10,8 @@ import { formatSunTime, getSunTimes } from "@/lib/sunTimes";
 import { DEFAULT_SCENE_PHOTO } from "@/lib/energyScenePhoto";
 import { SPA_SIDEBAR_PHOTO } from "@/lib/spaScenePhoto";
 import { VEHICLE_SIDEBAR_PHOTO } from "@/lib/vehicleScenePhoto";
-import type { MarketPricesResponse, SiteDashboard, SolarWeather } from "@/lib/api";
-import { fetchMarketPrices } from "@/lib/api";
+import type { EnergyStrategyCurrent, PricePeriodSnapshot, SiteDashboard, SolarWeather } from "@/lib/api";
+import { fetchEnergyStrategyCurrent, fetchPriceEngineToday } from "@/lib/api";
 import { SidebarElectricityPriceCard } from "@/components/intelligence-dashboard/SidebarElectricityPriceCard";
 import { DashboardNavIcon, isNavActive, visibleNavItems } from "./navItems";
 import { WeatherIcon } from "./weatherIcons";
@@ -164,18 +164,27 @@ export function DashboardSidebar({
   const usesHashSubnav =
     isEnergyRoute || isEvRoute || isSolarRoute || isVehicleRoute || isCostsRoute;
   const [locationHash, setLocationHash] = useState("");
-  const [marketPrices, setMarketPrices] = useState<MarketPricesResponse | null>(null);
+  const [importPeriods, setImportPeriods] = useState<PricePeriodSnapshot[] | null>(null);
+  const [energyStrategy, setEnergyStrategy] = useState<EnergyStrategyCurrent | null>(null);
 
   useEffect(() => {
     let active = true;
-    const load = () =>
-      fetchMarketPrices(slug, 24, timezone)
+    const load = () => {
+      fetchPriceEngineToday(slug)
         .then((data) => {
-          if (active) setMarketPrices(data);
+          if (active) setImportPeriods(data.periods);
         })
         .catch(() => {
-          if (active) setMarketPrices(null);
+          if (active) setImportPeriods(null);
         });
+      fetchEnergyStrategyCurrent(slug)
+        .then((data) => {
+          if (active) setEnergyStrategy(data);
+        })
+        .catch(() => {
+          if (active) setEnergyStrategy(null);
+        });
+    };
     load();
     const interval = setInterval(load, 300_000);
     return () => {
@@ -262,7 +271,7 @@ export function DashboardSidebar({
         </div>
       </div>
 
-      <SidebarElectricityPriceCard prices={marketPrices} />
+      <SidebarElectricityPriceCard periods={importPeriods} timezone={timezone} strategy={energyStrategy} />
 
       <nav className="idash-sidebar-nav">
         {items.map((item) => {

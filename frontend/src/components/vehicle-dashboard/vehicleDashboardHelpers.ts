@@ -134,10 +134,22 @@ export function lastCompletedSession(sessions: VehicleChargeSession[]): VehicleC
 
 export function sessionEnergyKwh(session: VehicleChargeSession): number {
   const measured = session.halo_energy_kwh ?? 0;
-  const estimated = session.estimated_battery_energy_delta_kwh ?? 0;
+  const estimated = session.estimated_battery_energy_delta_kwh ?? session.estimated_energy_kwh ?? 0;
   if (measured > 0) return measured;
   if (estimated > 0) return estimated;
   return 0;
+}
+
+export function sessionDisplayCost(session: VehicleChargeSession | null | undefined): number | null {
+  if (!session) return null;
+  return session.charging_cost_sek ?? session.actual_cost_sek ?? null;
+}
+
+export function sessionPriceLabel(session: VehicleChargeSession | null | undefined): string | null {
+  if (!session) return null;
+  if (session.price_model === "FREE") return "Gratis";
+  if (session.price_value_sek_kwh == null) return null;
+  return `${session.price_value_sek_kwh.toFixed(2)} kr/kWh`;
 }
 
 const UNKNOWN_LOCATION_LABELS = new Set(["Unknown", "Borta (ej hemma)"]);
@@ -222,6 +234,38 @@ function envelopeNumber(envelope?: VehicleValueEnvelope | null): number | null {
   return typeof envelope.value === "number" ? envelope.value : null;
 }
 
+export function formatGps(latitude: number | null | undefined, longitude: number | null | undefined): string | null {
+  if (latitude == null || longitude == null) return null;
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+export function vehicleLocationTitle(
+  vehicle: VehicleListItem | null,
+  session: VehicleChargeSession | null,
+): string | null {
+  if (session?.status === "ACTIVE") {
+    return sessionLocationTitle(session);
+  }
+  const fromVehicle = vehicle?.location_name?.trim();
+  if (fromVehicle) return fromVehicle;
+  return formatGps(vehicle?.latitude, vehicle?.longitude);
+}
+
+export function vehicleLocationSubtitle(
+  vehicle: VehicleListItem | null,
+  session: VehicleChargeSession | null,
+): string | null {
+  if (session?.status === "ACTIVE") {
+    return sessionLocationSubtitle(session);
+  }
+  const parts: string[] = [];
+  const operator = vehicle?.charger_operator?.trim();
+  const gps = formatGps(vehicle?.latitude, vehicle?.longitude);
+  if (operator) parts.push(operator);
+  if (gps && !vehicle?.location_name) parts.push(gps);
+  return parts.length > 0 ? parts.join(" · ") : gps;
+}
+
 export function buildVehicleDisplay({
   vehicle,
   session,
@@ -276,7 +320,7 @@ export function buildVehicleDisplay({
     dataQuality: vehicle?.data_quality ?? "—",
     startedAt: formatIsoTime(activeSession?.charging_started_at ?? activeSession?.connected_at),
     chargedTodayKwh: chargedKwh,
-    costKr: activeSession?.actual_cost_sek ?? null,
+    costKr: sessionDisplayCost(activeSession),
     savingsKr: activeSession?.savings_sek ?? null,
     surplusLabel: surplusLabel(activeSession),
     co2SavedKg: estimateCo2SavedKg(renewableKwh),
@@ -312,6 +356,11 @@ export function buildVehicleDisplay({
     canStartCharging: vehicle?.capabilities.can_start_charging ?? false,
     canSetTargetSoc: vehicle?.capabilities.can_set_target_soc ?? false,
     activeSession,
+    locationTitle: vehicleLocationTitle(vehicle, activeSession),
+    locationSubtitle: vehicleLocationSubtitle(vehicle, activeSession),
+    latitude: vehicle?.latitude ?? null,
+    longitude: vehicle?.longitude ?? null,
+    chargerOperator: vehicle?.charger_operator ?? activeSession?.charger_operator ?? null,
   };
 }
 

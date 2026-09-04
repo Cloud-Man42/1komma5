@@ -124,6 +124,8 @@ export function VehicleOverview({ siteSlug }: { siteSlug: string }) {
                 isCharging={display.isCharging}
                 chargingPowerKw={display.chargingPowerKw}
                 freshnessLabel={display.freshnessLabel}
+                locationTitle={display.locationTitle}
+                locationSubtitle={display.locationSubtitle}
               />
             </div>
             <VehicleSummaryStrip display={display} siteName={siteName} />
@@ -253,6 +255,17 @@ export function VehicleOverview({ siteSlug }: { siteSlug: string }) {
             <span className="vdash-status-chip">
               {display.isPluggedIn == null ? "—" : display.isPluggedIn ? "Ansluten" : "Ej ansluten"}
             </span>
+            {display.isCharging ? (
+              <span className="vdash-status-chip vdash-status-chip-green">Laddar</span>
+            ) : null}
+            {display.locationTitle ? (
+              <span className="vdash-status-chip" title={display.locationSubtitle ?? undefined}>
+                {display.locationTitle}
+              </span>
+            ) : null}
+            {display.chargerOperator ? (
+              <span className="vdash-status-chip">{display.chargerOperator}</span>
+            ) : null}
             <span className="vdash-status-chip">{siteName}</span>
             <span className="vdash-status-chip">Senast uppdaterad {updatedLabel}</span>
           </div>

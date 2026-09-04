@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.deps import get_db_session, get_reading_repository, get_site_repository
+from app.deps import get_app_settings, get_db_session, get_reading_repository, get_site_repository
 from app.schemas import (
     AggregatedReadingResponse,
     FinancialStatResponse,
@@ -20,8 +20,10 @@ from energy_core.db.repositories import (
     HistoricalEnergyRepository,
     SiteRepository,
 )
+from energy_core.cache.service import financial_stats_cache_key, get_cache_service
 from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.forecasting import ForecastValues, build_year_forecast
+from energy_core.performance.context import get_performance_context
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,6 +129,7 @@ async def get_site_financial_stats(
     year: int | None = Query(default=None, ge=2000, le=2100),
     site_repo: SiteRepository = Depends(get_site_repository),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
+    settings=Depends(get_app_settings),
 ) -> FinancialStatsResponse:
     site = await site_repo.get_by_slug(slug)
     if site is None:
@@ -137,46 +140,63 @@ async def get_site_financial_stats(
         raise HTTPException(status_code=422, detail=f"Invalid site timezone: {site.timezone}") from exc
     from_time = datetime(year, 1, 1, tzinfo=zone).astimezone(UTC) if year is not None else None
     to_time = datetime(year + 1, 1, 1, tzinfo=zone).astimezone(UTC) if year is not None else None
-    stats = await reading_repo.list_financial_stats(
-        site_id=site.id,
-        period=period,
-        timezone=site.timezone,
-        fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
-        export_compensation_sek_kwh=site.export_compensation_sek_kwh,
-        from_time=from_time,
-        to_time=to_time,
-        sell_config=sell_price_config_from_site(site),
-    )
-    return FinancialStatsResponse(
-        slug=slug,
-        timezone=site.timezone,
-        period=period,
-        fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
-        export_compensation_sek_kwh=site.export_compensation_sek_kwh,
-        sell_pricing_mode=getattr(site, "sell_pricing_mode", "spot") or "spot",
-        sell_contract_start_date=getattr(site, "sell_contract_start_date", None),
-        stats=[
-            FinancialStatResponse(
-                period_start=stat.period_start,
-                solar_self_consumed_kwh=stat.solar_self_consumed_kwh,
-                battery_self_consumed_kwh=stat.battery_self_consumed_kwh,
-                exported_kwh=stat.exported_kwh,
-                imported_kwh=stat.imported_kwh,
-                solar_savings_sek=stat.solar_savings_sek,
-                battery_savings_sek=stat.battery_savings_sek,
-                export_revenue_sek=stat.export_revenue_sek,
-                grid_import_cost_sek=stat.grid_import_cost_sek,
-                market_priced_fraction=stat.market_priced_fraction,
-                energy_sale_revenue_sek=stat.energy_sale_revenue_sek,
-                grid_benefit_revenue_sek=stat.grid_benefit_revenue_sek,
-                tax_credit_sek=stat.tax_credit_sek,
-                effective_sell_price_sek_kwh=stat.effective_sell_price_sek_kwh,
-                export_spot_priced_fraction=stat.export_spot_priced_fraction,
-                uncontracted_exported_kwh=stat.uncontracted_exported_kwh,
-            )
-            for stat in stats
-        ],
-    )
+
+    cache = get_cache_service(settings)
+    cache_key = financial_stats_cache_key(site.id, period, year)
+    ttl_seconds = settings.financial_redis_cache_ttl_seconds
+
+    async def factory() -> dict:
+        stats = await reading_repo.list_financial_stats(
+            site_id=site.id,
+            period=period,
+            timezone=site.timezone,
+            fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+            export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+            from_time=from_time,
+            to_time=to_time,
+            sell_config=sell_price_config_from_site(site),
+            use_aggregates=settings.financial_aggregates_enabled,
+        )
+        return FinancialStatsResponse(
+            slug=slug,
+            timezone=site.timezone,
+            period=period,
+            fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
+            export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+            sell_pricing_mode=getattr(site, "sell_pricing_mode", "spot") or "spot",
+            sell_contract_start_date=getattr(site, "sell_contract_start_date", None),
+            stats=[
+                FinancialStatResponse(
+                    period_start=stat.period_start,
+                    solar_self_consumed_kwh=stat.solar_self_consumed_kwh,
+                    battery_self_consumed_kwh=stat.battery_self_consumed_kwh,
+                    exported_kwh=stat.exported_kwh,
+                    imported_kwh=stat.imported_kwh,
+                    solar_savings_sek=stat.solar_savings_sek,
+                    battery_savings_sek=stat.battery_savings_sek,
+                    export_revenue_sek=stat.export_revenue_sek,
+                    grid_import_cost_sek=stat.grid_import_cost_sek,
+                    market_priced_fraction=stat.market_priced_fraction,
+                    energy_sale_revenue_sek=stat.energy_sale_revenue_sek,
+                    grid_benefit_revenue_sek=stat.grid_benefit_revenue_sek,
+                    tax_credit_sek=stat.tax_credit_sek,
+                    effective_sell_price_sek_kwh=stat.effective_sell_price_sek_kwh,
+                    export_spot_priced_fraction=stat.export_spot_priced_fraction,
+                    uncontracted_exported_kwh=stat.uncontracted_exported_kwh,
+                )
+                for stat in stats
+            ],
+        ).model_dump(mode="json")
+
+    ctx = get_performance_context()
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        if ctx is not None:
+            ctx.cache_hit = True
+        return FinancialStatsResponse.model_validate(cached)
+
+    payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
+    return FinancialStatsResponse.model_validate(payload)
 
 
 @router.get("/sites/{slug}/peaks", response_model=PeaksResponse)

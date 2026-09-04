@@ -55,16 +55,26 @@ def clear_dashboard_cache():
     """Every test gets a fresh database, so a cached section from an earlier test is stale."""
     from app.api.dashboard import _CACHE
     from app.widget_service import clear_snapshot_cache
+    from energy_core.cache.service import reset_cache_service
 
     from app.widget_auth import WIDGET_RATE_LIMITER
 
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
+    reset_cache_service()
     clear_snapshot_cache()
     yield
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
+    reset_cache_service()
     clear_snapshot_cache()
+
+
+@pytest.fixture(autouse=True)
+def isolate_admin_token_env(monkeypatch):
+    """Tests expect open admin routes unless a fixture sets EMIC_ADMIN_TOKEN explicitly."""
+    monkeypatch.delenv("EMIC_ADMIN_TOKEN", raising=False)
+    monkeypatch.setenv("EMIC_ADMIN_TOKEN", "")
 
 
 @pytest.fixture
@@ -74,6 +84,7 @@ async def client(tmp_path):
         _env_file=None,
         APP_ENV="test",
         DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
+        emic_admin_token="",
     )
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)

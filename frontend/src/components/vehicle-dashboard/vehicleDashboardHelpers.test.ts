@@ -6,6 +6,8 @@ import {
   recentSessionEnergyBars,
   resolveTargetSocPct,
   sessionEnergyKwh,
+  sessionDisplayCost,
+  sessionPriceLabel,
   sessionLocationSubtitle,
   sessionLocationTitle,
   surplusLabel,
@@ -157,6 +159,37 @@ describe("vehicleDashboardHelpers", () => {
         charging_type: "AC",
       }),
     ).toBe("ChargeNode · AC");
+  });
+
+  it("prefers operator charging cost during away sessions", () => {
+    expect(
+      sessionDisplayCost({
+        ...session,
+        actual_cost_sek: null,
+        charging_cost_sek: 42.5,
+        price_value_sek_kwh: 4.5,
+      }),
+    ).toBe(42.5);
+    expect(
+      sessionPriceLabel({
+        ...session,
+        price_value_sek_kwh: 4.5,
+      }),
+    ).toBe("4.50 kr/kWh");
+  });
+
+  it("builds location from vehicle GPS when no active session", () => {
+    const display = buildVehicleDisplay({
+      vehicle: { ...vehicle, latitude: 57.26123, longitude: 16.48123, charger_operator: "Charge Amps" },
+      session: null,
+      sessions: [],
+      integration: null,
+      reasoning: null,
+      refreshIntervalSec: 60,
+      siteSlug: "akarp",
+    });
+    expect(display.locationTitle).toBe("57.26123, 16.48123");
+    expect(display.chargerOperator).toBe("Charge Amps");
   });
 });
 

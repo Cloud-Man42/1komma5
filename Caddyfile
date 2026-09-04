@@ -1,15 +1,48 @@
+# EMIC reverse proxy — TLS termination at Caddy, HTTP to internal services.
+#
+# Production (.env):
+#   CADDY_DOMAIN=emic.inacloud.se
+#   CADDY_LAN_HOST=192.168.50.54          # optional HTTP fallback for direct IP access
+#
+# TLS: uses Caddy's internal CA by default (works with LAN / split-horizon DNS).
+# When emic.inacloud.se has a public A-record and ports 80+443 are forwarded,
+# remove the "tls internal" line below for automatic Let's Encrypt instead.
+#
+# Trust the internal CA on client machines (optional, removes browser warnings):
+#   docker compose exec caddy cat /data/caddy/pki/ca/root.crt
+
+(emic_app) {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /health {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
+
+# Primary site — HTTPS on the FQDN.
+{$CADDY_DOMAIN:localhost} {
+	tls internal
+	import emic_app
+
+	header {
+		Strict-Transport-Security "max-age=31536000;"
+	}
+}
+
+# Redirect plain HTTP on the FQDN to HTTPS.
 http://{$CADDY_DOMAIN:localhost} {
-  encode gzip
+	redir https://{host}{uri} permanent
+}
 
-  handle /api/* {
-    reverse_proxy backend:8000
-  }
-
-  handle /health {
-    reverse_proxy backend:8000
-  }
-
-  handle {
-    reverse_proxy frontend:3000
-  }
+# LAN IP fallback — plain HTTP for legacy clients that still hit the server by IP.
+http://{$CADDY_LAN_HOST:192.168.50.54} {
+	import emic_app
 }

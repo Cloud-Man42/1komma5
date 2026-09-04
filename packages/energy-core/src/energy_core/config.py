@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     solar_forecast_horizon_hours: int = Field(default=48, ge=12, le=72, alias="SOLAR_FORECAST_HORIZON_HOURS")
     solar_forecast_extended_days: int = Field(default=7, ge=0, le=16, alias="SOLAR_FORECAST_EXTENDED_DAYS")
     solar_forecast_refresh_minutes: int = Field(default=30, ge=5, alias="SOLAR_FORECAST_REFRESH_MINUTES")
+    solar_forecast_sync_refresh_on_read: bool = Field(
+        default=False,
+        alias="SOLAR_FORECAST_SYNC_REFRESH_ON_READ",
+    )
     solar_weather_cache_minutes: int = Field(default=45, ge=15, alias="SOLAR_WEATHER_CACHE_MINUTES")
     solar_weather_stale_minutes: int = Field(default=90, ge=30, alias="SOLAR_WEATHER_STALE_MINUTES")
     solar_forecast_retention_days: int = Field(default=14, ge=1, alias="SOLAR_FORECAST_RETENTION_DAYS")
@@ -127,6 +131,28 @@ class Settings(BaseSettings):
     widget_snapshot_cache_seconds: int = Field(default=15, ge=0, alias="WIDGET_SNAPSHOT_CACHE_SECONDS")
     widget_rate_limit_per_minute: int = Field(default=60, ge=1, alias="WIDGET_RATE_LIMIT_PER_MINUTE")
     enable_timescaledb: bool = Field(default=False, alias="ENABLE_TIMESCALEDB")
+    emic_admin_token: str = Field(default="", alias="EMIC_ADMIN_TOKEN")
+    financial_aggregates_enabled: bool = Field(default=False, alias="FINANCIAL_AGGREGATES_ENABLED")
+    redis_url: str = Field(default="", alias="REDIS_URL")
+    snapshot_redis_cache_ttl_seconds: float = Field(default=60.0, ge=5.0, alias="SNAPSHOT_REDIS_CACHE_TTL_SECONDS")
+    dashboard_redis_cache_ttl_seconds: float = Field(default=60.0, ge=5.0, alias="DASHBOARD_REDIS_CACHE_TTL_SECONDS")
+    financial_redis_cache_ttl_seconds: float = Field(default=300.0, ge=30.0, alias="FINANCIAL_REDIS_CACHE_TTL_SECONDS")
+    solar_forecast_redis_cache_ttl_seconds: float = Field(
+        default=1800.0, ge=60.0, alias="SOLAR_FORECAST_REDIS_CACHE_TTL_SECONDS"
+    )
+    current_price_redis_cache_ttl_seconds: float = Field(
+        default=120.0, ge=15.0, alias="CURRENT_PRICE_REDIS_CACHE_TTL_SECONDS"
+    )
+    horizon_optimizer_redis_cache_ttl_seconds: float = Field(
+        default=300.0, ge=30.0, alias="HORIZON_OPTIMIZER_REDIS_CACHE_TTL_SECONDS"
+    )
+    energy_control_collector_enabled: bool = Field(default=True, alias="ENERGY_CONTROL_COLLECTOR_ENABLED")
+    energy_control_provider: str = Field(default="noop", alias="ENERGY_CONTROL_PROVIDER")
+    timescale_retention_enabled: bool = Field(default=False, alias="TIMESCALE_RETENTION_ENABLED")
+    timescale_compression_enabled: bool = Field(default=False, alias="TIMESCALE_COMPRESSION_ENABLED")
+    collector_medium_lane_interval: int = Field(default=300, ge=30, alias="COLLECTOR_MEDIUM_LANE_INTERVAL")
+    collector_slow_lane_interval: int = Field(default=900, ge=60, alias="COLLECTOR_SLOW_LANE_INTERVAL")
+    collector_lane_timeout_seconds: int = Field(default=120, ge=30, alias="COLLECTOR_LANE_TIMEOUT_SECONDS")
 
     @field_validator("heartbeat_provider", mode="before")
     @classmethod

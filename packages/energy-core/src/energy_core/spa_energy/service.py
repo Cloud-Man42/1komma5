@@ -524,21 +524,31 @@ class SmartSpaEnergyService:
         solar_repo = SolarForecastRepository(session)
         solar_forecast = await solar_repo.get_latest(site.id)
 
-        price_repo = MarketPriceRepository(session, is_sqlite=self._settings.is_sqlite)
-        prices = await price_repo.list_between(site.id, from_time=now - timedelta(hours=1), to_time=end)
-        price_by_hour: dict[datetime, tuple[float | None, float | None]] = {}
-        for p in prices:
-            hour_key = p.recorded_at.replace(minute=0, second=0, microsecond=0)
-            price_by_hour[hour_key] = (p.spot_price_eur_kwh, p.all_in_price_eur_kwh)
+        from energy_core.market_prices.currency import sek_to_eur
+        from energy_core.price_engine.engine import EmicPriceEngine
+        from energy_core.price_engine.horizon_adapter import (
+            export_value_from_periods,
+            price_by_hour_from_periods,
+            price_by_period,
+        )
+
+        engine = EmicPriceEngine(session, is_sqlite=self._settings.is_sqlite)
+        periods = await engine.get_range(site.id, start=now - timedelta(hours=1), end=end)
+        price_by_hour = price_by_hour_from_periods(periods)
+        if not price_by_hour:
+            price_repo = MarketPriceRepository(session, is_sqlite=self._settings.is_sqlite)
+            prices = await price_repo.list_between(site.id, from_time=now - timedelta(hours=1), to_time=end)
+            for p in prices:
+                hour_key = p.recorded_at.replace(minute=0, second=0, microsecond=0)
+                price_by_hour[hour_key] = (p.spot_price_eur_kwh, p.all_in_price_eur_kwh)
 
         battery_soc = None
         if readings_raw:
             latest = readings_raw[-1]
             battery_soc = latest.battery_soc_pct
 
-        from energy_core.market_prices.currency import sek_to_eur
-
         fallback_eur = sek_to_eur(site.fallback_purchase_price_sek_kwh, self._settings)
+        export_value = export_value_from_periods(periods) or site.export_compensation_sek_kwh
         builder = EnergyHorizonBuilder()
         return builder.build(
             now=now,
@@ -547,7 +557,8 @@ class SmartSpaEnergyService:
                 solar_forecast=solar_forecast,
                 house_load=house_forecast,
                 price_by_hour=price_by_hour,
-                export_value_sek_kwh=site.export_compensation_sek_kwh,
+                price_by_period=price_by_period(periods),
+                export_value_sek_kwh=export_value,
                 fallback_price_eur_kwh=fallback_eur,
                 initial_battery_soc_pct=battery_soc,
             ),

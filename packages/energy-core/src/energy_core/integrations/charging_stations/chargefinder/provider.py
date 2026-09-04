@@ -6,9 +6,15 @@ import logging
 from enum import StrEnum
 from typing import Callable
 
+from dataclasses import replace
+
 from energy_core.integrations.charging_stations.chargefinder.circuit_breaker import ChargeFinderCircuitBreaker
 from energy_core.integrations.charging_stations.chargefinder.http_client import ChargeFinderHttpLookupClient
-from energy_core.integrations.charging_stations.chargefinder.parser import parse_stations
+from energy_core.integrations.charging_stations.chargefinder.parser import (
+    _parse_pricing_from_status,
+    parse_station,
+    parse_stations,
+)
 from energy_core.integrations.charging_stations.exceptions import (
     ChargeFinderBlockedError,
     ChargeFinderProviderError,
@@ -69,6 +75,88 @@ class ChargeFinderChargingStationProvider:
     def disabled(cls) -> ChargeFinderChargingStationProvider:
         return cls(mode=ChargeFinderMode.DISABLED)
 
+    async def _enrich_missing_pricing(
+        self,
+        candidates: list[ChargingStationCandidate],
+        *,
+        vehicle_lat: float,
+        vehicle_lon: float,
+        max_enrich: int = 3,
+    ) -> list[ChargingStationCandidate]:
+        if self._mode not in {ChargeFinderMode.WEB, ChargeFinderMode.API}:
+            return candidates
+        enriched: list[ChargingStationCandidate] = []
+        detail_fetches = 0
+        for candidate in candidates:
+            if candidate.price_model not in {None, "UNKNOWN", "FREE"} or detail_fetches >= max_enrich:
+                enriched.append(candidate)
+                continue
+            try:
+                raw, _latency_ms, _status = await self._lookup_client.fetch_station(
+                    slug=candidate.provider_station_id,
+                )
+            except ChargeFinderProviderError:
+                enriched.append(candidate)
+                continue
+            except Exception:
+                enriched.append(candidate)
+                continue
+            if raw is None:
+                enriched.append(candidate)
+                continue
+            detail_fetches += 1
+            reparsed = parse_station(raw, vehicle_lat=vehicle_lat, vehicle_lon=vehicle_lon)
+            price_model = reparsed.price_model if reparsed else candidate.price_model
+            price_value = reparsed.price_value_sek_kwh if reparsed else candidate.price_value_sek_kwh
+            connector_type = reparsed.connector_type if reparsed else candidate.connector_type
+            max_power_kw = reparsed.max_power_kw if reparsed else candidate.max_power_kw
+            charging_type = reparsed.charging_type if reparsed else candidate.charging_type
+
+            if price_model in {None, "UNKNOWN", "FREE"}:
+                price_model, price_value = await self._pricing_from_status(
+                    raw,
+                    fallback_model=price_model,
+                    fallback_value=price_value,
+                )
+
+            if price_model not in {None, "UNKNOWN"}:
+                enriched.append(
+                    replace(
+                        candidate,
+                        connector_type=connector_type or candidate.connector_type,
+                        max_power_kw=max_power_kw or candidate.max_power_kw,
+                        charging_type=charging_type or candidate.charging_type,
+                        price_model=price_model,
+                        price_value_sek_kwh=price_value,
+                    )
+                )
+            else:
+                enriched.append(candidate)
+        return enriched
+
+    async def _pricing_from_status(
+        self,
+        raw: dict,
+        *,
+        fallback_model: str | None,
+        fallback_value: float | None,
+    ) -> tuple[str, float | None]:
+        realtime_id = raw.get("realtimeId")
+        if not realtime_id:
+            return fallback_model or "UNKNOWN", fallback_value
+        try:
+            status_items, _latency_ms, _status = await self._lookup_client.fetch_status(
+                realtime_id=str(realtime_id),
+            )
+        except ChargeFinderProviderError:
+            return fallback_model or "UNKNOWN", fallback_value
+        except Exception:
+            return fallback_model or "UNKNOWN", fallback_value
+        status_model, status_value = _parse_pricing_from_status(status_items)
+        if status_model != "UNKNOWN":
+            return status_model, status_value
+        return fallback_model or "UNKNOWN", fallback_value
+
     async def find_stations(
         self,
         *,
@@ -102,6 +190,11 @@ class ChargeFinderChargingStationProvider:
                 vehicle_lon=longitude,
                 radius_m=float(radius_m),
             )[:limit]
+            candidates = await self._enrich_missing_pricing(
+                candidates,
+                vehicle_lat=latitude,
+                vehicle_lon=longitude,
+            )
             success = True
             logger.info(
                 "provider=CHARGEFINDER lookup_mode=%s lat=%s lon=%s radius=%s candidate_count=%s response_ms=%s",

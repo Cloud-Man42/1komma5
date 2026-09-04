@@ -9,7 +9,7 @@ import {
   formatWatts,
   updateEvCharger,
 } from "@/lib/api";
-import { formatOrePerKwh } from "@/lib/prices";
+import { formatOrePerKwh, legacyMarketEurToSekKwh } from "@/lib/prices";
 
 function kw(value: number | null | undefined): string {
   if (value == null) return "—";
@@ -149,7 +149,7 @@ export default function EnergyReasoningPanel({
             {priceTierLabel(data.price_tier)}
           </span>
           {data.current_price_eur_kwh != null && (
-            <span className="muted"> — nu {formatOrePerKwh(data.current_price_eur_kwh)}</span>
+            <span className="muted"> — nu {formatOrePerKwh(legacyMarketEurToSekKwh(data.current_price_eur_kwh))}</span>
           )}
         </p>
       </div>

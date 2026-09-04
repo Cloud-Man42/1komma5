@@ -42,6 +42,7 @@ class _VehicleLookupState:
     was_charging: bool = False
     lookup_done_for_session: bool = False
     uncertain_retry_done: bool = False
+    price_enriched: bool = False
     pending_finalize: bool = False
     last_resolution: object | None = None
 
@@ -196,7 +197,11 @@ class VehicleChargeSessionCoordinator:
             )
             return 1
 
-        is_charging = bool(latest and latest.is_charging)
+        effective = resolve_effective_connection(
+            latest,
+            plugged_agreement=getattr(halo_correlation, "plugged_agreement", None) if halo_correlation else None,
+        )
+        is_charging = effective.is_charging
         await self._session_service.process_vehicle(
             db,
             vehicle=vehicle,
@@ -319,11 +324,12 @@ class VehicleChargeSessionCoordinator:
         if latest is None or latest.latitude is None or latest.longitude is None:
             return None
 
-        is_plugged = resolve_effective_connection(
+        effective = resolve_effective_connection(
             latest,
             plugged_agreement=getattr(correlation, "plugged_agreement", None) if correlation else None,
-        ).is_plugged_in
-        is_charging = bool(latest.is_charging)
+        )
+        is_plugged = effective.is_plugged_in
+        is_charging = effective.is_charging
         state = self._lookup_state.setdefault(vehicle_id, _VehicleLookupState())
         if not self._should_lookup(
             vehicle_id,
@@ -336,6 +342,11 @@ class VehicleChargeSessionCoordinator:
                 return state.last_resolution
             if not is_plugged:
                 return None
+            if state.last_resolution is not None and not state.price_enriched:
+                enriched = await resolver.enrich_pricing(state.last_resolution)
+                if enriched != state.last_resolution:
+                    state.last_resolution = enriched
+                state.price_enriched = True
             return state.last_resolution
 
         halo = None
@@ -373,6 +384,7 @@ class VehicleChargeSessionCoordinator:
 
         state.lookup_done_for_session = True
         state.pending_finalize = False
-        state.last_resolution = resolved
+        state.last_resolution = await resolver.enrich_pricing(resolved)
+        state.price_enriched = state.last_resolution.price_model not in {None, "UNKNOWN", "FREE"}
         await db.flush()
-        return resolved
+        return state.last_resolution

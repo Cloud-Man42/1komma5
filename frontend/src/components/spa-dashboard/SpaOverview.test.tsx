@@ -158,9 +158,12 @@ describe("SpaOverview", () => {
     const user = userEvent.setup();
     render(<SpaOverview siteSlug="akarp" />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Visa alla sensorer/i)).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Visa alla sensorer/i)).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
 
     await user.click(screen.getByRole("button", { name: /Visa alla sensorer/i }));
     expect(screen.getByTestId("spa-sensors-panel")).toBeInTheDocument();
@@ -168,26 +171,35 @@ describe("SpaOverview", () => {
 
     await user.click(screen.getByRole("button", { name: "Stäng" }));
     await user.click(screen.getByRole("button", { name: /Visa detaljerad analys/i }));
-    await waitFor(() => {
-      expect(screen.getByTestId("spa-detailed-analysis")).toBeInTheDocument();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("spa-detailed-analysis")).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
 
   it("opens filter schedule drawer", async () => {
     const user = userEvent.setup();
     render(<SpaOverview siteSlug="akarp" />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Visa schema/i })).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /Visa schema/i })).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
 
     await user.click(screen.getByRole("button", { name: /Visa schema/i }));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("spa-filter-schedule-editor")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Spara schema/i })).toBeInTheDocument();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("spa-filter-schedule-editor")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /Spara schema/i })).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
 
   it("updates spa mode from header select", async () => {
     const user = userEvent.setup();

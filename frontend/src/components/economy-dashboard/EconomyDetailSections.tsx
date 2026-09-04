@@ -2,7 +2,8 @@
 
 import { PriceChart } from "@/components/PriceChart";
 import type { FinancialStat, MarketPricesResponse } from "@/lib/api";
-import { formatPriceOre, marketPriceToOre } from "./economyDashboardHelpers";
+import { formatPriceOre } from "./economyDashboardHelpers";
+import { marketPointImportOre, marketPointSpotOre } from "@/lib/prices";
 import type { EconomyInsight, PriceAnalysis } from "./economyDashboardHelpers";
 import { exportFinancialCsv, formatEconomyKr } from "./economyDashboardHelpers";
 import { navigateEconomySection } from "./economySection";
@@ -195,10 +196,8 @@ export function EconomyPriceDetailsSection({
                       timeZone: timezone,
                     })}
                   </td>
-                  <td>{marketPriceToOre(point.spot_eur_kwh)}</td>
-                  <td>
-                    {point.all_in_eur_kwh != null ? marketPriceToOre(point.all_in_eur_kwh) : "—"}
-                  </td>
+                  <td>{marketPointSpotOre(point) ?? "—"}</td>
+                  <td>{marketPointImportOre(point) ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

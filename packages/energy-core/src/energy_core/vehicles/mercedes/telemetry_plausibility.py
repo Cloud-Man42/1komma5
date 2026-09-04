@@ -30,11 +30,17 @@ def sanitize_vehicle_state(state: VehicleState) -> VehicleState:
     """Drop implausible placeholder fields so LKG merge keeps the last good values."""
     from dataclasses import replace
 
+    power_kw = state.charging_power_kw
+    if power_kw == 0 and state.is_charging is False:
+        power_kw = 0.0
+    elif power_kw == 0:
+        power_kw = None
+
     return replace(
         state,
         state_of_charge_percent=None if _is_sleep_placeholder_soc(state) else state.state_of_charge_percent,
         electric_range_km=None if _is_sleep_placeholder_range(state) else state.electric_range_km,
-        charging_power_kw=None if state.charging_power_kw == 0 else state.charging_power_kw,
+        charging_power_kw=power_kw,
     )
 
 

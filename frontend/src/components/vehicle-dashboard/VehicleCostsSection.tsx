@@ -15,7 +15,10 @@ export function VehicleCostsSection({
   totalEnergyKwh: number;
   totalSavingsKr: number;
 }) {
-  const totalCost = sessions.reduce((sum, s) => sum + (s.actual_cost_sek ?? 0), 0);
+  const totalCost = sessions.reduce(
+    (sum, s) => sum + (s.charging_cost_sek ?? s.actual_cost_sek ?? 0),
+    0,
+  );
   const totalReference = sessions.reduce((sum, s) => sum + (s.reference_cost_sek ?? 0), 0);
 
   return (
@@ -52,7 +55,7 @@ export function VehicleCostsSection({
           <ul className="vdash-source-list">
             {sessions.slice(0, 10).map((session) => (
               <li key={session.id}>
-                <span>{formatSek(session.actual_cost_sek)} · {sessionEnergyKwh(session).toFixed(1)} kWh</span>
+                <span>{formatSek(session.charging_cost_sek ?? session.actual_cost_sek)} · {sessionEnergyKwh(session).toFixed(1)} kWh</span>
                 <span className="vdash-muted">
                   Sol {(session.energy_sources.solar_direct_kwh ?? 0).toFixed(1)} ·
                   Nät {(session.energy_sources.grid_direct_kwh ?? 0).toFixed(1)} kWh

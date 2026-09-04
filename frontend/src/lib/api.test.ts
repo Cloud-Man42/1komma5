@@ -213,6 +213,7 @@ describe("charger catalog API client", () => {
     await expect(testEvChargerConnection("akarp", 4)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith("/api/sites/akarp/ev-chargers/4/test-connection", {
       method: "POST",
+      headers: {},
     });
   });
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.deps import get_db_session
 from app.schemas import (
     VehicleCapabilitiesResponse,
@@ -45,7 +47,7 @@ from energy_core.vehicles.mercedes.provider import MercedesProvider
 from energy_core.vehicles.health import MercedesIntegrationHealthService
 from energy_core.vehicles.sessions.repair import repair_completed_sessions
 from energy_core.vehicles.vin import mask_vin
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import VehicleCapabilityModel, VehicleStateLatestModel
@@ -132,12 +134,21 @@ def _guard_stale_connection_fields(
     charging_updated_at: datetime | None = None,
 ) -> tuple[bool | None, bool | None, float | None]:
     """Do not present plug/charge state from stale telemetry as current fact."""
+    if charging_updated_at is not None:
+        ts = charging_updated_at if charging_updated_at.tzinfo else charging_updated_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - ts).total_seconds()
+        if age > STALE_TELEMETRY_SECONDS and is_charging is not True:
+            charging_power_kw = None
     if freshness_label not in {"INAKTUELL", "OFFLINE"}:
         return is_plugged_in, is_charging, charging_power_kw
     if charging_updated_at is not None:
-        age = (datetime.now(UTC) - charging_updated_at).total_seconds()
+        ts = charging_updated_at if charging_updated_at.tzinfo else charging_updated_at.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - ts).total_seconds()
         if age <= STALE_TELEMETRY_SECONDS:
             return is_plugged_in, is_charging, charging_power_kw
+    if is_plugged_in is True:
+        power = charging_power_kw if is_charging else None
+        return True, is_charging, power
     return None, None, None
 
 
@@ -181,6 +192,8 @@ def _vehicle_item(
     latest: VehicleStateLatestModel | None,
     caps: list[VehicleCapabilityModel],
     correlation=None,
+    *,
+    active_session=None,
 ) -> VehicleListItemResponse:
     connection_state = latest.connection_state if latest else VehicleConnectionState.DISCONNECTED.value
     data_quality = latest.data_quality if latest else DataQuality.UNKNOWN.value
@@ -227,13 +240,20 @@ def _vehicle_item(
         is_charging=is_charging,
         charging_power_kw=charging_power_kw,
         last_vehicle_update=latest.last_vehicle_update if latest else None,
+        latitude=latest.latitude if latest else None,
+        longitude=latest.longitude if latest else None,
+        location_name=getattr(active_session, "station_name", None)
+        or getattr(active_session, "location_name", None)
+        if active_session
+        else None,
+        charger_operator=getattr(active_session, "charger_operator", None) if active_session else None,
         state_of_charge=_value_response(
             soc,
             updated_at=soc_updated_at or (latest.last_vehicle_update if latest else None),
             estimated=_field_is_stale(soc_updated_at),
         ),
         charging_power=_value_response(
-            latest.charging_power_kw if latest else None,
+            charging_power_kw,
             updated_at=getattr(latest, "charging_updated_at", None) or (latest.last_vehicle_update if latest else None),
         ),
         electric_range=_value_response(
@@ -251,6 +271,7 @@ async def list_vehicles(slug: str, session: AsyncSession = Depends(get_db_sessio
     site = await _site_or_404(session, slug)
     vehicles = await VehicleRepository(session).list_for_site(site.id)
     items: list[VehicleListItemResponse] = []
+    session_repo = VehicleChargeSessionRepository(session)
     for vehicle in vehicles:
         latest = await VehicleRepository(session).get_latest_state(vehicle.id)
         caps = (
@@ -261,7 +282,8 @@ async def list_vehicles(slug: str, session: AsyncSession = Depends(get_db_sessio
         model = await VehicleRepository(session).get(vehicle.id)
         assert model is not None
         correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
-        items.append(_vehicle_item(model, latest, list(caps), correlation))
+        active_session = await session_repo.get_current_for_vehicle(vehicle.id)
+        items.append(_vehicle_item(model, latest, list(caps), correlation, active_session=active_session))
     return VehicleListResponse(site_slug=slug, vehicles=items)
 
 
@@ -277,16 +299,30 @@ def _sync_http_error(exc: VehicleSyncError) -> HTTPException:
 
 
 @router.post("/sites/{slug}/vehicles/sync", response_model=VehicleSyncResponse)
-async def sync_vehicles(slug: str, session: AsyncSession = Depends(get_db_session)) -> VehicleSyncResponse:
+async def sync_vehicles(
+    slug: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
+) -> VehicleSyncResponse:
     site = await _site_or_404(session, slug)
     service = VehicleSyncService(session, is_sqlite=get_settings().is_sqlite)
     try:
         states = await service.sync_site(site.id)
     except VehicleSyncError as exc:
         raise _sync_http_error(exc) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.sync",
+        site_slug=slug,
+        resource_type="vehicle",
+        summary={"vehicles_updated": len(states)},
+    )
     await session.commit()
     vehicles = await VehicleRepository(session).list_for_site(site.id)
     items: list[VehicleListItemResponse] = []
+    session_repo = VehicleChargeSessionRepository(session)
     for vehicle in vehicles:
         latest = await VehicleRepository(session).get_latest_state(vehicle.id)
         caps = (
@@ -297,7 +333,8 @@ async def sync_vehicles(slug: str, session: AsyncSession = Depends(get_db_sessio
         model = await VehicleRepository(session).get(vehicle.id)
         assert model is not None
         correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
-        items.append(_vehicle_item(model, latest, list(caps), correlation))
+        active_session = await session_repo.get_current_for_vehicle(vehicle.id)
+        items.append(_vehicle_item(model, latest, list(caps), correlation, active_session=active_session))
     return VehicleSyncResponse(
         site_slug=slug,
         synced_at=datetime.now(UTC),
@@ -320,7 +357,9 @@ async def get_vehicle(
     caps = (
         await session.execute(select(VehicleCapabilityModel).where(VehicleCapabilityModel.vehicle_id == vehicle.id))
     ).scalars().all()
-    item = _vehicle_item(vehicle, latest, list(caps), await VehicleHaloCorrelationRepository(session).get(vehicle.id))
+    correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
+    active_session = await VehicleChargeSessionRepository(session).get_current_for_vehicle(vehicle.id)
+    item = _vehicle_item(vehicle, latest, list(caps), correlation, active_session=active_session)
     return VehicleDetailResponse(**item.model_dump(), charger_id=vehicle.charger_id)
 
 
@@ -329,7 +368,9 @@ async def update_vehicle(
     slug: str,
     vehicle_id: int,
     payload: VehicleUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleDetailResponse:
     site = await _site_or_404(session, slug)
     vehicle = await VehicleRepository(session).get(vehicle_id)
@@ -341,12 +382,23 @@ async def update_vehicle(
         assert vehicle is not None
     if payload.display_name is not None:
         vehicle.display_name = payload.display_name.strip() or vehicle.model
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.update",
+        site_slug=slug,
+        resource_type="vehicle",
+        resource_id=str(vehicle_id),
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     latest = await repo.get_latest_state(vehicle.id)
     caps = (
         await session.execute(select(VehicleCapabilityModel).where(VehicleCapabilityModel.vehicle_id == vehicle.id))
     ).scalars().all()
-    item = _vehicle_item(vehicle, latest, list(caps), await VehicleHaloCorrelationRepository(session).get(vehicle.id))
+    correlation = await VehicleHaloCorrelationRepository(session).get(vehicle.id)
+    active_session = await VehicleChargeSessionRepository(session).get_current_for_vehicle(vehicle.id)
+    item = _vehicle_item(vehicle, latest, list(caps), correlation, active_session=active_session)
     return VehicleDetailResponse(**item.model_dump(), charger_id=vehicle.charger_id)
 
 
@@ -429,7 +481,9 @@ async def get_integration_config(
 async def update_integration_config(
     slug: str,
     payload: VehicleIntegrationConfigUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleIntegrationConfigResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session)
@@ -445,6 +499,14 @@ async def update_integration_config(
         )
     except SecretBoxError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.integration.update",
+        site_slug=slug,
+        resource_type="vehicle_integration",
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     record = repo.to_record(row)
     return VehicleIntegrationConfigResponse(
@@ -461,7 +523,9 @@ async def update_integration_config(
 @router.post("/sites/{slug}/vehicles/integration/login", response_model=VehicleIntegrationLoginResponse)
 async def login_integration(
     slug: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleIntegrationLoginResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session)
@@ -485,13 +549,21 @@ async def login_integration(
         bundle = await provider.login(row.username, password)
         await repo.persist_token_bundle(row, bundle)
         await repo.update_runtime_status(row, connection_state=VehicleConnectionState.CONNECTED.value, last_error="")
-        await session.commit()
     except MercedesTwoFactorUnsupported as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except MercedesAuthError as exc:
         await repo.update_runtime_status(row, connection_state=VehicleConnectionState.BACKOFF.value, last_error=str(exc))
         await session.commit()
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.integration.login",
+        site_slug=slug,
+        resource_type="vehicle_integration",
+        summary={"success": True},
+    )
+    await session.commit()
     logger.info("Mercedes authentication successful for site %s", slug)
     return VehicleIntegrationLoginResponse(success=True, message="Mercedes login successful")
 
@@ -638,7 +710,9 @@ async def list_integration_events(
 async def run_integration_action(
     slug: str,
     action: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleIntegrationActionResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session, secret_box=SecretBox.from_settings())
@@ -652,6 +726,14 @@ async def run_integration_action(
             blocked_since=None,
             consecutive_failures=0,
             last_error_code=None,
+        )
+        await audit_admin_mutation(
+            request,
+            session,
+            action="vehicle.integration.action",
+            site_slug=slug,
+            resource_type="vehicle_integration",
+            summary={"action": action},
         )
         await session.commit()
         return VehicleIntegrationActionResponse(success=True, message="Integration reset")
@@ -670,6 +752,14 @@ async def run_integration_action(
             await sync.sync_site(site.id)
         except VehicleSyncError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        await audit_admin_mutation(
+            request,
+            session,
+            action="vehicle.integration.action",
+            site_slug=slug,
+            resource_type="vehicle_integration",
+            summary={"action": action},
+        )
         await session.commit()
         return VehicleIntegrationActionResponse(success=True, message="Vehicle state fetched")
     raise HTTPException(status_code=404, detail="Unknown action")
@@ -713,6 +803,8 @@ def _vehicle_session_response(record: VehicleChargeSessionRecord) -> VehicleChar
         estimated_energy_kwh=record.estimated_energy_kwh,
         charging_cost_sek=record.charging_cost_sek,
         cost_source=record.cost_source,
+        price_model=record.price_model,
+        price_value_sek_kwh=record.price_value_sek_kwh,
         detection_confidence=record.detection_confidence,
         identification_method=record.identification_method,
         vehicle_data_quality=record.vehicle_data_quality,
@@ -800,7 +892,9 @@ async def patch_vehicle_charge_session(
     vehicle_id: int,
     session_id: int,
     payload: VehicleChargeSessionPatchRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleChargeSessionResponse:
     site = await _site_or_404(session, slug)
     vehicle = await VehicleRepository(session).get(vehicle_id)
@@ -848,6 +942,15 @@ async def patch_vehicle_charge_session(
             )
             updated = await repo.get_by_id(session_id)
             assert updated is not None
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.session.patch",
+        site_slug=slug,
+        resource_type="vehicle_session",
+        resource_id=str(session_id),
+        summary=fields,
+    )
     await session.commit()
     return _vehicle_session_response(updated)
 
@@ -914,7 +1017,9 @@ async def set_vehicle_target_soc(
     slug: str,
     vehicle_id: int,
     payload: VehicleSetTargetSocRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)
@@ -926,6 +1031,15 @@ async def set_vehicle_target_soc(
         )
     except VehicleCommandError as exc:
         raise _command_http_error(exc) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.command.set_target_soc",
+        site_slug=slug,
+        resource_type="vehicle",
+        resource_id=str(vehicle_id),
+        summary=payload.model_dump(),
+    )
     await session.commit()
     return VehicleCommandResponse(
         success=result.success,
@@ -942,7 +1056,9 @@ async def set_vehicle_target_soc(
 async def start_vehicle_charging(
     slug: str,
     vehicle_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)
@@ -950,6 +1066,14 @@ async def start_vehicle_charging(
         result = await service.start_charging(site_id=site.id, vehicle_id=vehicle_id)
     except VehicleCommandError as exc:
         raise _command_http_error(exc) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.command.start_charging",
+        site_slug=slug,
+        resource_type="vehicle",
+        resource_id=str(vehicle_id),
+    )
     await session.commit()
     return VehicleCommandResponse(
         success=result.success,
@@ -966,7 +1090,9 @@ async def start_vehicle_charging(
 async def stop_vehicle_charging(
     slug: str,
     vehicle_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)
@@ -974,6 +1100,14 @@ async def stop_vehicle_charging(
         result = await service.stop_charging(site_id=site.id, vehicle_id=vehicle_id)
     except VehicleCommandError as exc:
         raise _command_http_error(exc) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="vehicle.command.stop_charging",
+        site_slug=slug,
+        resource_type="vehicle",
+        resource_id=str(vehicle_id),
+    )
     await session.commit()
     return VehicleCommandResponse(
         success=result.success,

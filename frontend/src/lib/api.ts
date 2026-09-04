@@ -1,3 +1,5 @@
+import { adminAuthHeaders, adminFetch } from "@/lib/adminAuth";
+
 export interface Reading {
   recorded_at: string;
   solar_production_w: number;
@@ -54,6 +56,12 @@ export interface DashboardTodaySection extends DashboardSectionMeta {
   exported_kwh: number | null;
   energy_cost_sek: number | null;
   savings_sek: number | null;
+  produced_kwh_yesterday?: number | null;
+  consumed_kwh_yesterday?: number | null;
+  imported_kwh_yesterday?: number | null;
+  exported_kwh_yesterday?: number | null;
+  energy_cost_sek_yesterday?: number | null;
+  savings_sek_yesterday?: number | null;
 }
 
 export interface DashboardEvSection extends DashboardSectionMeta {
@@ -585,6 +593,9 @@ export interface MarketPricePoint {
   timestamp: string;
   spot_eur_kwh: number;
   all_in_eur_kwh: number | null;
+  spot_sek_kwh?: number | null;
+  import_sek_kwh?: number | null;
+  export_sek_kwh?: number | null;
 }
 
 export interface MarketPricesResponse {
@@ -595,7 +606,236 @@ export interface MarketPricesResponse {
   average_all_in_eur_kwh: number | null;
   highest_all_in_eur_kwh: number | null;
   lowest_all_in_eur_kwh: number | null;
+  current_spot_sek_kwh?: number | null;
+  current_import_sek_kwh?: number | null;
+  average_import_sek_kwh?: number | null;
+  highest_import_sek_kwh?: number | null;
+  lowest_import_sek_kwh?: number | null;
   points: MarketPricePoint[];
+}
+
+export interface PricePeriodSnapshot {
+  period_start: string;
+  period_end: string;
+  price_area: string;
+  currency: string;
+  market_price_sek_kwh: number | null;
+  import_price_sek_kwh: number | null;
+  export_price_sek_kwh: number | null;
+  source: string;
+  quality: string;
+  is_estimated: boolean;
+  components: Record<string, unknown>;
+}
+
+export interface EvRecommendation {
+  charger_id: number;
+  charger_name: string;
+  window_start: string;
+  window_end: string;
+  avg_import_sek_kwh: number;
+  current_import_sek_kwh: number;
+  estimated_saving_sek: number | null;
+  reason_sv: string;
+}
+
+export interface EnergyStrategyCurrent {
+  slug: string;
+  timezone: string;
+  period_start: string;
+  market_price_sek_kwh: number | null;
+  import_price_sek_kwh: number | null;
+  export_price_sek_kwh: number | null;
+  market_quality: string;
+  import_quality: string;
+  export_quality: string;
+  battery_soc_pct: number | null;
+  strategy_state: string;
+  confidence: number;
+  reason: string;
+  reason_sv: string;
+  next_peak_at: string | null;
+  next_peak_import_sek_kwh: number | null;
+  optimization_mode: string;
+  expected_saving_today_sek: number | null;
+  recommended_reserve_soc_pct: number | null;
+  recommended_action: string | null;
+  eov_value_sek_kwh: number | null;
+  grid_surcharge_sek_kwh: number | null;
+  fuse_headroom_a: number | null;
+  fuse_utilization_pct: number | null;
+  ev_recommendations: EvRecommendation[];
+}
+
+export interface BatteryOpportunity {
+  slug: string;
+  timezone: string;
+  available: boolean;
+  monitor_only: boolean;
+  unavailable_reason_sv: string | null;
+  action: string | null;
+  action_label_sv: string | null;
+  headline_sv: string | null;
+  reason_sv: string | null;
+  confidence: number | null;
+  battery_soc_pct: number | null;
+  recommended_reserve_soc_pct: number | null;
+  expected_value_sek_kwh: number | null;
+  next_peak_at: string | null;
+  next_peak_import_sek_kwh: number | null;
+  optimization_mode: string | null;
+  strategy_state: string | null;
+}
+
+export interface HorizonLoadRecommendation {
+  load_id: string;
+  name: string;
+  load_type: string;
+  priority: number;
+  strategy: string;
+  window_start: string | null;
+  window_end: string | null;
+  expected_energy_kwh: number | null;
+  expected_cost_sek: number | null;
+  expected_energy_source: string | null;
+  savings_sek: number | null;
+  reason_sv: string | null;
+  explanation_sv: string | null;
+}
+
+export interface HorizonOptimizerPlan {
+  slug: string;
+  timezone: string;
+  available: boolean;
+  monitor_only: boolean;
+  unavailable_reason_sv: string | null;
+  horizon_hours: number;
+  horizon_blocks: number;
+  generated_at: string | null;
+  total_planned_savings_sek: number | null;
+  headline_sv: string | null;
+  summary_sv: string | null;
+  loads: HorizonLoadRecommendation[];
+  battery: BatteryOpportunity | null;
+}
+
+export interface HeartbeatAuditRollup {
+  actual_energy_cost_sek: number;
+  baseline_cost_without_optimization_sek: number;
+  heartbeat_saving_sek: number;
+  emic_theoretical_optimal_cost_sek: number;
+  additional_optimization_potential_sek: number;
+  heartbeat_efficiency_pct: number | null;
+  imported_kwh: number;
+  exported_kwh: number;
+}
+
+export interface HeartbeatAuditPeriodSnapshot {
+  period_start: string;
+  period_end: string;
+  import_price_sek_kwh: number | null;
+  export_price_sek_kwh: number | null;
+  grid_import_w: number | null;
+  grid_export_w: number | null;
+  battery_soc_pct: number | null;
+  ev_power_w: number | null;
+  heartbeat_mode: string | null;
+  ai_decision: string | null;
+  heartbeat_reason: string | null;
+  emic_strategy_state: string | null;
+  emic_recommended_action: string | null;
+}
+
+export interface HeartbeatAuditDaily {
+  slug: string;
+  timezone: string;
+  day: string;
+  rollup: HeartbeatAuditRollup;
+  solar_self_consumed_kwh: number;
+  battery_self_consumed_kwh: number;
+  period_count: number;
+  periods: HeartbeatAuditPeriodSnapshot[];
+}
+
+export interface HeartbeatAuditMonthly {
+  slug: string;
+  timezone: string;
+  month: string;
+  rollup: HeartbeatAuditRollup;
+  days_with_data: number;
+  daily: HeartbeatAuditDaily[];
+}
+
+export interface ForecastMetricSummary {
+  kind: string;
+  mae: number | null;
+  bias: number | null;
+  sample_count: number;
+  mape_pct: number | null;
+}
+
+export interface ForecastSnapshot {
+  period_start: string;
+  period_end: string;
+  kind: string;
+  predicted_value: number;
+  actual_value: number | null;
+  forecast_recorded_at: string;
+  actual_recorded_at: string | null;
+  model_version: string | null;
+}
+
+export interface ForecastLearningSummary {
+  slug: string;
+  timezone: string;
+  days: number;
+  metrics: ForecastMetricSummary[];
+  last_reconciled_at: string | null;
+}
+
+export interface ForecastLearningRecent {
+  slug: string;
+  timezone: string;
+  kind: string | null;
+  snapshots: ForecastSnapshot[];
+}
+
+export interface EnergyControlAction {
+  id: number;
+  recorded_at: string;
+  optimization_mode: string;
+  action: string;
+  target: string;
+  outcome: string;
+  dry_run: boolean;
+  reason: string | null;
+}
+
+export interface EnergyControlStatus {
+  slug: string;
+  timezone: string;
+  optimization_mode: string;
+  control_enabled: boolean;
+  writes_allowed: boolean;
+  automatic_allowed: boolean;
+  provider: string;
+  last_action: EnergyControlAction | null;
+}
+
+export interface EnergyControlResult {
+  slug: string;
+  action: string;
+  target: string;
+  outcome: string;
+  dry_run: boolean;
+  reason: string;
+  reason_sv: string;
+  provider: string;
+}
+
+export interface EnergyControlRecent {
+  slug: string;
+  actions: EnergyControlAction[];
 }
 
 export interface SiteHeartbeatMapping {
@@ -797,6 +1037,181 @@ export async function fetchMarketPrices(
   return res.json();
 }
 
+export async function fetchHeartbeatAuditToday(slug: string): Promise<HeartbeatAuditDaily> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat-audit/today`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch heartbeat audit: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchHeartbeatAuditMonth(slug: string, month?: string): Promise<HeartbeatAuditMonthly> {
+  const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat-audit/month`);
+  if (month) url.searchParams.set("month", month);
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch heartbeat audit month: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchForecastLearningSummary(
+  slug: string,
+  days = 30,
+): Promise<ForecastLearningSummary> {
+  const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/forecast-learning/summary`);
+  url.searchParams.set("days", String(days));
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch forecast learning summary: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchForecastLearningRecent(
+  slug: string,
+  kind?: string,
+  days = 7,
+): Promise<ForecastLearningRecent> {
+  const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/forecast-learning/recent`);
+  url.searchParams.set("days", String(days));
+  if (kind) url.searchParams.set("kind", kind);
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch forecast learning recent: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchEnergyControlStatus(slug: string): Promise<EnergyControlStatus> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/status`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch energy control status: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateEnergyControlSettings(
+  slug: string,
+  payload: { optimization_mode?: string; control_enabled?: boolean },
+): Promise<EnergyControlStatus> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to update energy control settings: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function previewEnergyControlAction(
+  slug: string,
+  action: string,
+  target = "site",
+): Promise<EnergyControlResult> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, target }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to preview energy control action: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function applyEnergyControlAction(
+  slug: string,
+  action: string,
+  target = "site",
+): Promise<EnergyControlResult> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/apply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, target }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to apply energy control action: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchEnergyControlRecent(
+  slug: string,
+  limit = 20,
+): Promise<EnergyControlRecent> {
+  const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/recent`);
+  url.searchParams.set("limit", String(limit));
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch energy control recent: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchEnergyStrategyCurrent(slug: string): Promise<EnergyStrategyCurrent> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-strategy/current`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch energy strategy: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchBatteryOpportunity(slug: string): Promise<BatteryOpportunity> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/battery-opportunity`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch battery opportunity: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchHorizonOptimizer(slug: string): Promise<HorizonOptimizerPlan> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/horizon-optimizer`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to fetch horizon optimizer: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchPriceEngineToday(slug: string): Promise<{
+  slug: string;
+  timezone: string;
+  day: string;
+  periods: PricePeriodSnapshot[];
+}> {
+  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/price-engine/today`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch price engine today: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function fetchHeartbeatConfig(): Promise<HeartbeatConfig> {
   const res = await fetch(`${getApiBaseUrl()}/api/system/heartbeat-config`, {
     cache: "no-store",
@@ -806,7 +1221,7 @@ export async function fetchHeartbeatConfig(): Promise<HeartbeatConfig> {
 }
 
 export async function saveHeartbeatConfig(payload: HeartbeatConfigUpdate): Promise<HeartbeatConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/system/heartbeat-config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -814,6 +1229,31 @@ export async function saveHeartbeatConfig(payload: HeartbeatConfigUpdate): Promi
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(detail || `Failed to save heartbeat config: ${res.status}`);
+  }
+  return res.json();
+}
+
+export type AdminAuditEntry = {
+  id: number;
+  recorded_at: string;
+  http_method: string;
+  path: string;
+  action: string;
+  site_slug: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  outcome: string;
+  summary: Record<string, unknown> | null;
+};
+
+export type AdminAuditLog = {
+  entries: AdminAuditEntry[];
+};
+
+export async function fetchAdminAuditLog(limit = 50): Promise<AdminAuditLog> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/admin/audit-log?limit=${limit}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch admin audit log: ${res.status}`);
   }
   return res.json();
 }
@@ -838,7 +1278,7 @@ export async function createSite(payload: {
   fallback_purchase_price_sek_kwh?: number;
   export_compensation_sek_kwh?: number;
 }): Promise<Site> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -859,7 +1299,7 @@ export async function updateSite(
     safety_margin_a?: number;
   },
 ): Promise<Site> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -869,7 +1309,7 @@ export async function updateSite(
 }
 
 export async function deleteSite(slug: string): Promise<void> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}`, { method: "DELETE" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -911,7 +1351,7 @@ export async function createEvCharger(
     solar_stop_delay_seconds?: number;
   },
 ): Promise<EvCharger> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -925,7 +1365,7 @@ export async function updateEvCharger(
   chargerId: number,
   payload: Record<string, unknown>,
 ): Promise<EvCharger> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -935,14 +1375,14 @@ export async function updateEvCharger(
 }
 
 export async function deleteEvCharger(slug: string, chargerId: number): Promise<void> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(await res.text());
 }
 
 export async function syncEvChargers(slug: string): Promise<EvCharger[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/sync`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/sync`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -1007,7 +1447,7 @@ export async function testEvChargerConnectionDraft(
     connection_settings?: Record<string, unknown>;
   },
 ): Promise<ChargerConnectionTestResult> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/test-connection`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/test-connection`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1020,7 +1460,7 @@ export async function testEvChargerConnection(
   slug: string,
   chargerId: number,
 ): Promise<ChargerConnectionTestResult> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/test-connection`,
     { method: "POST" },
   );
@@ -1040,7 +1480,7 @@ export async function controlEvCharger(
     clear_deadline_at?: boolean;
   },
 ): Promise<EvCharger> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/control`,
     {
       method: "PATCH",
@@ -1059,7 +1499,7 @@ export async function setEvChargerOverride(
   chargerId: number,
   payload: { hours?: number; clear?: boolean },
 ): Promise<EvCharger> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/override`,
     {
       method: "POST",
@@ -1157,7 +1597,7 @@ export async function updateSiteEnergyConfig(
     ev_vehicle_label?: string;
   },
 ): Promise<SiteEnergyConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1690,7 +2130,7 @@ export async function fetchSpaConfig(slug: string): Promise<SpaConfig> {
 }
 
 export async function updateSpaConfig(slug: string, payload: Record<string, unknown>): Promise<SpaConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1700,7 +2140,7 @@ export async function updateSpaConfig(slug: string, payload: Record<string, unkn
 }
 
 export async function testSpaConnection(slug: string): Promise<SpaConnectionTest> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/test-connection`, { method: "POST" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/test-connection`, { method: "POST" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -1869,7 +2309,7 @@ export async function fetchSpaControlConfig(slug: string): Promise<SpaControlCon
 }
 
 export async function updateSpaControlConfig(slug: string, payload: Partial<SpaControlConfig>): Promise<SpaControlConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1909,7 +2349,7 @@ export async function fetchSpaShadow(slug: string): Promise<SpaShadow> {
 }
 
 export async function runSpaCleaningNow(slug: string): Promise<{ success: boolean; message: string; dry_run: boolean }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/cleaning/run-now`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/cleaning/run-now`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -2008,6 +2448,10 @@ export interface VehicleListItem {
   is_charging: boolean | null;
   charging_power_kw: number | null;
   last_vehicle_update: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+  charger_operator?: string | null;
   capabilities: VehicleCapabilities;
   halo_correlation: VehicleHaloCorrelation | null;
   state_of_charge?: VehicleValueEnvelope | null;
@@ -2099,6 +2543,8 @@ export interface VehicleChargeSession {
   estimated_energy_kwh?: number | null;
   charging_cost_sek?: number | null;
   cost_source?: string | null;
+  price_model?: string | null;
+  price_value_sek_kwh?: number | null;
   detection_confidence?: string | null;
   identification_method?: string | null;
   vehicle_data_quality?: string | null;
@@ -2188,7 +2634,7 @@ export async function fetchVehicles(slug: string): Promise<VehicleListResponse> 
 }
 
 export async function syncVehicles(slug: string): Promise<VehicleSyncResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/sync`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/sync`, {
     method: "POST",
     cache: "no-store",
   });
@@ -2212,7 +2658,7 @@ export async function updateVehicleIntegrationConfig(
   slug: string,
   payload: Record<string, unknown>,
 ): Promise<VehicleIntegrationConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -2222,7 +2668,7 @@ export async function updateVehicleIntegrationConfig(
 }
 
 export async function loginVehicleIntegration(slug: string): Promise<VehicleIntegrationLoginResult> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/login`, { method: "POST" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/login`, { method: "POST" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2312,7 +2758,7 @@ export async function runVehicleIntegrationAction(
   slug: string,
   action: string,
 ): Promise<VehicleIntegrationActionResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/actions/${action}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/actions/${action}`, {
     method: "POST",
     cache: "no-store",
   });
@@ -2360,7 +2806,7 @@ export async function patchVehicleChargeSession(
     >
   >,
 ): Promise<VehicleChargeSession> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/${sessionId}`,
     {
       method: "PATCH",
@@ -2440,7 +2886,7 @@ export async function sendVehicleSetTargetSoc(
   vehicleId: number,
   targetSocPercent: number,
 ): Promise<VehicleCommandResult> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/set-target-soc`,
     {
       method: "POST",
@@ -2453,7 +2899,7 @@ export async function sendVehicleSetTargetSoc(
 }
 
 export async function startVehicleCharging(slug: string, vehicleId: number): Promise<VehicleCommandResult> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/start-charging`,
     { method: "POST" },
   );
@@ -2462,7 +2908,7 @@ export async function startVehicleCharging(slug: string, vehicleId: number): Pro
 }
 
 export async function stopVehicleCharging(slug: string, vehicleId: number): Promise<VehicleCommandResult> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/commands/stop-charging`,
     { method: "POST" },
   );
@@ -2497,7 +2943,14 @@ export async function fetchSiteSnapshot(slug: string): Promise<SiteSnapshot> {
 
 export interface PerformanceCenterMetrics {
   request_count: number;
-  cache: { hits: number; misses: number; hit_rate_pct: number };
+  cache: {
+    hits: number;
+    misses: number;
+    hit_rate_pct: number;
+    backend?: string;
+    redis_configured?: boolean;
+    redis_available?: boolean;
+  };
   slowest_routes: Array<{ route: string; count: number; p50_ms: number; p95_ms: number }>;
   slowest_requests: Array<Record<string, unknown>>;
   slow_queries: Array<{ sql: string; duration_ms: number; route: string }>;
@@ -2509,6 +2962,36 @@ export interface PerformanceCenterMetrics {
     freshness: string;
     generated_at?: string | null;
   }>;
+  tasks?: {
+    lanes: Record<string, { count: number; p50_ms: number; p95_ms: number }>;
+    failures: number;
+    sample_size: number;
+  };
+}
+
+export interface IntegrationHealthProvider {
+  provider: string;
+  status: string;
+  last_success_at: string | null;
+  last_attempt_at: string | null;
+  latency_ms: number | null;
+  consecutive_failures: number;
+  stale_seconds: number | null;
+  circuit_breaker_state: string | null;
+  last_error_class: string | null;
+}
+
+export interface IntegrationHealthResponse {
+  slug: string;
+  providers: IntegrationHealthProvider[];
+}
+
+export async function fetchIntegrationHealth(slug: string): Promise<IntegrationHealthResponse> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/integration-health`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
 }
 
 export async function fetchPerformanceMetrics(): Promise<PerformanceCenterMetrics> {
@@ -2674,7 +3157,10 @@ export interface AppleDeviceCreateResult extends AppleDevice {
 }
 
 export async function fetchAppleDevices(): Promise<AppleDevice[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, { cache: "no-store" });
+  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, {
+    cache: "no-store",
+    headers: adminAuthHeaders(),
+  });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2687,7 +3173,7 @@ export async function createAppleDevice(payload: {
 }): Promise<AppleDeviceCreateResult> {
   const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -2695,7 +3181,10 @@ export async function createAppleDevice(payload: {
 }
 
 export async function revokeAppleDevice(deviceId: number): Promise<AppleDevice> {
-  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices/${deviceId}/revoke`, { method: "POST" });
+  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices/${deviceId}/revoke`, {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }

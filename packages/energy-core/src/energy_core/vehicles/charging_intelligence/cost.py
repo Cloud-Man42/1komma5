@@ -31,6 +31,7 @@ def resolve_session_cost(
     price_model: str | None,
     price_value: float | None,
     energy_kwh: float | None,
+    price_from_chargefinder: bool = False,
 ) -> SessionCostEstimate:
     if home_charging and actual_cost_sek is not None:
         return SessionCostEstimate(actual_cost_sek, CostSource.HOME_ENERGY_MODEL)
@@ -39,6 +40,11 @@ def resolve_session_cost(
     if price_model == "FIXED" and price_value is not None:
         return SessionCostEstimate(price_value, CostSource.CONFIGURED_FIXED)
     if price_model == "PER_KWH" and price_value is not None and energy_kwh is not None:
-        source = CostSource.OPERATOR if home_charging is False else CostSource.CONFIGURED_PER_KWH
+        if price_from_chargefinder:
+            source = CostSource.CHARGEFINDER
+        elif home_charging is False:
+            source = CostSource.OPERATOR
+        else:
+            source = CostSource.CONFIGURED_PER_KWH
         return SessionCostEstimate(round(energy_kwh * price_value, 2), source)
     return SessionCostEstimate(None, CostSource.UNKNOWN)

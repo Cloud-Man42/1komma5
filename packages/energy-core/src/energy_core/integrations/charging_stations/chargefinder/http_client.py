@@ -34,6 +34,19 @@ class IChargeFinderLookupClient(Protocol):
         radius_m: int,
     ) -> tuple[list[dict[str, Any]], int, int | None]: ...
 
+    async def fetch_station(
+        self,
+        *,
+        slug: str,
+    ) -> tuple[dict[str, Any] | None, int, int | None]: ...
+
+
+    async def fetch_status(
+        self,
+        *,
+        realtime_id: str,
+    ) -> tuple[list[dict[str, Any]], int, int | None]: ...
+
 
 class ChargeFinderHttpLookupClient:
     def __init__(
@@ -117,6 +130,104 @@ class ChargeFinderHttpLookupClient:
                 latency_ms,
                 exc,
             )
+            if isinstance(exc, ChargeFinderMalformedResponseError):
+                raise
+            raise ChargeFinderMalformedResponseError(str(exc)) from exc
+
+    async def fetch_station(
+        self,
+        *,
+        slug: str,
+    ) -> tuple[dict[str, Any] | None, int, int | None]:
+        if self._circuit.is_open():
+            raise ChargeFinderBlockedError("ChargeFinder circuit breaker open")
+
+        started = time.perf_counter()
+        status_code: int | None = None
+        try:
+            url = f"{API_BASE}/station/{slug}"
+            headers = {
+                "origin": "https://chargefinder.com",
+                "referer": "https://chargefinder.com/",
+                "accept": "application/json",
+            }
+            async with httpx.AsyncClient(timeout=self._timeout_seconds, follow_redirects=True) as client:
+                response = await client.get(url, headers=headers)
+                status_code = response.status_code
+                if response.status_code in {403, 429}:
+                    self._circuit.record_http_block(
+                        status_code=response.status_code,
+                        cooldown_seconds=self._cooldown_seconds,
+                    )
+                    raise ChargeFinderBlockedError(f"ChargeFinder HTTP {response.status_code}")
+                response.raise_for_status()
+                body = response.json()
+                if _looks_like_captcha(body):
+                    self._circuit.record_captcha_detected(cooldown_seconds=self._cooldown_seconds)
+                    raise ChargeFinderCaptchaError("ChargeFinder CAPTCHA/challenge detected")
+                if is_encrypted(body):
+                    key_hex = extract_aes_key_hex(timeout_seconds=self._timeout_seconds)
+                    body = decrypt_response(key_hex.encode("ascii"), body)
+                if not isinstance(body, dict):
+                    raise ChargeFinderMalformedResponseError("Expected station object")
+                self._circuit.record_success()
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                return body, latency_ms, status_code
+        except httpx.TimeoutException as exc:
+            raise ChargeFinderTimeoutError(str(exc)) from exc
+        except (ChargeFinderBlockedError, ChargeFinderCaptchaError):
+            raise
+        except Exception as exc:
+            self._circuit.record_parser_failure(max_failures=3, cooldown_seconds=self._cooldown_seconds)
+            if isinstance(exc, ChargeFinderMalformedResponseError):
+                raise
+            raise ChargeFinderMalformedResponseError(str(exc)) from exc
+
+    async def fetch_status(
+        self,
+        *,
+        realtime_id: str,
+    ) -> tuple[list[dict[str, Any]], int, int | None]:
+        if self._circuit.is_open():
+            raise ChargeFinderBlockedError("ChargeFinder circuit breaker open")
+
+        started = time.perf_counter()
+        status_code: int | None = None
+        try:
+            url = f"{API_BASE}/status/{realtime_id}"
+            headers = {
+                "origin": "https://chargefinder.com",
+                "referer": "https://chargefinder.com/",
+                "accept": "application/json",
+            }
+            async with httpx.AsyncClient(timeout=self._timeout_seconds, follow_redirects=True) as client:
+                response = await client.get(url, headers=headers)
+                status_code = response.status_code
+                if response.status_code in {403, 429}:
+                    self._circuit.record_http_block(
+                        status_code=response.status_code,
+                        cooldown_seconds=self._cooldown_seconds,
+                    )
+                    raise ChargeFinderBlockedError(f"ChargeFinder HTTP {response.status_code}")
+                response.raise_for_status()
+                body = response.json()
+                if _looks_like_captcha(body):
+                    self._circuit.record_captcha_detected(cooldown_seconds=self._cooldown_seconds)
+                    raise ChargeFinderCaptchaError("ChargeFinder CAPTCHA/challenge detected")
+                if is_encrypted(body):
+                    key_hex = extract_aes_key_hex(timeout_seconds=self._timeout_seconds)
+                    body = decrypt_response(key_hex.encode("ascii"), body)
+                if not isinstance(body, list):
+                    raise ChargeFinderMalformedResponseError("Expected status list")
+                self._circuit.record_success()
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                return body, latency_ms, status_code
+        except httpx.TimeoutException as exc:
+            raise ChargeFinderTimeoutError(str(exc)) from exc
+        except (ChargeFinderBlockedError, ChargeFinderCaptchaError):
+            raise
+        except Exception as exc:
+            self._circuit.record_parser_failure(max_failures=3, cooldown_seconds=self._cooldown_seconds)
             if isinstance(exc, ChargeFinderMalformedResponseError):
                 raise
             raise ChargeFinderMalformedResponseError(str(exc)) from exc

@@ -7,6 +7,11 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from energy_core.charging.config import ChargingConfig
+from energy_core.charging.import_price_schedule import (
+    has_import_prices,
+    import_price_allows_immediate_grid_charge,
+    should_charge_import_price,
+)
 from energy_core.charging.models import ChargingDecision
 from energy_core.charging.policy import (
     PRICE_MODES,
@@ -22,6 +27,7 @@ from energy_core.charging.smart_schedule import (
     should_charge_smart,
 )
 from energy_core.energy.state import EnergyState
+from energy_core.price_engine.periods import align_period_start
 from energy_core.solar_forecast.types import SolarChargingPlan
 
 
@@ -45,7 +51,7 @@ DEADLINE_RISK_URGENCY = 0.8
 # Above this urgency, deferring grid charging for forecast solar is too risky.
 SOLAR_DEFER_MAX_URGENCY = 0.5
 PRICE_CHARGE_REASONS = frozenset(
-    {"cheap_now", "smart_scheduled", "normal_price_ok", "smart_urgency_balanced"}
+    {"cheap_now", "smart_scheduled", "smart_green_price", "normal_price_ok", "smart_urgency_balanced"}
 )
 
 
@@ -114,7 +120,7 @@ class EvChargingOptimizer:
                 state, config, now=now, mode=mode, solar_plan=solar_plan
             )
 
-        if state.ev_charge_from_grid_recommended:
+        if state.ev_charge_from_grid_recommended and not _state_has_import_prices(state):
             return OptimizerTarget(_max_current(config), "cheap_grid_charge")
 
         return OptimizerTarget(0.0, "no_signal")
@@ -175,6 +181,18 @@ class EvChargingOptimizer:
         if _battery_blocks_ev(state, config):
             return OptimizerTarget(0.0, "battery_priority")
 
+        if _state_has_import_prices(state):
+            charge, reason = should_charge_import_price(
+                now,
+                current_period_start=align_period_start(now),
+                current_import_sek_kwh=state.import_price_sek_kwh,
+                import_forecast=state.import_price_forecast,
+                charge_hours=config.smart_charge_hours,
+            )
+            if charge:
+                return OptimizerTarget(_max_current(config), reason)
+            return OptimizerTarget(0.0, reason)
+
         charge, reason = should_charge_by_price(
             now,
             price_forecast=state.price_forecast,
@@ -232,6 +250,25 @@ class EvChargingOptimizer:
             now=now,
         ):
             return OptimizerTarget(0.0, "solar_forecast_wait")
+
+        if _state_has_import_prices(state):
+            charge, reason = should_charge_import_price(
+                now,
+                current_period_start=align_period_start(now),
+                current_import_sek_kwh=state.import_price_sek_kwh,
+                import_forecast=state.import_price_forecast,
+                charge_hours=config.smart_charge_hours,
+                urgency=urgency,
+            )
+            grid_needed = solar_plan is not None and not solar_plan.solar_first
+            if charge:
+                if grid_needed and reason.startswith("import_"):
+                    return OptimizerTarget(_max_current(config), "solar_forecast_partial_grid")
+                return OptimizerTarget(_max_current(config), reason)
+            if urgency < DEADLINE_RISK_URGENCY:
+                if grid_needed:
+                    return OptimizerTarget(0.0, "solar_forecast_wait_cheaper")
+                return OptimizerTarget(0.0, reason)
 
         schedule_mode = resolve_schedule_mode(
             departure_time=config.departure_time or state.departure_time,
@@ -361,11 +398,25 @@ def _should_wait_for_solar_forecast(
         return False
     if urgency >= SOLAR_DEFER_MAX_URGENCY:
         return False
+    if _state_has_import_prices(state):
+        return not import_price_allows_immediate_grid_charge(
+            current_import_sek_kwh=state.import_price_sek_kwh,
+            import_forecast=state.import_price_forecast,
+            now=now,
+            charge_hours=config.smart_charge_hours,
+        )
     return not price_allows_immediate_grid_charge(
         state.electricity_price_eur_kwh,
         state.price_forecast,
         expensive_threshold=config.expensive_price_eur_kwh,
         now=now,
+    )
+
+
+def _state_has_import_prices(state: EnergyState) -> bool:
+    return has_import_prices(
+        current_import_sek_kwh=state.import_price_sek_kwh,
+        import_forecast=state.import_price_forecast,
     )
 
 

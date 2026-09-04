@@ -152,6 +152,8 @@ async def chargefinder_test_lookup(
                 "charging_type": c.charging_type,
                 "max_power_kw": c.max_power_kw,
                 "connector_type": c.connector_type,
+                "price_model": c.price_model,
+                "price_value_sek_kwh": c.price_value_sek_kwh,
                 "external_url": c.external_url,
             }
             for c in candidates
@@ -186,6 +188,8 @@ async def chargefinder_raw_lookup(
                 "charging_type": c.charging_type,
                 "max_power_kw": c.max_power_kw,
                 "connector_type": c.connector_type,
+                "price_model": c.price_model,
+                "price_value_sek_kwh": c.price_value_sek_kwh,
                 "external_url": c.external_url,
                 "raw_provider_data": c.raw_provider_data,
             }

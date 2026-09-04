@@ -62,7 +62,9 @@ describe("ChargerSetupWizard", () => {
   it("loads models after manufacturer selection", async () => {
     const user = userEvent.setup();
     render(<ChargerSetupWizard siteSlug="akarp" onClose={() => {}} onSaved={() => {}} />);
-    await user.selectOptions(await screen.findByRole("combobox", { name: /tillverkare/i }), "charge-amps");
+    const manufacturerSelect = await screen.findByRole("combobox", { name: /tillverkare/i });
+    await waitFor(() => expect(manufacturerSelect).not.toBeDisabled());
+    await user.selectOptions(manufacturerSelect, "charge-amps");
     await waitFor(() => {
       expect(screen.getByText(/Halo \(Full\)/i)).toBeInTheDocument();
     });

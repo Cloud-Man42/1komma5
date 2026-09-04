@@ -4,18 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.deps import get_db_session
 from app.widget_auth import WIDGET_METRICS
 from energy_core.auth.device_tokens import generate_device_token
 from energy_core.db.apple_device_repo import AppleDeviceRepository
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/apple-devices", tags=["apple-devices"])
 
-# Full-screen dashboards read the display API; phones get the smaller widget feed.
-DISPLAY_DEVICE_TYPES = frozenset({"raspberry_pi", "tablet"})
+# Full-screen dashboards read the display API; iPhone widgets keep widget.read.
+DISPLAY_DEVICE_TYPES = frozenset({"raspberry_pi", "tablet", "phone"})
 
 
 class AppleDeviceCreateRequest(BaseModel):
@@ -73,6 +75,7 @@ def _to_response(record, *, token: str | None = None) -> AppleDeviceResponse | A
 @router.get("", response_model=list[AppleDeviceResponse])
 async def list_apple_devices(
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> list[AppleDeviceResponse]:
     repo = AppleDeviceRepository(session)
     records = await repo.list_all()
@@ -82,7 +85,9 @@ async def list_apple_devices(
 @router.post("", response_model=AppleDeviceCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_apple_device(
     payload: AppleDeviceCreateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> AppleDeviceCreateResponse:
     repo = AppleDeviceRepository(session)
     generated = generate_device_token()
@@ -99,6 +104,18 @@ async def create_apple_device(
         scopes=scopes,
         default_site_slug=payload.default_site_slug,
     )
+    await audit_admin_mutation(
+        request,
+        session,
+        action="apple_device.create",
+        resource_type="apple_device",
+        resource_id=str(record.id),
+        summary={
+            "owner_label": payload.owner_label,
+            "device_name": payload.device_name,
+            "device_type": payload.device_type,
+        },
+    )
     await session.commit()
     return _to_response(record, token=token)
 
@@ -106,6 +123,7 @@ async def create_apple_device(
 @router.get("/metrics", response_model=AppleDeviceMetricsResponse)
 async def apple_device_metrics(
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> AppleDeviceMetricsResponse:
     active = await AppleDeviceRepository(session).count_active()
     return AppleDeviceMetricsResponse(metrics=WIDGET_METRICS.to_dict(active))
@@ -114,12 +132,22 @@ async def apple_device_metrics(
 @router.post("/{device_id}/revoke", response_model=AppleDeviceResponse)
 async def revoke_apple_device(
     device_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> AppleDeviceResponse:
     repo = AppleDeviceRepository(session)
     record = await repo.revoke(device_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    await audit_admin_mutation(
+        request,
+        session,
+        action="apple_device.revoke",
+        resource_type="apple_device",
+        resource_id=str(device_id),
+        summary={"device_name": record.device_name},
+    )
     await session.commit()
     return _to_response(record)
 
@@ -128,11 +156,21 @@ async def revoke_apple_device(
 async def rename_apple_device(
     device_id: int,
     payload: AppleDeviceRenameRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> AppleDeviceResponse:
     repo = AppleDeviceRepository(session)
     record = await repo.rename(device_id, device_name=payload.device_name.strip())
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    await audit_admin_mutation(
+        request,
+        session,
+        action="apple_device.rename",
+        resource_type="apple_device",
+        resource_id=str(device_id),
+        summary={"device_name": payload.device_name.strip()},
+    )
     await session.commit()
     return _to_response(record)

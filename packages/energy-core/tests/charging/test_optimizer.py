@@ -455,3 +455,91 @@ def test_little_expected_solar_tops_up_from_grid():
     assert target.target_current_a > 0
     assert target.reason == "solar_forecast_partial_grid"
 
+
+def _import_forecast(now: datetime, prices: list[float]):
+    from energy_core.price_engine.periods import align_period_start
+
+    return tuple(
+        (align_period_start(now + timedelta(minutes=15 * i)), price)
+        for i, price in enumerate(prices)
+    )
+
+
+def test_smart_waits_on_expensive_import_price():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    forecast = _import_forecast(now, [2.0, 2.1, 0.4, 0.45, 0.42, 0.43, 1.8, 1.9])
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            import_price_sek_kwh=2.0,
+            import_price_forecast=forecast,
+            electricity_price_eur_kwh=0.05,
+            price_forecast=((now, 0.05),),
+            ev_charge_from_grid_recommended=True,
+        ),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.requested_current_a == 0
+    assert decision.reason == "import_wait_cheaper"
+
+
+def test_smart_charges_in_cheap_import_window():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 30, tzinfo=UTC)
+    forecast = _import_forecast(now - timedelta(minutes=30), [2.0, 2.1, 0.4, 0.45, 0.42, 0.43, 1.8, 1.9])
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            import_price_sek_kwh=0.4,
+            import_price_forecast=forecast,
+            electricity_price_eur_kwh=0.99,
+        ),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.requested_current_a > 0
+    assert decision.reason in {"import_cheap_window", "import_cheap_now"}
+
+
+def test_smart_prefers_solar_over_import_grid():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    forecast = _import_forecast(now, [2.0, 2.1, 0.4, 0.45, 0.42, 0.43, 1.8, 1.9])
+    decision = optimizer.optimize(
+        _state(
+            timestamp=now,
+            grid_export_w=5000,
+            import_price_sek_kwh=2.0,
+            import_price_forecast=forecast,
+            electricity_price_eur_kwh=0.99,
+        ),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert decision.requested_current_a > 0
+    assert decision.reason == "smart_solar_surplus"
+
+
+def test_heartbeat_grid_recommendation_ignored_when_import_prices_available():
+    optimizer = EvChargingOptimizer()
+    now = datetime(2026, 8, 14, 12, 0, tzinfo=UTC)
+    forecast = _import_forecast(now, [2.0, 2.1, 0.4, 0.45, 0.42, 0.43, 1.8, 1.9])
+    target = optimizer.optimize_target(
+        _state(
+            timestamp=now,
+            import_price_sek_kwh=2.0,
+            import_price_forecast=forecast,
+            ev_charge_from_grid_recommended=True,
+        ),
+        config=_config(),
+        charging_mode="SMART_CHARGE",
+        now=now,
+    )
+    assert target.target_current_a == 0.0
+    assert target.reason == "import_wait_cheaper"
+

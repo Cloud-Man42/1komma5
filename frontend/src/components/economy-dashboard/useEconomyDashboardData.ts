@@ -90,9 +90,16 @@ export function useEconomyDashboardData(
     }
   }, [currentYear, shared?.dashboard, siteSlug]);
 
+  const refreshSeconds = 60;
+
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    const id = setInterval(reload, refreshSeconds * 1000);
+    return () => clearInterval(id);
+  }, [reload, refreshSeconds]);
 
   const allStats = dailyStats?.stats ?? [];
   const periodRange = useMemo(() => resolvePeriodRange(period, now), [period, now]);
@@ -251,6 +258,6 @@ export function useEconomyDashboardData(
     forecastDeltaPct,
     investmentSek,
     ytdReturnPct: metrics.ytdReturnPct,
-    refreshSeconds: 60,
+    refreshSeconds,
   };
 }

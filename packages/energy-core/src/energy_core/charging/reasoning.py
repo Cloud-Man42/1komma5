@@ -365,6 +365,7 @@ def _price_charge_step(reason: str) -> str:
         "cheap_now": "Prisregel: billigt elpris — laddar från nätet.",
         "normal_price_ok": "Vardagsläge: normalt pris — laddar utan att vänta på dyraste timmarna.",
         "smart_scheduled": "Prisregel: nuvarande timme är bland de billigaste — laddar.",
+        "smart_green_price": "Prisregel: grönt elpris (billigt) — laddar från nätet.",
         "smart_urgency_balanced": "Deadline närmar sig — laddar vid normalt pris.",
         "deadline_risk": "Deadline närmar sig — laddar för att hinna klart.",
     }

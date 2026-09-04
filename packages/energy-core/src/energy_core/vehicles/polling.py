@@ -12,6 +12,7 @@ from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 class VehicleActivityMode(StrEnum):
     DRIVING = "DRIVING"
     CHARGING = "CHARGING"
+    PLUGGED = "PLUGGED"
     POSITION_RECOVERY = "POSITION_RECOVERY"
     RECENTLY_PARKED = "RECENTLY_PARKED"
     STALE_RECOVERY = "STALE_RECOVERY"
@@ -30,14 +31,15 @@ class AdaptivePollingPlanner:
     """Choose REST polling interval based on vehicle/integration activity."""
 
     INTERVALS = {
-        VehicleActivityMode.DRIVING: (30, 60),
-        VehicleActivityMode.CHARGING: (30, 60),
-        VehicleActivityMode.POSITION_RECOVERY: (30, 30),
-        VehicleActivityMode.RECENTLY_PARKED: (120, 120),
-        VehicleActivityMode.STALE_RECOVERY: (60, 120),
+        VehicleActivityMode.DRIVING: (60, 120),
+        VehicleActivityMode.CHARGING: (90, 120),
+        VehicleActivityMode.PLUGGED: (180, 300),
+        VehicleActivityMode.POSITION_RECOVERY: (60, 90),
+        VehicleActivityMode.RECENTLY_PARKED: (180, 180),
+        VehicleActivityMode.STALE_RECOVERY: (180, 300),
         VehicleActivityMode.SLEEPING: (600, 900),
         VehicleActivityMode.NIGHT_INACTIVE: (900, 1800),
-        VehicleActivityMode.DEFAULT: (300, 300),
+        VehicleActivityMode.DEFAULT: (300, 600),
     }
 
     def decide(
@@ -49,6 +51,7 @@ class AdaptivePollingPlanner:
         vehicle_data_age_seconds: float | None = None,
         soc_updated_at: datetime | None = None,
         charging_power_kw: float | None = None,
+        charging_updated_at: datetime | None = None,
         missing_gps: bool = False,
         away_from_home: bool = False,
         now: datetime | None = None,
@@ -58,6 +61,8 @@ class AdaptivePollingPlanner:
             is_charging=is_charging,
             is_plugged_in=is_plugged_in,
             charging_power_kw=charging_power_kw,
+            charging_updated_at=charging_updated_at,
+            now=current,
         )
         age = vehicle_data_age_seconds
         if age is None and last_vehicle_update is not None:
@@ -74,8 +79,10 @@ class AdaptivePollingPlanner:
                 self.INTERVALS[VehicleActivityMode.POSITION_RECOVERY][0],
             )
 
-        if is_charging is True or is_plugged_in is True:
+        if is_charging is True:
             return PollingDecision(VehicleActivityMode.CHARGING, self._pick(self.INTERVALS[VehicleActivityMode.CHARGING]))
+        if is_plugged_in is True:
+            return PollingDecision(VehicleActivityMode.PLUGGED, self._pick(self.INTERVALS[VehicleActivityMode.PLUGGED]))
 
         if age is not None and age <= 180:
             return PollingDecision(VehicleActivityMode.RECENTLY_PARKED, self.INTERVALS[VehicleActivityMode.RECENTLY_PARKED][0])
@@ -107,9 +114,17 @@ def _infer_charging_signals(
     is_charging: bool | None,
     is_plugged_in: bool | None,
     charging_power_kw: float | None,
+    charging_updated_at: datetime | None = None,
+    now: datetime | None = None,
 ) -> tuple[bool | None, bool | None]:
-    """Keep charging mode when Mercedes drops plug flags but power is still flowing."""
-    if is_charging is None and charging_power_kw is not None and charging_power_kw >= 0.3:
+    """Infer charging only from fresh positive kW; avoid aggressive polling on stale power."""
+    current = now or datetime.now(UTC)
+    ch_age: float | None = None
+    if charging_updated_at is not None:
+        ts = charging_updated_at if charging_updated_at.tzinfo else charging_updated_at.replace(tzinfo=UTC)
+        ch_age = max(0.0, (current - ts).total_seconds())
+    power_fresh = ch_age is not None and ch_age <= STALE_TELEMETRY_SECONDS
+    if is_charging is None and power_fresh and charging_power_kw is not None and charging_power_kw >= 0.3:
         is_charging = True
     if is_plugged_in is None and is_charging is True:
         is_plugged_in = True

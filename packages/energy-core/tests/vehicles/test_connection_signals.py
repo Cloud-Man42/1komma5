@@ -36,12 +36,12 @@ def test_explicit_plugged_stays_plugged_during_pause():
     )
 
 
-def test_halo_disconnected_closes_effective_connection():
+def test_halo_disconnected_keeps_explicit_mercedes_plugged():
     effective = resolve_effective_connection(
         _latest(is_plugged_in=True, is_charging=False, charging_power_kw=0.0),
         halo_vehicle_connected=False,
     )
-    assert effective.is_plugged_in is False
+    assert effective.is_plugged_in is True
     assert effective.is_charging is False
 
 
@@ -53,11 +53,27 @@ def test_correlation_mismatch_closes_effective_connection():
     assert effective.is_plugged_in is False
 
 
-def test_stale_plugged_flag_healed_when_idle_without_halo():
+def test_stale_power_does_not_clear_explicit_plug():
     effective = resolve_effective_connection(
         _latest(is_plugged_in=True, is_charging=False, charging_power_kw=10.9),
     )
-    assert effective.is_plugged_in is False
+    assert effective.is_plugged_in is True
+    assert effective.is_charging is False
+
+
+def test_stale_charging_telemetry_assumes_charging_when_plugged():
+    from datetime import UTC, datetime, timedelta
+
+    effective = resolve_effective_connection(
+        _latest(
+            is_plugged_in=True,
+            is_charging=False,
+            charging_power_kw=10.9,
+            charging_updated_at=datetime.now(UTC) - timedelta(hours=6),
+        ),
+    )
+    assert effective.is_plugged_in is True
+    assert effective.is_charging is True
 
 
 def test_charge_break_keeps_plugged_without_power():

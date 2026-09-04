@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -22,18 +23,21 @@ from app.schemas import (
     DashboardTodaySection,
     DashboardVehicleSection,
 )
+from energy_core.price_engine.peak_protection import assess_peak_protection
 from energy_core.charging.engine import bridge_status_from_charger
 from energy_core.energy.integration import integrate_site_energy
 from energy_core.charging.reasoning import build_energy_reasoning
 from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.config import Settings
+from energy_core.cache.service import get_cache_service, site_dashboard_cache_key
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
-from energy_core.db.models import EnergyReadingModel
+from energy_core.db.models import EnergyDailyModel, EnergyReadingModel, FinancialDailyModel
 from energy_core.db.repositories import EnergyReadingRepository, MarketPriceRepository, SiteRepository
 from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
 from energy_core.energy.state import EnergyState
+from energy_core.performance.context import get_performance_context
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,6 +89,56 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
     zone = ZoneInfo(site.timezone)
     now_local = datetime.now(zone)
     start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_local = start_local.date()
+    yesterday_local = today_local - timedelta(days=1)
+
+    if settings.financial_aggregates_enabled:
+        rows = (
+            await session.execute(
+                select(EnergyDailyModel).where(
+                    EnergyDailyModel.site_id == site.id,
+                    EnergyDailyModel.day.in_([today_local, yesterday_local]),
+                )
+            )
+        ).scalars().all()
+        by_day = {row.day: row for row in rows}
+        today_row = by_day.get(today_local)
+        yesterday_row = by_day.get(yesterday_local)
+        if today_row is not None:
+            fin_today = await session.scalar(
+                select(FinancialDailyModel).where(
+                    FinancialDailyModel.site_id == site.id,
+                    FinancialDailyModel.day == today_local,
+                )
+            )
+            energy_cost = None
+            savings = None
+            if fin_today is not None:
+                energy_cost = round(fin_today.grid_import_cost_sek - fin_today.energy_sale_sek, 2)
+                savings = round(fin_today.solar_savings_sek + fin_today.battery_savings_sek, 2)
+            yesterday_cost = None
+            if yesterday_row is not None and yesterday_row.import_cost_sek is not None:
+                yesterday_cost = round(
+                    float(yesterday_row.import_cost_sek) - float(yesterday_row.export_revenue_sek or 0.0),
+                    2,
+                )
+            section = DashboardTodaySection(
+                produced_kwh=round(float(today_row.solar_kwh), 1),
+                consumed_kwh=round(float(today_row.consumption_kwh), 1),
+                imported_kwh=round(float(today_row.import_kwh), 1),
+                exported_kwh=round(float(today_row.export_kwh), 1),
+                energy_cost_sek=energy_cost,
+                savings_sek=savings,
+                produced_kwh_yesterday=round(float(yesterday_row.solar_kwh), 1) if yesterday_row else None,
+                consumed_kwh_yesterday=round(float(yesterday_row.consumption_kwh), 1) if yesterday_row else None,
+                imported_kwh_yesterday=round(float(yesterday_row.import_kwh), 1) if yesterday_row else None,
+                exported_kwh_yesterday=round(float(yesterday_row.export_kwh), 1) if yesterday_row else None,
+                energy_cost_sek_yesterday=yesterday_cost,
+                savings_sek_yesterday=None,
+            )
+            _cache_set(site.slug, "today", section)
+            return section
+
     start_utc = start_local.astimezone(UTC)
     now_utc = now_local.astimezone(UTC)
 
@@ -135,6 +189,22 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
         energy_cost = round(stat.grid_import_cost_sek - stat.export_revenue_sek, 2)
         savings = round(stat.solar_savings_sek + stat.battery_savings_sek, 2)
 
+    yesterday_local = (start_local - timedelta(days=1)).date()
+    yesterday_row = await session.scalar(
+        select(EnergyDailyModel).where(
+            EnergyDailyModel.site_id == site.id,
+            EnergyDailyModel.day == yesterday_local,
+        )
+    )
+    yesterday_cost = None
+    yesterday_savings = None
+    if yesterday_row is not None and yesterday_row.import_cost_sek is not None:
+        yesterday_cost = round(
+            float(yesterday_row.import_cost_sek) - float(yesterday_row.export_revenue_sek or 0.0),
+            2,
+        )
+        yesterday_savings = None
+
     section = DashboardTodaySection(
         produced_kwh=round(produced, 1),
         consumed_kwh=round(consumed, 1),
@@ -142,6 +212,12 @@ async def _compute_today(session: AsyncSession, site, settings: Settings) -> Das
         exported_kwh=round(exported, 1),
         energy_cost_sek=energy_cost,
         savings_sek=savings,
+        produced_kwh_yesterday=round(float(yesterday_row.solar_kwh), 1) if yesterday_row else None,
+        consumed_kwh_yesterday=round(float(yesterday_row.consumption_kwh), 1) if yesterday_row else None,
+        imported_kwh_yesterday=round(float(yesterday_row.import_kwh), 1) if yesterday_row else None,
+        exported_kwh_yesterday=round(float(yesterday_row.export_kwh), 1) if yesterday_row else None,
+        energy_cost_sek_yesterday=yesterday_cost,
+        savings_sek_yesterday=yesterday_savings,
     )
     _cache_set(site.slug, "today", section)
     return section
@@ -423,6 +499,9 @@ def _build_alerts(
     freshness: DashboardFreshnessSection,
     ev: DashboardEvSection | None,
     live: DashboardLiveSection | None,
+    *,
+    main_fuse_a: float | None = None,
+    safety_margin_a: float = 2.0,
 ) -> list[DashboardAlert]:
     alerts: list[DashboardAlert] = []
     if freshness.stale:
@@ -441,6 +520,16 @@ def _build_alerts(
         )
     if ev and ev.available and ev.display_status_sv and "fel" in ev.display_status_sv.lower():
         alerts.append(DashboardAlert(severity="danger", message_sv=ev.display_status_sv))
+
+    if live is not None:
+        peak_hint = assess_peak_protection(
+            main_fuse_a=main_fuse_a,
+            safety_margin_a=safety_margin_a,
+            grid_import_w=live.grid_import_w,
+        )
+        if peak_hint is not None:
+            alerts.append(DashboardAlert(severity="warning", message_sv=peak_hint.reason_sv))
+
     return alerts
 
 
@@ -454,6 +543,30 @@ async def get_site_dashboard(
     if site is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
+    cache = get_cache_service(settings)
+    cache_key = site_dashboard_cache_key(site.id)
+    ttl_seconds = settings.dashboard_redis_cache_ttl_seconds
+
+    async def factory() -> dict[str, Any]:
+        response = await _build_dashboard_response(session, site, settings)
+        return response.model_dump(mode="json")
+
+    ctx = get_performance_context()
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        if ctx is not None:
+            ctx.cache_hit = True
+        return DashboardResponse.model_validate(cached)
+
+    payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
+    return DashboardResponse.model_validate(payload)
+
+
+async def _build_dashboard_response(
+    session: AsyncSession,
+    site,
+    settings: Settings,
+) -> DashboardResponse:
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
     latest = await reading_repo.get_latest_for_site(site.id)
 
@@ -480,27 +593,35 @@ async def get_site_dashboard(
             ev_power_w=None,
         )
 
-    ev_section = await _compute_ev(session, site, settings)
-    vehicle_section = await _compute_vehicle(session, site)
+    ev_section, vehicle_section, today_section, solar_section, price_section = await asyncio.gather(
+        _compute_ev(session, site, settings),
+        _compute_vehicle(session, site),
+        _compute_today(session, site, settings),
+        _compute_solar(session, site),
+        _compute_price(session, site, settings),
+    )
     if live is not None and ev_section.power_w is not None:
         live = live.model_copy(update={"ev_power_w": ev_section.power_w})
 
-    today_section = await _compute_today(session, site, settings)
-    solar_section = await _compute_solar(session, site)
-    price_section = await _compute_price(session, site, settings)
     optimization_section = await _compute_optimization(session, site, settings, live)
 
     from energy_core.db.consumer_repo import ConsumerRepository
-
-    spa_row = await ConsumerRepository(session).get_spa_by_site_slug(slug)
-    spa_enabled = bool(spa_row and spa_row[1].integration_enabled)
-
     from energy_core.db.vehicle_repo import VehicleProviderRepository
 
-    vehicle_row = await VehicleProviderRepository(session).get_for_site(site.id)
+    spa_row, vehicle_row = await asyncio.gather(
+        ConsumerRepository(session).get_spa_by_site_slug(site.slug),
+        VehicleProviderRepository(session).get_for_site(site.id),
+    )
+    spa_enabled = bool(spa_row and spa_row[1].integration_enabled)
     vehicle_enabled = bool(vehicle_row and vehicle_row.enabled)
 
-    alerts = _build_alerts(freshness, ev_section, live)
+    alerts = _build_alerts(
+        freshness,
+        ev_section,
+        live,
+        main_fuse_a=site.main_fuse_a,
+        safety_margin_a=site.safety_margin_a or 2.0,
+    )
 
     return DashboardResponse(
         site=DashboardSiteSection(slug=site.slug, name=site.name, timezone=site.timezone),

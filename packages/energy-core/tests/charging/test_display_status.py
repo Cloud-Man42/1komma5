@@ -19,5 +19,23 @@ def test_reason_label_quick_charge():
     assert display_status_sv(state=None, reason="quick_charge", externally_limited=False) == "Snabbladdning"
 
 
+def test_smart_green_price_label():
+    assert display_status_sv(state=None, reason="smart_green_price", externally_limited=False) == (
+        "Laddar smart — billigt elpris"
+    )
+
+
+def test_import_cheap_window_label():
+    assert display_status_sv(state=None, reason="import_cheap_window", externally_limited=False) == (
+        "Laddar smart — billigt importpris"
+    )
+
+
+def test_import_wait_cheaper_label():
+    assert display_status_sv(state=None, reason="import_wait_cheaper", externally_limited=False) == (
+        "Väntar på billigare importpris"
+    )
+
+
 def test_state_label_reducing():
     assert display_status_sv(state=SmartChargingState.REDUCING, reason=None, externally_limited=False) == "Minskar laddström"

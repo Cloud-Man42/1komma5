@@ -293,7 +293,7 @@ async def test_a_real_reading_still_overwrites_an_older_one(stored_vehicle):
 
 
 @pytest.mark.asyncio
-async def test_soc_updated_at_only_changes_when_soc_changes(stored_vehicle):
+async def test_soc_updated_at_refreshes_on_fresh_telemetry(stored_vehicle):
     session_factory, vehicle_id = stored_vehicle
     first_at = datetime.now(UTC) - timedelta(minutes=10)
     async with session_factory() as session:
@@ -317,7 +317,7 @@ async def test_soc_updated_at_only_changes_when_soc_changes(stored_vehicle):
     async with session_factory() as session:
         latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
         assert latest is not None
-        assert latest.soc_updated_at == original_soc_ts
+        assert latest.soc_updated_at > original_soc_ts
 
     async with session_factory() as session:
         repo = VehicleRepository(session, is_sqlite=True)
@@ -390,6 +390,60 @@ async def test_not_charging_signal_clears_stale_plugged_state(stored_vehicle):
         latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
         assert latest is not None
         assert latest.is_plugged_in is False
+
+
+@pytest.mark.asyncio
+async def test_persist_state_estimates_soc_from_range_change(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    first_at = datetime.now(UTC) - timedelta(minutes=10)
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(first_at), state_of_charge_percent=31.0, electric_range_km=131.0),
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        diagnostics = await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(datetime.now(UTC)), state_of_charge_percent=31.0, electric_range_km=156.0),
+        )
+        await session.commit()
+
+    assert any(event.event_type.value == "SOC_ESTIMATED_FROM_RANGE" for event in diagnostics.events)
+    async with session_factory() as session:
+        latest = await VehicleRepository(session, is_sqlite=True).get_latest_state(vehicle_id)
+        assert latest is not None
+        assert latest.state_of_charge_percent == 36.9
+        assert latest.soc_updated_at is not None
+
+
+@pytest.mark.asyncio
+async def test_persist_state_logs_stale_soc_at_source(stored_vehicle):
+    session_factory, vehicle_id = stored_vehicle
+    stale_at = datetime.now(UTC) - timedelta(minutes=10)
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(stale_at), state_of_charge_percent=31.0, electric_range_km=131.0),
+        )
+        latest = await repo.get_latest_state(vehicle_id)
+        assert latest is not None
+        latest.soc_updated_at = stale_at
+        await session.commit()
+
+    async with session_factory() as session:
+        repo = VehicleRepository(session, is_sqlite=True)
+        diagnostics = await repo.persist_state(
+            vehicle_id,
+            replace(_measured_state(datetime.now(UTC)), state_of_charge_percent=31.0, electric_range_km=131.0),
+        )
+        await session.commit()
+
+    assert any(event.event_type.value == "SOC_STALE_AT_SOURCE" for event in diagnostics.events)
 
 
 @pytest.mark.asyncio

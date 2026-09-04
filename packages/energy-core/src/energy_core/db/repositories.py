@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from itertools import pairwise
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -385,6 +385,46 @@ class MarketPriceRepository:
         return value is not None
 
     async def get_at(self, site_id: int, recorded_at: datetime) -> MarketPriceRecord | None:
+        from energy_core.db.models import PricePeriodModel
+        from energy_core.market_prices.currency import sek_to_eur
+
+        hour_start = recorded_at.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+        period_row = await self._session.scalar(
+            select(PricePeriodModel)
+            .where(
+                PricePeriodModel.site_id == site_id,
+                PricePeriodModel.period_start == hour_start,
+            )
+            .limit(1)
+        )
+        if period_row is None:
+            period_row = await self._session.scalar(
+                select(PricePeriodModel)
+                .where(
+                    PricePeriodModel.site_id == site_id,
+                    PricePeriodModel.period_start >= hour_start,
+                    PricePeriodModel.period_start < hour_start + timedelta(hours=1),
+                )
+                .order_by(PricePeriodModel.period_start)
+                .limit(1)
+            )
+        if period_row is not None:
+            spot_eur = sek_to_eur(period_row.market_price_sek_kwh) if period_row.market_price_sek_kwh is not None else None
+            all_in_eur = (
+                sek_to_eur(period_row.import_price_sek_kwh) if period_row.import_price_sek_kwh is not None else None
+            )
+            feed_in_eur = (
+                sek_to_eur(period_row.export_price_sek_kwh) if period_row.export_price_sek_kwh is not None else None
+            )
+            if spot_eur is not None:
+                return MarketPriceRecord(
+                    site_id=site_id,
+                    recorded_at=hour_start,
+                    spot_price_eur_kwh=spot_eur,
+                    all_in_price_eur_kwh=all_in_eur,
+                    feed_in_price_eur_kwh=feed_in_eur,
+                )
+
         row = await self._session.scalar(
             select(MarketPriceModel).where(
                 MarketPriceModel.site_id == site_id,
@@ -867,28 +907,49 @@ class EnergyReadingRepository:
         to_time: datetime | None = None,
         *,
         sell_config: "SellPriceConfig | None" = None,
+        use_aggregates: bool = False,
     ) -> list[FinancialStat]:
-        from energy_core.export_revenue.calculator import (
-            ExportRevenueAccumulator,
-            SellPriceConfig,
-            accumulate_export_interval,
-            finalize_export_totals,
+        from energy_core.export_revenue.calculator import SellPriceConfig
+        from energy_core.financial.aggregation import (
+            aggregate_daily_to_period_stats,
+            build_price_maps,
+            integrate_financial_stats,
         )
-        from energy_core.export_revenue.tax_credit import (
-            allocate_yearly_tax_credit,
-            compute_yearly_tax_credit_sek,
-        )
-        from energy_core.market_prices.currency import (
-            all_in_price_eur,
-            feed_in_price_eur,
-            feed_in_price_sek_kwh,
-            spot_price_eur,
-            stored_eur_to_sek_kwh,
-        )
+        from energy_core.financial.daily_repo import FinancialDailyRepository
 
         config = sell_config or SellPriceConfig(
             fallback_flat_price_sek_kwh=export_compensation_sek_kwh,
         )
+
+        if use_aggregates:
+            from_day = from_time.date() if from_time is not None else None
+            to_day = to_time.date() if to_time is not None else None
+            daily_repo = FinancialDailyRepository(self._session, is_sqlite=self._is_sqlite)
+            daily_rows = await daily_repo.list_for_site(site_id, from_day=from_day, to_day=to_day)
+            if daily_rows:
+                integrated = aggregate_daily_to_period_stats(daily_rows, period=period, config=config)
+                return [
+                    FinancialStat(
+                        period_start=row.period_start,
+                        solar_self_consumed_kwh=row.solar_self_consumed_kwh,
+                        battery_self_consumed_kwh=row.battery_self_consumed_kwh,
+                        exported_kwh=row.exported_kwh,
+                        imported_kwh=row.imported_kwh,
+                        solar_savings_sek=row.solar_savings_sek,
+                        battery_savings_sek=row.battery_savings_sek,
+                        export_revenue_sek=row.export_revenue_sek,
+                        grid_import_cost_sek=row.grid_import_cost_sek,
+                        market_priced_fraction=row.market_priced_fraction,
+                        energy_sale_revenue_sek=row.energy_sale_revenue_sek,
+                        grid_benefit_revenue_sek=row.grid_benefit_revenue_sek,
+                        tax_credit_sek=row.tax_credit_sek,
+                        effective_sell_price_sek_kwh=row.effective_sell_price_sek_kwh,
+                        export_spot_priced_fraction=row.export_spot_priced_fraction,
+                        uncontracted_exported_kwh=row.uncontracted_exported_kwh,
+                    )
+                    for row in integrated
+                ]
+
         reading_stmt = select(
             EnergyReadingModel.recorded_at,
             EnergyReadingModel.solar_production_w,
@@ -917,139 +978,39 @@ class EnergyReadingRepository:
         if to_time is not None:
             price_stmt = price_stmt.where(MarketPriceModel.recorded_at < to_time)
         price_rows = (await self._session.execute(price_stmt)).all()
+        purchase_prices, spot_prices, feed_in_prices = build_price_maps(price_rows)
 
-        purchase_prices: dict[datetime, float] = {}
-        spot_prices: dict[datetime, float] = {}
-        feed_in_prices: dict[datetime, float] = {}
-        for row in price_rows:
-            timestamp = row.recorded_at
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            hour_key = timestamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-            all_in_eur = all_in_price_eur(row)
-            if all_in_eur is not None:
-                purchase_prices[hour_key] = stored_eur_to_sek_kwh(float(all_in_eur))
-            spot_eur = spot_price_eur(row)
-            if spot_eur is not None:
-                spot_prices[hour_key] = stored_eur_to_sek_kwh(float(spot_eur))
-            feed_in_sek = feed_in_price_sek_kwh(row)
-            if feed_in_sek is not None:
-                feed_in_prices[hour_key] = feed_in_sek
-
-        zone = ZoneInfo(timezone)
-        totals: dict[str, list[float]] = {}
-        export_acc: dict[str, ExportRevenueAccumulator] = {}
-        pre_contract_export: dict[str, float] = defaultdict(float)
-        yearly_export: dict[int, float] = defaultdict(float)
-        yearly_import: dict[int, float] = defaultdict(float)
-        contract_start = config.sell_contract_start_date
-        for previous, current in pairwise(readings):
-            started_at = previous.recorded_at
-            ended_at = current.recorded_at
-            if started_at.tzinfo is None:
-                started_at = started_at.replace(tzinfo=UTC)
-            if ended_at.tzinfo is None:
-                ended_at = ended_at.replace(tzinfo=UTC)
-            seconds = (ended_at - started_at).total_seconds()
-            if seconds <= 0 or seconds > 300:
-                continue
-            hours = seconds / 3600.0
-            local_time = started_at.astimezone(zone)
-            if period == "day":
-                key = local_time.strftime("%Y-%m-%d")
-            elif period == "month":
-                key = local_time.strftime("%Y-%m")
-            else:
-                key = local_time.strftime("%Y")
-
-            solar_w = max(0.0, float(previous.solar_production_w or 0.0))
-            consumption_w = max(0.0, float(previous.consumption_w or 0.0))
-            discharge_w = max(0.0, -float(previous.battery_power_w or 0.0))
-            imported_w = max(0.0, float(previous.grid_import_w or 0.0))
-            exported_w = max(0.0, float(previous.grid_export_w or 0.0))
-            solar_self_w = min(solar_w, max(0.0, consumption_w - discharge_w - imported_w))
-            battery_self_w = min(discharge_w, max(0.0, consumption_w - solar_self_w))
-            solar_kwh = solar_self_w * hours / 1000.0
-            battery_kwh = battery_self_w * hours / 1000.0
-            export_kwh = exported_w * hours / 1000.0
-            import_kwh = imported_w * hours / 1000.0
-
-            price_key = started_at.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-            market_price = purchase_prices.get(price_key)
-            if config.pricing_mode == "feed_in":
-                export_price = feed_in_prices.get(price_key)
-            elif config.pricing_mode == "spot":
-                export_price = spot_prices.get(price_key)
-            else:
-                export_price = None
-            purchase_price = (
-                market_price if market_price is not None else fallback_purchase_price_sek_kwh
+        integrated = integrate_financial_stats(
+            readings,
+            period=period,
+            timezone=timezone,
+            purchase_prices=purchase_prices,
+            spot_prices=spot_prices,
+            feed_in_prices=feed_in_prices,
+            fallback_purchase_price_sek_kwh=fallback_purchase_price_sek_kwh,
+            config=config,
+        )
+        return [
+            FinancialStat(
+                period_start=row.period_start,
+                solar_self_consumed_kwh=row.solar_self_consumed_kwh,
+                battery_self_consumed_kwh=row.battery_self_consumed_kwh,
+                exported_kwh=row.exported_kwh,
+                imported_kwh=row.imported_kwh,
+                solar_savings_sek=row.solar_savings_sek,
+                battery_savings_sek=row.battery_savings_sek,
+                export_revenue_sek=row.export_revenue_sek,
+                grid_import_cost_sek=row.grid_import_cost_sek,
+                market_priced_fraction=row.market_priced_fraction,
+                energy_sale_revenue_sek=row.energy_sale_revenue_sek,
+                grid_benefit_revenue_sek=row.grid_benefit_revenue_sek,
+                tax_credit_sek=row.tax_credit_sek,
+                effective_sell_price_sek_kwh=row.effective_sell_price_sek_kwh,
+                export_spot_priced_fraction=row.export_spot_priced_fraction,
+                uncontracted_exported_kwh=row.uncontracted_exported_kwh,
             )
-            values = totals.setdefault(key, [0.0] * 10)
-            values[0] += solar_kwh
-            values[1] += battery_kwh
-            values[2] += export_kwh
-            values[3] += import_kwh
-            values[4] += solar_kwh * purchase_price
-            values[5] += battery_kwh * purchase_price
-            values[7] += import_kwh * purchase_price
-            values[8] += solar_kwh + battery_kwh + import_kwh
-            if market_price is not None:
-                values[9] += solar_kwh + battery_kwh + import_kwh
-
-            year_key = local_time.year
-            yearly_import[year_key] += import_kwh
-            export_under_contract = (
-                contract_start is None or local_time.date() >= contract_start
-            )
-            if export_under_contract:
-                yearly_export[year_key] += export_kwh
-                acc = export_acc.setdefault(key, ExportRevenueAccumulator())
-                _, acc = accumulate_export_interval(export_kwh, export_price, config, acc)
-                export_acc[key] = acc
-            elif export_kwh > 0:
-                pre_contract_export[key] += export_kwh
-
-        yearly_tax_credit: dict[int, float] = {}
-        for year, export_kwh in yearly_export.items():
-            yearly_tax_credit[year] = compute_yearly_tax_credit_sek(
-                year,
-                export_kwh,
-                yearly_import.get(year, 0.0),
-                country=config.country,
-                enabled=config.historical_tax_credit_enabled,
-            )
-
-        result: list[FinancialStat] = []
-        for key, values in sorted(totals.items()):
-            export_totals = finalize_export_totals(export_acc.get(key, ExportRevenueAccumulator()))
-            year = int(key[:4]) if period == "year" else int(key[:4])
-            period_tax = allocate_yearly_tax_credit(
-                values[2],
-                yearly_export.get(year, 0.0),
-                yearly_tax_credit.get(year, 0.0),
-            )
-            result.append(
-                FinancialStat(
-                    period_start=key,
-                    solar_self_consumed_kwh=round(values[0], 3),
-                    battery_self_consumed_kwh=round(values[1], 3),
-                    exported_kwh=round(values[2], 3),
-                    imported_kwh=round(values[3], 3),
-                    solar_savings_sek=round(values[4], 2),
-                    battery_savings_sek=round(values[5], 2),
-                    export_revenue_sek=round(export_totals.export_revenue_sek, 2),
-                    grid_import_cost_sek=round(values[7], 2),
-                    market_priced_fraction=round(values[9] / values[8], 3) if values[8] > 0 else 0.0,
-                    energy_sale_revenue_sek=round(export_totals.energy_sale_revenue_sek, 2),
-                    grid_benefit_revenue_sek=round(export_totals.grid_benefit_revenue_sek, 2),
-                    tax_credit_sek=period_tax,
-                    effective_sell_price_sek_kwh=export_totals.effective_sell_price_sek_kwh,
-                    export_spot_priced_fraction=export_totals.spot_priced_fraction,
-                    uncontracted_exported_kwh=round(pre_contract_export.get(key, 0.0), 3),
-                )
-            )
-        return result
+            for row in integrated
+        ]
 
     @staticmethod
     def _to_record(reading: EnergyReadingModel, slug: str) -> ReadingRecord:

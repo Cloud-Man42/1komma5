@@ -62,6 +62,8 @@ class VehicleChargeSessionRecord:
     charging_power_max_kw: float | None = None
     charging_cost_sek: float | None = None
     cost_source: str | None = None
+    price_model: str | None = None
+    price_value_sek_kwh: float | None = None
     detection_confidence: str | None = None
     identification_method: str | None = None
     vehicle_data_quality: str | None = None
@@ -255,6 +257,8 @@ class VehicleChargeSessionRepository:
             charging_power_max_kw=row.charging_power_max_kw,
             charging_cost_sek=row.charging_cost_sek,
             cost_source=row.cost_source,
+            price_model=row.price_model,
+            price_value_sek_kwh=row.price_value_sek_kwh,
             detection_confidence=row.detection_confidence,
             identification_method=row.identification_method,
             vehicle_data_quality=row.vehicle_data_quality,

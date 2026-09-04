@@ -63,9 +63,13 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
       const produced = kwhReading(live?.produced_today_kwh);
       const power = kwReading(live?.solar_power_kw);
       const selfUse = pctReading(live?.self_consumption_pct);
+      const forecast = kwhReading(data?.solar?.expected_today_kwh);
+      const remaining = kwhReading(data?.solar?.remaining_today_kwh);
       return [
         { label: "Aktuell effekt", value: power.value, unit: power.unit },
         { label: "Producerat idag", value: produced.value, unit: produced.unit },
+        { label: "Prognos idag", value: forecast.value, unit: forecast.unit },
+        { label: "Kvar idag", value: remaining.value, unit: remaining.unit },
         { label: "Egenanvändning", value: selfUse.value, unit: selfUse.unit },
         { label: "Högsta soleffekt", value: peak?.value ?? MISSING, sub: peak?.detail_sv ?? undefined },
       ];
@@ -89,14 +93,16 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
       const power = kwReading(live?.battery_power_kw);
       const stored = kwhReading(live?.battery_stored_kwh);
       const capacity = kwhReading(live?.battery_capacity_kwh);
-      const charged = highlightByLabel(data, /batteri laddat/i);
+      const charged = kwhReading(live?.battery_charged_today_kwh);
+      const discharged = kwhReading(live?.battery_discharged_today_kwh);
       const range = batterySocRange(data);
       const soh = pctReading(live?.battery_soh_pct);
       return [
         { label: "Laddningsgrad", value: soc.value, unit: soc.unit },
         { label: "Effekt", value: power.value, unit: power.unit, sub: live?.battery_state_sv ?? undefined },
         { label: "Lagrad energi", value: stored.value, unit: stored.unit, sub: `${capacity.value} ${capacity.unit} kapacitet` },
-        { label: "Laddat från sol", value: charged?.value ?? MISSING },
+        { label: "Laddat idag", value: charged.value, unit: charged.unit },
+        { label: "Urladdat idag", value: discharged.value, unit: discharged.unit },
         { label: "Min / max idag", value: range.min, sub: range.max },
         { label: "SoH", value: soh.value, unit: soh.unit },
       ];
@@ -126,6 +132,7 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
         { label: "Laddläge", value: sectionText(available, vehicle?.charging_mode_sv) },
         { label: "Klart senast", value: formatDayTime(vehicle?.ready_by, timezone) },
         { label: "Kostnad idag", value: formatKr(vehicle?.cost_today_sek) },
+        { label: "Mål-SoC", value: pctReading(vehicle?.target_soc_pct).value, unit: "%" },
       ];
     }
     case "charger": {
@@ -146,6 +153,7 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
                 ? "Aktiv"
                 : "Av",
         },
+        { label: "Beslut", value: sectionText(available, charger?.decision_reason_sv) },
         { label: "Klart senast", value: formatDayTime(charger?.ready_by, timezone) },
         { label: "Prisnivå", value: sectionText(available, charger?.price_tier_label_sv) },
       ];
@@ -157,9 +165,14 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
       const consumption = kwhReading(spa?.consumption_today_kwh);
       const cost = formatKr(spa?.cost_today_sek);
       const power = powerReading(spa?.power_w);
+      const cycles =
+        spa?.filter_cycles_completed_today != null && spa?.filter_cycles_target_today != null
+          ? `${spa.filter_cycles_completed_today}/${spa.filter_cycles_target_today}`
+          : MISSING;
       return [
         { label: "Vattentemperatur", value: temp.value, unit: temp.unit },
         { label: "Filtrering", value: sectionText(available, spa?.filter_status_sv) },
+        { label: "Filtercykler idag", value: cycles },
         { label: "Nästa rengöring", value: formatDayTime(spa?.next_cleaning_at, timezone) },
         { label: "Förbrukning idag", value: consumption.value, unit: consumption.unit },
         { label: "Kostnad idag", value: cost },
@@ -180,6 +193,13 @@ function tilesForSection(section: PiSection, data: DisplayOverview | null): Deta
           label: "Aktuellt elpris",
           value: price?.available === false ? MISSING : formatOre(price?.current_ore_kwh),
           sub: price?.tier_label_sv ?? undefined,
+        },
+        {
+          label: "Lägst / högst idag",
+          value:
+            price?.lowest_ore_kwh != null && price?.highest_ore_kwh != null
+              ? `${formatOre(price.lowest_ore_kwh)} / ${formatOre(price.highest_ore_kwh)}`
+              : MISSING,
         },
       ];
     }
@@ -213,7 +233,11 @@ export function PiDetailChart({ section, data }: { section: PiSection; data: Dis
       return (
         <PiAreaChart
           className="pi-detail-chart-svg"
-          values={sparklineValues(data, "solar")}
+          values={
+            (data?.solar?.forecast_curve?.length ?? 0) > 0
+              ? data!.solar!.forecast_curve!.map((point) => point.value)
+              : sparklineValues(data, "solar")
+          }
           colour="#fcc206"
           gradientId="pi-detail-solar"
         />

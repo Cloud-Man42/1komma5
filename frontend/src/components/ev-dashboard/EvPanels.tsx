@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import type { CSSProperties, FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DeadlineInput } from "@/components/DeadlineInput";
 import {
   Area,
   Bar,
@@ -48,6 +49,7 @@ import {
   totalChargeMinutesToday,
   uplinkLabel,
   EV_MODE_LABELS,
+  isPriceOnlyMode,
   type EvEnergyMixSlice,
   type EvHourlySourcePoint,
   type EvPlanWindow,
@@ -538,8 +540,59 @@ export function EvManualControlPanel({
 }) {
   const [maxCurrent, setMaxCurrent] = useState(charger.max_current_a);
   const [mode, setMode] = useState(charger.charging_mode ?? "SMART_CHARGE");
+  const [targetSoc, setTargetSoc] = useState(charger.target_soc_pct ?? 80);
+  const [departureTime, setDepartureTime] = useState(charger.departure_time ?? "07:00");
+  const [deadlineEnabled, setDeadlineEnabled] = useState(Boolean(charger.deadline_at));
+  const [deadlineAt, setDeadlineAt] = useState<string | null>(charger.deadline_at ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const priceOnly = isPriceOnlyMode(mode);
+
+  useEffect(() => {
+    setMaxCurrent(charger.max_current_a);
+    setMode(charger.charging_mode ?? "SMART_CHARGE");
+    setTargetSoc(charger.target_soc_pct ?? 80);
+    setDepartureTime(charger.departure_time ?? "07:00");
+    setDeadlineEnabled(Boolean(charger.deadline_at));
+    setDeadlineAt(charger.deadline_at ?? null);
+  }, [
+    charger.id,
+    charger.max_current_a,
+    charger.charging_mode,
+    charger.target_soc_pct,
+    charger.departure_time,
+    charger.deadline_at,
+  ]);
+
+  const saveSmartSettings = async () => {
+    if (deadlineEnabled && !deadlineAt) {
+      setError("Ange datum och tid för klar senast, eller avaktivera deadline.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await controlEvCharger(siteSlug, charger.id, {
+        ...(priceOnly
+          ? { clear_deadline_at: true }
+          : {
+              departure_time: departureTime || undefined,
+              target_soc_pct: targetSoc,
+              ...(deadlineEnabled && deadlineAt
+                ? { deadline_at: deadlineAt, clear_deadline_at: false }
+                : { clear_deadline_at: true }),
+            }),
+      });
+      setMessage(deadlineEnabled ? "Avresa och deadline sparade." : "Avresa sparad. Deadline avaktiverad.");
+      onUpdated();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Kunde inte spara laddinställningar.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const applyMode = async (nextMode: string) => {
     setBusy(true);
@@ -606,9 +659,86 @@ export function EvManualControlPanel({
 
   return (
     <section className="evdash-panel evdash-control-panel" data-testid="ev-manual-control">
-      <h2 className="evdash-panel-title">MANUELL KONTROLL</h2>
+      <h2 className="evdash-panel-title">LADDINSTÄLLNINGAR</h2>
       {error ? <p className="evdash-error" role="alert">{error}</p> : null}
+      {message ? <p className="evdash-muted">{message}</p> : null}
       <form onSubmit={handleSubmit} className="evdash-control-form">
+        {!priceOnly ? (
+          <>
+            <label className="evdash-control-field">
+              <span>Avfärd (HH:MM)</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="\d{2}:\d{2}"
+                value={departureTime}
+                disabled={busy}
+                aria-label="Avfärdstid"
+                onChange={(event) => setDepartureTime(event.target.value)}
+              />
+            </label>
+            <label className="evdash-control-field">
+              <span>Mål-SoC (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={targetSoc}
+                disabled={busy}
+                aria-label="Mål-SoC procent"
+                onChange={(event) => setTargetSoc(Number(event.target.value))}
+              />
+            </label>
+            <label className="evdash-control-checkbox">
+              <input
+                type="checkbox"
+                checked={deadlineEnabled}
+                disabled={busy}
+                aria-label="Använd deadline klar senast"
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setDeadlineEnabled(enabled);
+                  if (!enabled) {
+                    setDeadlineAt(null);
+                  }
+                }}
+              />
+              <span>Använd deadline (klar senast)</span>
+            </label>
+            {deadlineEnabled ? (
+              <div className="evdash-control-field">
+                <span>Klar senast</span>
+                <DeadlineInput
+                  value={deadlineAt}
+                  idPrefix={`ev-deadline-${charger.id}`}
+                  disabled={busy}
+                  onChange={setDeadlineAt}
+                />
+              </div>
+            ) : (
+              <p className="evdash-muted">Deadline är avaktiverad. Smart laddning planerar utan klar senast.</p>
+            )}
+            <button
+              type="button"
+              className="evdash-btn-primary"
+              disabled={busy}
+              onClick={() => void saveSmartSettings()}
+            >
+              Spara avresa &amp; deadline
+            </button>
+            <p className="evdash-muted">
+              {deadlineEnabled
+                ? "Smart laddning prioriterar klar senast när avresa och deadline är satta."
+                : "Avresa och mål-SoC sparas utan deadline."}
+            </p>
+          </>
+        ) : (
+          <p className="evdash-muted">
+            Billigast pris laddar när elpriset är som lägst. Avresa och klar senast används inte i detta läge.
+          </p>
+        )}
+
+        <h3 className="evdash-control-subtitle">Manuell kontroll</h3>
         <label className="evdash-control-field">
           <span>Max ström (A)</span>
           <div className="evdash-stepper">

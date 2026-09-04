@@ -134,6 +134,8 @@ async def test_cache_hit_skips_provider():
         identification_method="CHARGEFINDER",
         source="CACHE",
         station_resolution_status=StationResolutionStatus.OK,
+        price_model="PER_KWH",
+        price_value_sek_kwh=4.5,
     )
     await cache.put(latitude=57.26, longitude=16.48, radius_m=150, resolved=cached, ttl_seconds=3600)
     resolver = ChargingStationResolver(provider, cache_repo=cache)

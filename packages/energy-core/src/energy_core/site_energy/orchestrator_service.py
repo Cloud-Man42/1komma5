@@ -14,6 +14,7 @@ from energy_core.db.flexible_load_plan_repo import FlexibleLoadPlanRepository
 from energy_core.db.repositories import SiteRepository
 from energy_core.flexible_load.ev_load import build_ev_orchestrated_load
 from energy_core.flexible_load.orchestrator import EnergyOrchestrator, OrchestratedLoadSpec
+from energy_core.energy_optimizer.horizon import HorizonOptimizerSnapshot
 from energy_core.spa_energy.service import SmartSpaEnergyService
 
 logger = logging.getLogger(__name__)
@@ -129,3 +130,34 @@ class SiteEnergyOrchestratorService:
                 )
 
         return spa_handled or len(results) > 0
+
+    async def plan_horizon_readonly(self, session: AsyncSession, site) -> HorizonOptimizerSnapshot:
+        """Build a monitor-only joint EV/spa horizon plan without persisting."""
+        from datetime import UTC, datetime
+
+        from energy_core.energy_optimizer.horizon import build_horizon_optimizer_snapshot
+
+        now = datetime.now(UTC)
+        specs = await self.build_specs_for_site(session, site)
+        if not specs:
+            return build_horizon_optimizer_snapshot(
+                specs=(),
+                horizon=(),
+                results=(),
+                now=now,
+            )
+
+        timezone = site.timezone
+        consumer_repo = ConsumerRepository(session)
+        spa_row = await consumer_repo.get_spa_by_site_slug(site.slug)
+        if spa_row is not None:
+            timezone = spa_row[0].timezone
+
+        horizon = await self._spa_service.build_horizon(session, site, timezone, now)
+        results = self._orchestrator.plan_all(specs, horizon, now=now) if horizon else ()
+        return build_horizon_optimizer_snapshot(
+            specs=specs,
+            horizon=horizon,
+            results=results,
+            now=now,
+        )

@@ -281,9 +281,26 @@ describe("economyDashboardHelpers", () => {
       average_all_in_eur_kwh: 1.05,
       highest_all_in_eur_kwh: 2.44,
       lowest_all_in_eur_kwh: 0.77,
+      current_spot_sek_kwh: 1.21,
+      current_import_sek_kwh: 1.61,
+      average_import_sek_kwh: 1.605,
+      highest_import_sek_kwh: 2.44,
+      lowest_import_sek_kwh: 0.77,
       points: [
-        { timestamp: "2026-08-31T02:00:00+02:00", spot_eur_kwh: 0.55, all_in_eur_kwh: 0.77 },
-        { timestamp: "2026-08-31T14:00:00+02:00", spot_eur_kwh: 1.87, all_in_eur_kwh: 2.44 },
+        {
+          timestamp: "2026-08-31T02:00:00+02:00",
+          spot_eur_kwh: 0.55,
+          all_in_eur_kwh: 0.77,
+          spot_sek_kwh: 0.55,
+          import_sek_kwh: 0.77,
+        },
+        {
+          timestamp: "2026-08-31T14:00:00+02:00",
+          spot_eur_kwh: 1.87,
+          all_in_eur_kwh: 2.44,
+          spot_sek_kwh: 1.87,
+          import_sek_kwh: 2.44,
+        },
       ],
     };
 

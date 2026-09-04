@@ -30,7 +30,10 @@ def parse_station(raw: dict[str, Any], *, vehicle_lat: float, vehicle_lon: float
             charging_type = "DC" if max_power_kw >= 50 else "AC"
 
     distance_m = haversine_m(vehicle_lat, vehicle_lon, float(lat), float(lon))
-    price_model, price_value = _parse_pricing(raw.get("outletList"))
+    price_model, price_value = _parse_pricing(
+        raw.get("outletList"),
+        free_charging=_truthy_flag(raw.get("freeCharging")),
+    )
 
     return ChargingStationCandidate(
         provider=StationProvider.CHARGEFINDER,
@@ -111,15 +114,22 @@ def _parse_outlets(outlet_list: Any) -> tuple[str | None, float | None, str | No
     return connector, max_kw, charging_type
 
 
-def _parse_pricing(outlet_list: Any) -> tuple[str, float | None]:
+def _parse_pricing(outlet_list: Any, *, free_charging: bool | None = None) -> tuple[str, float | None]:
     if not isinstance(outlet_list, list):
         return "UNKNOWN", None
+    saw_zero_kwh = False
+    max_cost_min: float | None = None
     for group in outlet_list:
         if not isinstance(group, dict):
             continue
         cost_kwh = _float_or_none(group.get("costKwh"))
         if cost_kwh is not None and cost_kwh > 0:
             return "PER_KWH", cost_kwh
+        if cost_kwh == 0:
+            saw_zero_kwh = True
+        cost_min = _float_or_none(group.get("costMin"))
+        if cost_min is not None and cost_min > 0:
+            max_cost_min = max(max_cost_min or 0.0, cost_min)
         outlets = group.get("outlets")
         if isinstance(outlets, list):
             for outlet in outlets:
@@ -128,6 +138,52 @@ def _parse_pricing(outlet_list: Any) -> tuple[str, float | None]:
                 outlet_cost = _float_or_none(outlet.get("costKwh"))
                 if outlet_cost is not None and outlet_cost > 0:
                     return "PER_KWH", outlet_cost
+                if outlet_cost == 0:
+                    saw_zero_kwh = True
+                outlet_min = _float_or_none(outlet.get("costMin"))
+                if outlet_min is not None and outlet_min > 0:
+                    max_cost_min = max(max_cost_min or 0.0, outlet_min)
+    if max_cost_min is not None and max_cost_min > 0:
+        return "FIXED", max_cost_min
+    if saw_zero_kwh and free_charging is True:
+        return "FREE", 0.0
+    return "UNKNOWN", None
+
+
+def _parse_pricing_from_status(status_items: Any) -> tuple[str, float | None]:
+    """Read live tariffs returned by ChargeFinder /status/{realtimeId}."""
+    if not isinstance(status_items, list):
+        return "UNKNOWN", None
+    max_cost_kwh: float | None = None
+    max_cost_session: float | None = None
+    max_cost_min: float | None = None
+    for item in status_items:
+        if not isinstance(item, dict):
+            continue
+        tariffs = item.get("tariffs")
+        if not isinstance(tariffs, list):
+            continue
+        for tariff in tariffs:
+            if not isinstance(tariff, dict):
+                continue
+            cost_kwh = _float_or_none(tariff.get("costKwh"))
+            if cost_kwh is not None and cost_kwh > 0:
+                max_cost_kwh = max(max_cost_kwh or 0.0, cost_kwh)
+            cost_session = _float_or_none(tariff.get("costSession"))
+            if cost_session is not None and cost_session > 0:
+                max_cost_session = max(max_cost_session or 0.0, cost_session)
+            cost_min = _float_or_none(tariff.get("costMin"))
+            if cost_min is not None and cost_min > 0:
+                max_cost_min = max(max_cost_min or 0.0, cost_min)
+            cost_parking = _float_or_none(tariff.get("costParking"))
+            if cost_parking is not None and cost_parking > 0:
+                max_cost_min = max(max_cost_min or 0.0, cost_parking)
+    if max_cost_kwh is not None and max_cost_kwh > 0:
+        return "PER_KWH", max_cost_kwh
+    if max_cost_session is not None and max_cost_session > 0:
+        return "FIXED", max_cost_session
+    if max_cost_min is not None and max_cost_min > 0:
+        return "FIXED", max_cost_min
     return "UNKNOWN", None
 
 
@@ -159,3 +215,18 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _truthy_flag(value: Any) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes"}:
+        return True
+    if text in {"0", "false", "no"}:
+        return False
+    return None

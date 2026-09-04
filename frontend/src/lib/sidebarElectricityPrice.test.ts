@@ -3,6 +3,7 @@ import type { MarketPricesResponse } from "@/lib/api";
 import {
   buildPriceTrend,
   buildSidebarElectricityPriceModel,
+  buildSidebarElectricityPriceModelFromImportPeriods,
   lineColorForOre,
   pointOre,
 } from "@/lib/sidebarElectricityPrice";
@@ -17,13 +18,14 @@ function samplePrices(): MarketPricesResponse {
     current_price_eur_kwh: 0.84,
     average_all_in_eur_kwh: 0.95,
     highest_all_in_eur_kwh: 1.87,
-    lowest_all_in_eur_kwh: 0.22,
+    lowest_all_in_eur_kwh: 0.26,
+    current_import_sek_kwh: 0.84,
     points: [
-      { timestamp: "2026-08-28T00:00:00+02:00", spot_eur_kwh: 0.22, all_in_eur_kwh: 0.22 },
-      { timestamp: "2026-08-28T06:00:00+02:00", spot_eur_kwh: 0.35, all_in_eur_kwh: 0.35 },
-      { timestamp: "2026-08-28T09:00:00+02:00", spot_eur_kwh: 0.84, all_in_eur_kwh: 0.84 },
-      { timestamp: "2026-08-28T14:00:00+02:00", spot_eur_kwh: 0.43, all_in_eur_kwh: 0.43 },
-      { timestamp: "2026-08-28T18:00:00+02:00", spot_eur_kwh: 1.87, all_in_eur_kwh: 1.87 },
+      { timestamp: "2026-08-28T00:00:00+02:00", spot_eur_kwh: 0.26, all_in_eur_kwh: 0.26, spot_sek_kwh: 0.26, import_sek_kwh: 0.26 },
+      { timestamp: "2026-08-28T06:00:00+02:00", spot_eur_kwh: 0.35, all_in_eur_kwh: 0.35, spot_sek_kwh: 0.35, import_sek_kwh: 0.35 },
+      { timestamp: "2026-08-28T09:00:00+02:00", spot_eur_kwh: 0.84, all_in_eur_kwh: 0.84, spot_sek_kwh: 0.84, import_sek_kwh: 0.84 },
+      { timestamp: "2026-08-28T14:00:00+02:00", spot_eur_kwh: 0.43, all_in_eur_kwh: 0.43, spot_sek_kwh: 0.43, import_sek_kwh: 0.43 },
+      { timestamp: "2026-08-28T18:00:00+02:00", spot_eur_kwh: 1.87, all_in_eur_kwh: 1.87, spot_sek_kwh: 1.87, import_sek_kwh: 1.87 },
     ],
   };
 }
@@ -33,13 +35,38 @@ describe("sidebarElectricityPrice", () => {
     expect(pointOre({ timestamp: "", spot_eur_kwh: 0.84, all_in_eur_kwh: 0.84 })).toBe(84);
   });
 
+  it("builds today model from import periods in SEK", () => {
+    const periods = samplePrices().points.map((point) => ({
+      period_start: point.timestamp,
+      period_end: point.timestamp,
+      price_area: "SE4",
+      currency: "SEK",
+      market_price_sek_kwh: point.all_in_eur_kwh,
+      import_price_sek_kwh: point.all_in_eur_kwh,
+      export_price_sek_kwh: 0.39,
+      source: "heartbeat",
+      quality: "REAL",
+      is_estimated: false,
+      components: {},
+    }));
+    const model = buildSidebarElectricityPriceModelFromImportPeriods(
+      periods,
+      TIMEZONE,
+      new Date("2026-08-28T09:15:00+02:00"),
+    );
+    expect(model).not.toBeNull();
+    expect(model?.lowestOre).toBe(26);
+    expect(model?.highestOre).toBe(187);
+    expect(model?.currentOre).toBe(84);
+  });
+
   it("builds today model with min, max and current", () => {
     const model = buildSidebarElectricityPriceModel(
       samplePrices(),
       new Date("2026-08-28T09:15:00+02:00"),
     );
     expect(model).not.toBeNull();
-    expect(model?.lowestOre).toBe(22);
+    expect(model?.lowestOre).toBe(26);
     expect(model?.highestOre).toBe(187);
     expect(model?.currentOre).toBe(84);
     expect(model?.yMax).toBeGreaterThan(model!.highestOre);

@@ -59,6 +59,8 @@ def _csi_fields(context, *, latest: VehicleStateLatestModel | None) -> dict:
         "estimated_energy_kwh": context.estimated_energy_kwh,
         "charging_cost_sek": context.charging_cost_sek,
         "cost_source": context.cost_source,
+        "price_model": context.price_model,
+        "price_value_sek_kwh": context.price_value_sek_kwh,
         "detection_confidence": context.detection_confidence,
         "identification_method": context.identification_method,
         "vehicle_data_quality": context.vehicle_data_quality,
@@ -170,6 +172,7 @@ class VehicleChargeSessionService:
             charger=None,
             meter=None,
             previous_soc=runtime.last_soc,
+            session_start_soc=active.start_soc if active is not None else soc,
             halo=halo,
             halo_charger_active=halo_charger_active,
             station_resolution=station_resolution,
@@ -198,6 +201,8 @@ class VehicleChargeSessionService:
 
         if active is not None:
             update_fields = merge_csi_fields(active, dict(csi_fields))
+            if soc is not None:
+                update_fields["end_soc"] = soc
             if is_away_charging(
                 halo=halo,
                 mercedes_plugged=is_plugged,
@@ -278,6 +283,8 @@ class VehicleChargeSessionService:
                 station_resolution=station_resolution,
             )
 
+        active = await repo.get_active_for_vehicle(vehicle.id)
+
         context = csi.build_context(
             vehicle=vehicle,
             site=site,
@@ -285,14 +292,13 @@ class VehicleChargeSessionService:
             charger=charger,
             meter=meter,
             previous_soc=runtime.last_soc,
+            session_start_soc=active.start_soc if active is not None else soc,
             halo=halo,
             halo_charger_active=halo_active,
             station_resolution=station_resolution,
         )
         csi_fields = _csi_fields(context, latest=latest)
         csi_fields = apply_station_resolution_to_csi(csi_fields, station_resolution, latest=latest)
-
-        active = await repo.get_active_for_vehicle(vehicle.id)
 
         if is_plugged and not was_plugged and active is None:
             ev_session = await EvChargingSessionRepository(db).get_active_for_charger(charger.id)
@@ -394,6 +400,8 @@ class VehicleChargeSessionService:
             estimated_battery_energy_delta_kwh=estimated_delta,
             charging_cost_sek=context.charging_cost_sek,
             cost_source=context.cost_source,
+            price_model=context.price_model,
+            price_value_sek_kwh=context.price_value_sek_kwh,
             energy_quality=energy_quality,
             cost_quality="ESTIMATED" if context.charging_cost_sek else "INCOMPLETE",
             attribution_quality="UNAVAILABLE",

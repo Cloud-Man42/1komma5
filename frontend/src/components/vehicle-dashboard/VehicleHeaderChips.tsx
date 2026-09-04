@@ -1,4 +1,3 @@
-import type { VehicleListItem } from "@/lib/api";
 import { formatPercent, formatKw } from "./vehicleDashboardHelpers";
 
 type Props = {
@@ -8,6 +7,8 @@ type Props = {
   isCharging: boolean | null | undefined;
   chargingPowerKw: number | null;
   freshnessLabel: string;
+  locationTitle?: string | null;
+  locationSubtitle?: string | null;
 };
 
 export function VehicleHeaderChips({
@@ -17,6 +18,8 @@ export function VehicleHeaderChips({
   isCharging,
   chargingPowerKw,
   freshnessLabel,
+  locationTitle,
+  locationSubtitle,
 }: Props) {
   return (
     <div className="vdash-chips-grid" data-testid="vehicle-header-chips">
@@ -48,6 +51,13 @@ export function VehicleHeaderChips({
         <strong className={`vdash-chip-value ${isCharging ? "vdash-chip-value-green" : ""}`.trim()}>
           {isCharging ? formatKw(chargingPowerKw) : freshnessLabel}
         </strong>
+      </div>
+      <div className="vdash-chip-card vdash-chip-status">
+        <span className="vdash-chip-label">Position</span>
+        <strong className="vdash-chip-value">
+          {locationTitle ?? "—"}
+        </strong>
+        {locationSubtitle ? <p className="vdash-chip-meta">{locationSubtitle}</p> : null}
       </div>
     </div>
   );

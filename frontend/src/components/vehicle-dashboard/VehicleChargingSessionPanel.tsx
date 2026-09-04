@@ -1,5 +1,11 @@
 import type { VehicleChargeSession } from "@/lib/api";
-import { formatPercent, formatSek, totalRenewableKwh } from "./vehicleDashboardHelpers";
+import {
+  formatPercent,
+  formatSek,
+  sessionDisplayCost,
+  sessionPriceLabel,
+  totalRenewableKwh,
+} from "./vehicleDashboardHelpers";
 
 type Props = {
   subtitle: string;
@@ -38,8 +44,12 @@ export function VehicleChargingSessionPanel({
   canStart,
 }: Props) {
   const chargedKwh =
-    session?.halo_energy_kwh ?? session?.estimated_battery_energy_delta_kwh ?? 0;
-  const costKr = session?.actual_cost_sek;
+    session?.estimated_energy_kwh ??
+    session?.halo_energy_kwh ??
+    session?.estimated_battery_energy_delta_kwh ??
+    0;
+  const costKr = sessionDisplayCost(session);
+  const priceLabel = sessionPriceLabel(session);
   const surplus =
     session?.renewable_share_pct != null
       ? `${Math.round(session.renewable_share_pct)}% förnybar`
@@ -72,7 +82,8 @@ export function VehicleChargingSessionPanel({
             <div className="vdash-session-stats">
               <span>Laddat: {chargedKwh.toFixed(1)} kWh</span>
               <span>SoC {formatPercent(session.start_soc)} → {formatPercent(session.end_soc)}</span>
-              <span>Kostnad: {formatSek(costKr)} ({surplus})</span>
+              <span>Kostnad: {formatSek(costKr)}{priceLabel ? ` (${priceLabel})` : ""}</span>
+              <span>Förnybar andel: {surplus}</span>
               <span>CO₂ besparing: {co2.toFixed(1)} kg</span>
             </div>
             <div className="vdash-session-sources">
@@ -86,6 +97,7 @@ export function VehicleChargingSessionPanel({
                   <span>Station: {session.station_name ?? session.location_name}</span>
                 ) : null}
                 {session.charger_operator ? <span>Operatör: {session.charger_operator}</span> : null}
+                {priceLabel ? <span>Pris: {priceLabel}</span> : null}
                 {session.charging_type ? <span>{session.charging_type}{session.charging_power_avg_kw ? ` · ${session.charging_power_avg_kw.toFixed(1)} kW` : ""}</span> : null}
                 {session.distance_from_vehicle_m != null ? <span>{Math.round(session.distance_from_vehicle_m)} m</span> : null}
                 {session.detection_confidence ? <span>Confidence: {session.detection_confidence}</span> : null}

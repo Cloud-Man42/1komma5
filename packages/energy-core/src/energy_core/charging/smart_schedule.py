@@ -49,9 +49,6 @@ def should_charge_smart(
     if current_price is not None:
         if average is not None and _is_green_price(current_price, average):
             return True, "cheap_now"
-        min_price = min(price for _, price in slots)
-        if current_price <= min_price + 0.001:
-            return True, "cheap_now"
 
     if schedule_mode == "none":
         return _everyday_schedule_decision(current_price, average)
@@ -70,7 +67,7 @@ def should_charge_smart(
             urgency=clamped_urgency,
         )
 
-    return _cheapest_hours_decision(now, slots=slots, charge_hours=charge_hours)
+    return _green_price_decision(now, slots=slots)
 
 
 def should_charge_by_price(
@@ -142,18 +139,21 @@ def _balanced_urgency_decision(
     return False, "smart_wait_cheaper"
 
 
-def _cheapest_hours_decision(
+def _green_price_decision(
     now: datetime,
     *,
     slots: list[tuple[datetime, float]],
-    charge_hours: float,
 ) -> tuple[bool, str]:
-    hours_needed = max(1, int(charge_hours + 0.999))
-    cheapest = sorted(slots, key=lambda item: item[1])[:hours_needed]
-    cheapest_hours = {_hour_key(ts) for ts, _ in cheapest}
+    """Charge when the current hour is in the green price tier (matches PriceChart bars)."""
+    average = _average_price(slots)
+    if average is None:
+        return False, "no_forecast"
     current_hour = _hour_key(now)
-    if current_hour in cheapest_hours:
-        return True, "smart_scheduled"
+    hour_price = next((price for ts, price in slots if _hour_key(ts) == current_hour), None)
+    if hour_price is None:
+        return False, "no_forecast_in_window"
+    if _is_green_price(hour_price, average):
+        return True, "smart_green_price"
     return False, "smart_wait_cheaper"
 
 

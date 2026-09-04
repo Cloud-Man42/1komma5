@@ -19,6 +19,7 @@ from energy_core.charging.config import ChargingConfig
 from energy_core.charging.display_status import display_status_sv
 from energy_core.charging.external_limitation import ExternalLimitationTracker
 from energy_core.charging.fuse_diagnostic import fuse_headroom_a_for_charger
+from energy_core.charging.import_prices import enrich_energy_import_prices
 from energy_core.charging.models import BridgeStatus, ChargingDecision
 from energy_core.charging.optimizer import EvChargingOptimizer
 from energy_core.charging.override import override_active
@@ -121,6 +122,10 @@ class SmartChargingEngine:
         )
         energy = await provider.get_energy_state(now=now)
         energy = _apply_local_prefs(charger, energy)
+        is_sqlite = session.bind is not None and session.bind.dialect.name == "sqlite"
+        energy = await enrich_energy_import_prices(
+            session, site, energy, is_sqlite=is_sqlite, now=now
+        )
         config = _charging_config(charger, site)
         vehicle_context = await resolve_vehicle_charging_context(
             session,

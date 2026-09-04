@@ -35,3 +35,13 @@ jobs:
         run: npm ci
       - name: Run Vitest
         run: npm test
+
+  benchmark-smoke:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Smoke check key API routes
+        shell: pwsh
+        run: ./scripts/phase19-baseline-smoke.ps1 -BaseUrl http://127.0.0.1:8000
+        continue-on-error: true

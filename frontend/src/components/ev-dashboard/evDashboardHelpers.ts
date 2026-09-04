@@ -8,7 +8,7 @@ import type {
   EvSolarChargingPlan,
 } from "@/lib/api";
 import { formatDeadline } from "@/lib/deadlineInput";
-import { formatSekAmount } from "@/lib/prices";
+import { formatSekAmount, marketApiPriceToOre } from "@/lib/prices";
 
 export const EV_MODE_LABELS: Record<string, string> = {
   SMART_CHARGE: "Smart laddning",
@@ -17,6 +17,10 @@ export const EV_MODE_LABELS: Record<string, string> = {
   QUICK_CHARGE: "Snabbladdning",
   PAUSED: "Pausad",
 };
+
+export function isPriceOnlyMode(mode: string | null | undefined): boolean {
+  return mode === "PRICE_CHARGE";
+}
 
 /** kg CO₂ avoided per kWh renewable vs fossil car (approx. Swedish factor). */
 export const CO2_SAVED_KG_PER_RENEWABLE_KWH = 0.155;
@@ -362,8 +366,7 @@ export function priceTierDisplay(reasoning: EnergyReasoning | null): {
 } {
   const tier = reasoning?.price_tier ?? "unknown";
   const price = reasoning?.current_price_eur_kwh;
-  const ore =
-    price != null ? Math.round(price * 11.2 * 100) : null;
+  const ore = price != null ? marketApiPriceToOre(price) : null;
   if (tier === "green") return { label: "Grönt (billigt)", detail: ore != null ? `${ore} öre/kWh` : "—", tone: "green" };
   if (tier === "red") return { label: "Rött (dyrt)", detail: ore != null ? `${ore} öre/kWh` : "—", tone: "red" };
   if (tier === "normal") return { label: "Normalt", detail: ore != null ? `${ore} öre/kWh` : "—", tone: "normal" };

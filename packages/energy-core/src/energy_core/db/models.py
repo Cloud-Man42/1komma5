@@ -28,9 +28,16 @@ class SiteModel(Base):
     sell_contract_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     main_fuse_a: Mapped[float | None] = mapped_column(Float, nullable=True)
     safety_margin_a: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
+    price_area: Mapped[str] = mapped_column(String(8), nullable=False, default="SE4")
+    optimization_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="MONITOR_ONLY")
+    energy_control_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     readings: Mapped[list["EnergyReadingModel"]] = relationship(back_populates="site")
     market_prices: Mapped[list["MarketPriceModel"]] = relationship(
+        back_populates="site",
+        cascade="all, delete-orphan",
+    )
+    price_periods: Mapped[list["PricePeriodModel"]] = relationship(
         back_populates="site",
         cascade="all, delete-orphan",
     )
@@ -257,6 +264,82 @@ class MarketPriceModel(Base):
     feed_in_price_eur_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     site: Mapped[SiteModel] = relationship(back_populates="market_prices")
+
+
+class PricePeriodModel(Base):
+    __tablename__ = "price_periods"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    price_area: Mapped[str] = mapped_column(String(8), nullable=False, default="SE4")
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="SEK")
+    market_price_sek_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    import_price_sek_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    export_price_sek_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="heartbeat")
+    quality: Mapped[str] = mapped_column(String(16), nullable=False, default="REAL")
+    is_estimated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    components_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    site: Mapped[SiteModel] = relationship(back_populates="price_periods")
+
+
+class EnergyForecastSnapshotModel(Base):
+    __tablename__ = "energy_forecast_snapshots"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    forecast_kind: Mapped[str] = mapped_column(String(32), primary_key=True)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    predicted_value: Mapped[float] = mapped_column(Float, nullable=False)
+    actual_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forecast_recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actual_recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    model_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class EnergyControlActionModel(Base):
+    __tablename__ = "energy_control_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    optimization_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    target: Mapped[str] = mapped_column(String(32), nullable=False, default="site")
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AdminAuditLogModel(Base):
+    __tablename__ = "admin_audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    http_method: Mapped[str] = mapped_column(String(16), nullable=False)
+    path: Mapped[str] = mapped_column(String(512), nullable=False)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    site_slug: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    resource_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class PriceEngineStateModel(Base):
+    __tablename__ = "price_engine_state"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    last_market_refresh_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_import_refresh_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_export_refresh_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    missing_periods_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    data_age_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    optimization_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="MONITOR_ONLY")
 
 
 class HistoricalMonthlyEnergyModel(Base):
@@ -1067,6 +1150,8 @@ class VehicleChargeSessionModel(Base):
     charging_power_max_kw: Mapped[float | None] = mapped_column(Float, nullable=True)
     charging_cost_sek: Mapped[float | None] = mapped_column(Float, nullable=True)
     cost_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    price_model: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    price_value_sek_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
     detection_confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)
     identification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
     vehicle_data_quality: Mapped[str | None] = mapped_column(String(16), nullable=True)
@@ -1416,6 +1501,66 @@ class SiteLiveSnapshotModel(Base):
     freshness: Mapped[str] = mapped_column(String(16), nullable=False, default="DEGRADED")
     source_status_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class SolarForecastApiSnapshotModel(Base):
+    __tablename__ = "solar_forecast_api_snapshots"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    forecast_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    freshness: Mapped[str] = mapped_column(String(16), nullable=False, default="DEGRADED")
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+
+class FinancialDailyModel(Base):
+    __tablename__ = "financial_daily"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    solar_self_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    battery_self_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    export_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    import_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    solar_savings_sek: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    battery_savings_sek: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    grid_import_cost_sek: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    market_priced_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    priced_denominator_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    energy_sale_sek: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    grid_benefit_sek: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    spot_priced_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    fallback_priced_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    negative_price_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    contracted_export_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    uncontracted_export_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+
+class CollectorTaskRunModel(Base):
+    __tablename__ = "collector_task_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    task_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    lane: Mapped[str] = mapped_column(String(16), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_ms: Mapped[float] = mapped_column(Float, nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    error_class: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class IntegrationHealthModel(Base):
+    __tablename__ = "integration_health"
+
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stale_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    circuit_breaker_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    last_error_class: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class EnergyHourlyModel(Base):

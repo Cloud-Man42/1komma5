@@ -18,6 +18,7 @@ from energy_core.vehicles.mercedes.constants import (
     ATTRIBUTE_RANGE_ELECTRIC_KM,
     ATTRIBUTE_SOC,
 )
+from energy_core.vehicles.mercedes.soc_estimation import resolve_soc_value
 from energy_core.vehicles.mercedes.protocol.proto import vehicle_events_pb2
 
 logger = logging.getLogger(__name__)
@@ -169,7 +170,7 @@ class MercedesMessageDecoder:
                 if not status_update.HasField(field_name):
                     continue
                 field_obj = getattr(status_update, field_name)
-                value = _extract_status_field_value(field_obj)
+                value = _extract_status_field_value(field_obj, attribute_key=attribute_name)
                 if value is None:
                     continue
                 normalized = _normalize_power_value(attribute_name, value)
@@ -207,7 +208,12 @@ def _normalize_power_value(attribute_name: str, value: Any) -> Any:
     return numeric
 
 
-def _extract_status_field_value(field_obj: Any) -> Any:
+def _extract_status_field_value(field_obj: Any, *, attribute_key: str | None = None) -> Any:
+    if attribute_key == ATTRIBUTE_SOC:
+        return resolve_soc_value(
+            getattr(field_obj, "value", None),
+            getattr(field_obj, "display_value", None),
+        )
     for attr_name in ("value", "display_value"):
         if hasattr(field_obj, attr_name):
             value = getattr(field_obj, attr_name)
@@ -220,6 +226,10 @@ def _extract_attribute_status_value(status: Any, *, attribute_key: str | None = 
     display_value = getattr(status, "display_value", None)
     if attribute_key in _PREFER_DISPLAY_VALUE and display_value not in (None, ""):
         return display_value
+    if attribute_key == ATTRIBUTE_SOC:
+        int_value = getattr(status, "int_value", None) if status.HasField("int_value") else None
+        double_value = getattr(status, "double_value", None) if status.HasField("double_value") else None
+        return resolve_soc_value(int_value, double_value, display_value)
     for field_name in ("double_value", "int_value", "bool_value", "string_value"):
         if status.HasField(field_name):
             value = getattr(status, field_name)
@@ -247,6 +257,8 @@ def _extract_status_update_value(status_obj: Any, *, attribute_key: str | None =
     display_value = getattr(status_obj, "display_value", None)
     if attribute_key in _PREFER_DISPLAY_VALUE and display_value not in (None, ""):
         return display_value
+    if attribute_key == ATTRIBUTE_SOC:
+        return resolve_soc_value(getattr(status_obj, "value", None), display_value)
     value = getattr(status_obj, "value", None)
     if value not in (None, ""):
         if isinstance(value, (int, float, bool)):

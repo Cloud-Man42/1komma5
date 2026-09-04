@@ -1,0 +1,250 @@
+{
+  "project": {
+    "name": "EMIC",
+    "full_name": "Energy Monitoring In a Cloud",
+    "repository": "1komma5",
+    "analysis_date": "2026-09-03",
+    "migration_head": "057_energy_control_interface",
+    "description": "Home energy monitoring and partial EMS for Swedish residential sites",
+    "production_example_host": "emic.inacloud.se",
+    "maturity": "Advanced monitor + partial load optimizer"
+  },
+  "architecture": {
+    "pattern": "monolith_collector_snapshot",
+    "layers": [
+      "clients",
+      "caddy_reverse_proxy",
+      "nextjs_frontend",
+      "fastapi_backend",
+      "energy_core_domain",
+      "collector",
+      "postgresql_timescaledb",
+      "external_integrations"
+    ],
+    "services_count": 5,
+    "api_endpoints_count": 158,
+    "background_worker": "collector_asyncio_loop",
+    "realtime": "http_polling_primary_sse_secondary",
+    "auth_model": "open_admin_api_lan_assumption_device_tokens_widget_display"
+  },
+  "stack": {
+    "backend": {
+      "language": "Python 3.12",
+      "framework": "FastAPI",
+      "server": "Uvicorn",
+      "orm": "SQLAlchemy 2 async",
+      "migrations": "Alembic",
+      "package_manager": "uv"
+    },
+    "frontend": {
+      "framework": "Next.js 15",
+      "ui": "React 19",
+      "language": "TypeScript",
+      "charts": "Recharts",
+      "tests": "Vitest"
+    },
+    "database": {
+      "production": "PostgreSQL 16 + TimescaleDB",
+      "development": "SQLite",
+      "tables_approx": 60,
+      "migrations_count": 57
+    },
+    "infrastructure": {
+      "container": "Docker Compose",
+      "proxy": "Caddy 2",
+      "ci": "GitHub Actions pytest + npm test"
+    },
+    "clients": [
+      "browser_nextjs",
+      "raspberry_pi_kiosk",
+      "apple_ios_widget",
+      "windows_tray_dotnet8"
+    ]
+  },
+  "services": [
+    {"name": "caddy", "port": "80,443", "role": "tls_reverse_proxy"},
+    {"name": "frontend", "port": 3000, "role": "nextjs_standalone"},
+    {"name": "backend", "port": 8000, "role": "fastapi_rest_api"},
+    {"name": "collector", "port": null, "role": "background_poll_enrichment"},
+    {"name": "postgres", "port": 5432, "role": "timescaledb_storage"}
+  ],
+  "databases": [
+    {
+      "name": "energy",
+      "engine": "postgresql_timescaledb",
+      "hypertables": ["energy_readings", "consumer_samples", "vehicle_state_history"],
+      "continuous_aggregates": ["energy_readings_5min", "energy_readings_1hour"],
+      "retention_policy": "partial_solar_14d_prices_90d_raw_none",
+      "dev_engine": "sqlite"
+    }
+  ],
+  "integrations": [
+    {"name": "1komma5_heartbeat", "status": "active", "protocol": "https_rest_jwt", "purpose": "readings_prices_live_overview"},
+    {"name": "sungrow", "status": "active_via_heartbeat", "protocol": "heartbeat_proxy", "purpose": "inverter_telemetry_balance"},
+    {"name": "charge_amps", "status": "active", "protocol": "https_rest_v5", "purpose": "ev_charger_control"},
+    {"name": "mercedes", "status": "active", "protocol": "websocket_rest", "purpose": "vehicle_telemetry_commands"},
+    {"name": "arctic_spa", "status": "optional", "protocol": "https_rest", "purpose": "spa_monitoring_control"},
+    {"name": "chargefinder", "status": "active", "protocol": "web_scrape", "purpose": "away_charging_lookup"},
+    {"name": "smhi", "status": "active", "protocol": "https_open_data", "purpose": "solar_radiation"},
+    {"name": "dmi", "status": "active", "protocol": "https_open_data", "purpose": "weather_harmonie"},
+    {"name": "open_meteo", "status": "active", "protocol": "https", "purpose": "weather_forecast_archive"},
+    {"name": "nord_pool", "status": "label_only", "protocol": "via_heartbeat", "purpose": "spot_prices"},
+    {"name": "modbus", "status": "removed", "protocol": null, "purpose": null},
+    {"name": "sensibo", "status": "not_in_codebase", "protocol": null, "purpose": null},
+    {"name": "stripe", "status": "not_in_codebase", "protocol": null, "purpose": null},
+    {"name": "ebecon", "status": "unknown", "protocol": null, "purpose": null}
+  ],
+  "background_jobs": [
+    {"name": "collector_main_loop", "interval_seconds": "30-60", "file": "collector/app/collector.py"},
+    {"name": "heartbeat_readings_ingest", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "price_engine_refresh", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "live_overview_prefetch", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "arctic_spa_poll", "parent": "collector_main_loop", "interval_seconds": "60-15_cleaning"},
+    {"name": "ev_accounting", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "vehicle_charge_sessions", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "energy_balance", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "solar_forecast_refresh", "parent": "collector_main_loop", "interval_seconds": 1800},
+    {"name": "forecast_learning_sync", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "energy_control_sync", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "energy_aggregation_rollup", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "snapshot_writer", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "smart_charging_engine", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "virtual_heartbeat_bridge", "parent": "collector_main_loop", "interval_seconds": "30-60"},
+    {"name": "vehicle_integration_supervisor", "interval_seconds": "adaptive_30-300", "file": "energy_core/vehicles/supervisor.py"}
+  ],
+  "api_endpoints": [
+    {"method": "GET", "path": "/health", "module": "main.py"},
+    {"method": "GET", "path": "/api/sites", "module": "sites.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/dashboard", "module": "dashboard.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/snapshot", "module": "snapshot.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/live-stream", "module": "snapshot.py", "type": "sse"},
+    {"method": "GET", "path": "/api/sites/{slug}/readings", "module": "readings.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/financial-stats", "module": "readings.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/market-prices", "module": "prices.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/solar/forecast", "module": "solar_forecast.py", "perf_critical": true},
+    {"method": "GET", "path": "/api/sites/{slug}/price-engine/current", "module": "price_engine.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/energy-strategy/current", "module": "price_engine.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/ev-chargers", "module": "ev_chargers.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/vehicles", "module": "vehicles.py"},
+    {"method": "GET", "path": "/api/sites/{slug}/spa/status", "module": "spa.py"},
+    {"method": "GET", "path": "/api/v1/display/overview/{slug}", "module": "display.py", "auth": "display.read"},
+    {"method": "GET", "path": "/api/v1/widget/status/{site_id}", "module": "widget.py", "auth": "widget.read"},
+    {"method": "GET", "path": "/api/system/performance", "module": "system.py"},
+    {"method": "GET", "path": "/api/system/heartbeat-config", "module": "system.py"},
+    {"method": "GET", "path": "/semp", "module": "semp.py", "prefix": "root"},
+    {"note": "Full list of 158 endpoints documented in analysis agent inventory; sample above covers critical paths"}
+  ],
+  "dashboards": [
+    {"name": "Intelligence Overview", "route": "/sites/[slug]", "poll_seconds": "15-30", "primary_api": "/api/sites/{slug}/dashboard"},
+    {"name": "Energy", "route": "/sites/[slug]/energy", "poll_seconds": 60, "primary_api": "/api/sites/{slug}/dashboard"},
+    {"name": "Solar", "route": "/sites/[slug]/solar", "poll_seconds": 30, "primary_api": "/api/sites/{slug}/solar/forecast"},
+    {"name": "EV Charging", "route": "/sites/[slug]/ev", "poll_seconds": 30, "primary_api": "/api/sites/{slug}/ev-chargers"},
+    {"name": "Economy", "route": "/sites/[slug]/costs", "poll_seconds": "none", "primary_api": "/api/sites/{slug}/financial-stats"},
+    {"name": "Vehicle", "route": "/sites/[slug]/vehicle", "poll_seconds": 30, "primary_api": "/api/sites/{slug}/vehicles"},
+    {"name": "SPA", "route": "/sites/[slug]/spa", "poll_seconds": 30, "primary_api": "/api/sites/{slug}/spa/status"},
+    {"name": "Diagnostics", "route": "/sites/[slug]/diagnostics", "poll_seconds": "mixed", "primary_api": "multiple"},
+    {"name": "Pi Kiosk", "route": "/display/[slug]", "poll_seconds": 4, "primary_api": "/api/v1/display/overview/{slug}"},
+    {"name": "Config", "route": "/config", "poll_seconds": "mount_only", "primary_api": "/api/system/heartbeat-config"},
+    {"name": "Performance Center", "route": "/sites/[slug]/system/performance", "poll_seconds": 10, "primary_api": "/api/system/performance"}
+  ],
+  "performance_findings": [
+    {"id": "P-API-01", "severity": "CRITICAL", "file": "backend/app/api/solar_forecast.py", "problem": "p95 34034ms at 10 concurrent users", "solution": "collector snapshot for forecast GET"},
+    {"id": "P-DB-01", "severity": "HIGH", "file": "packages/energy-core/src/energy_core/db/repositories.py", "problem": "list_financial_stats loads all readings to Python", "solution": "pre-aggregate daily financial stats"},
+    {"id": "P-API-02", "severity": "HIGH", "file": "backend/app/api/snapshot.py", "problem": "SSE polls DB every 1s per client", "solution": "redis pubsub push from collector"},
+    {"id": "P-CACHE-01", "severity": "HIGH", "file": "packages/energy-core/src/energy_core/cache/service.py", "problem": "process-local L1 cache only", "solution": "redis shared cache"},
+    {"id": "P-FE-01", "severity": "HIGH", "file": "frontend/src/lib/api.ts", "problem": "cache no-store on all fetches", "solution": "etag on snapshot endpoints"},
+    {"id": "P-FE-02", "severity": "MEDIUM", "file": "frontend/src/app/sites/[slug]/page.tsx", "problem": "duplicate dashboard polls 15s and 30s", "solution": "single refresh coordinator"},
+    {"id": "P-FE-03", "severity": "MEDIUM", "file": "frontend/src/lib/useEconomyDashboardData.ts", "problem": "no auto refresh", "solution": "add setInterval"},
+    {"id": "P-FE-04", "severity": "MEDIUM", "file": "frontend/src/lib/usePiDashboardData.ts", "problem": "4s poll vs 3s server cache", "solution": "align to 8-10s or use SSE"},
+    {"id": "P-COL-01", "severity": "HIGH", "file": "collector/app/collector.py", "problem": "15 sequential enrichment steps per cycle", "solution": "prioritized sub-loops"},
+    {"id": "P-DB-03", "severity": "MEDIUM", "file": "alembic/versions/002_timescaledb.py", "problem": "no raw data retention policy", "solution": "timescale retention compression"}
+  ],
+  "database_findings": [
+    {"severity": "HIGH", "issue": "unbounded energy_readings growth", "recommendation": "timescale retention 90d raw"},
+    {"severity": "HIGH", "issue": "dual price stores market_prices and price_periods", "recommendation": "unify on price_periods"},
+    {"severity": "MEDIUM", "issue": "financial stats not pre-aggregated", "recommendation": "daily_financial_stats table"},
+    {"severity": "MEDIUM", "issue": "fast growing tables ev_bridge_cycles vehicle_state_history", "recommendation": "retention policies"},
+    {"severity": "LOW", "issue": "legacy nobil tables may be unused", "recommendation": "audit and deprecate"}
+  ],
+  "security_findings": [
+    {"severity": "HIGH", "issue": "open admin API no authentication", "file": "backend/app/main.py"},
+    {"severity": "HIGH", "issue": "apple devices endpoints unauthenticated", "file": "backend/app/api/apple_devices.py"},
+    {"severity": "HIGH", "issue": "vehicle spa charging commands unauthenticated", "file": "backend/app/api/vehicles.py"},
+    {"severity": "MEDIUM", "issue": "no rate limiting on main API", "file": "backend/app/main.py"},
+    {"severity": "MEDIUM", "issue": "semp endpoints open", "file": "backend/app/api/semp.py"},
+    {"severity": "LOW", "issue": "display cookie CSRF risk if misconfigured", "file": "backend/app/display_auth.py"},
+    {"positive": "credentials encrypted with Fernet SecretBox", "file": "packages/energy-core/src/energy_core/secrets.py"},
+    {"positive": "pi token injected by caddy not exposed to chromium", "file": "scripts/pi/kiosk/Caddyfile"}
+  ],
+  "technical_debt": [
+    {"rank": 1, "severity": "CRITICAL", "item": "open admin API", "effort": "M"},
+    {"rank": 2, "severity": "HIGH", "item": "dual price stores", "effort": "M"},
+    {"rank": 3, "severity": "HIGH", "item": "financial stats python integration", "effort": "M"},
+    {"rank": 4, "severity": "HIGH", "item": "solar forecast heavy GET", "effort": "M"},
+    {"rank": 5, "severity": "HIGH", "item": "no timescale retention", "effort": "M"},
+    {"rank": 6, "severity": "HIGH", "item": "process local cache only", "effort": "M"},
+    {"rank": 7, "severity": "HIGH", "item": "fragmented energy model", "effort": "L"},
+    {"rank": 8, "severity": "MEDIUM", "item": "duplicate dashboard polls", "effort": "S"},
+    {"rank": 9, "severity": "MEDIUM", "item": "SSE DB poll 1s", "effort": "M"},
+    {"rank": 10, "severity": "MEDIUM", "item": "collector sequential steps", "effort": "M"}
+  ],
+  "feature_opportunities": [
+    {"rank": 1, "category": "QUICK_WIN", "name": "integration_health_strip", "user_value": "HIGH"},
+    {"rank": 2, "category": "QUICK_WIN", "name": "best_ev_charge_window_card", "user_value": "HIGH"},
+    {"rank": 3, "category": "QUICK_WIN", "name": "economy_auto_refresh", "user_value": "HIGH"},
+    {"rank": 4, "category": "MEDIUM", "name": "battery_opportunity_advisor", "user_value": "HIGH"},
+    {"rank": 5, "category": "MEDIUM", "name": "pi_phase2_display_fields", "user_value": "HIGH"},
+    {"rank": 6, "category": "MEDIUM", "name": "precomputed_daily_economics", "user_value": "HIGH"},
+    {"rank": 7, "category": "MEDIUM", "name": "sse_dashboard_push", "user_value": "MEDIUM"},
+    {"rank": 8, "category": "ADVANCED", "name": "closed_loop_forecast_tuning", "user_value": "HIGH"},
+    {"rank": 9, "category": "ADVANCED", "name": "unified_horizon_optimizer", "user_value": "HIGH"},
+    {"rank": 10, "category": "STRATEGIC", "name": "full_battery_arbitrage_automation", "user_value": "HIGH"}
+  ],
+  "architecture_recommendations": [
+    {"priority": 1, "name": "Unified EnergyStateBuilder", "impact": "HIGH"},
+    {"priority": 2, "name": "Redis shared cache and pubsub", "impact": "HIGH"},
+    {"priority": 3, "name": "Collector task prioritization", "impact": "HIGH"},
+    {"priority": 4, "name": "Precomputed read models", "impact": "HIGH"},
+    {"priority": 5, "name": "Client SSE push model", "impact": "MEDIUM"},
+    {"priority": 6, "name": "Price store unification", "impact": "MEDIUM"},
+    {"priority": 7, "name": "API authentication layer", "impact": "MEDIUM"},
+    {"priority": 8, "name": "Timescale lifecycle policies", "impact": "MEDIUM"},
+    {"priority": 9, "name": "Observability stack prometheus", "impact": "MEDIUM"},
+    {"priority": 10, "name": "Repository split", "impact": "LOW"}
+  ],
+  "unknowns": [
+    "production_host_sizing",
+    "production_concurrent_users",
+    "production_solar_forecast_MAPE",
+    "heartbeat_battery_write_api_capabilities",
+    "emic_exposed_beyond_lan",
+    "multi_collector_deployment",
+    "ebecon_integration",
+    "code_coverage_percentage",
+    "production_sse_usage",
+    "installed_battery_capacity_per_site",
+    "sensibo_planned",
+    "stripe_planned"
+  ],
+  "tests": {
+    "pytest_collected": 1110,
+    "frontend_test_files_approx": 110,
+    "ci": "github_actions_pytest_npm",
+    "coverage_enforced": false
+  },
+  "performance_baseline": {
+    "date": "2026-08-28",
+    "host": "192.168.50.54",
+    "site": "akarp",
+    "dashboard_p95_ms_1user": 154,
+    "dashboard_p95_ms_10users": 231,
+    "solar_forecast_p95_ms_1user": 4110,
+    "solar_forecast_p95_ms_10users": 34034,
+    "source": "docs/performance/REPORT.md"
+  },
+  "documentation": {
+    "analysis_dir": "docs/emic-analysis/",
+    "files_count": 30,
+    "handoff": "docs/emic-analysis/EMIC_AI_HANDOFF.md"
+  }
+}

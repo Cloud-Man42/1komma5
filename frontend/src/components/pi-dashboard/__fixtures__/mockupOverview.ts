@@ -90,6 +90,8 @@ export const MOCKUP_OVERVIEW: DisplayOverview = {
     self_consumption_pct: 87,
     self_sufficiency_pct: 81,
     battery_soh_pct: 100,
+    battery_charged_today_kwh: 7.2,
+    battery_discharged_today_kwh: 2.4,
   },
   sparklines: {
     solar: solarSeries,
@@ -98,7 +100,20 @@ export const MOCKUP_OVERVIEW: DisplayOverview = {
     grid: gridSeries,
   },
   weather: { available: true, temperature_c: 18, label_sv: "Klart", icon: "clear" },
-  price: { available: true, tier: "red", tier_label_sv: "Rött (dyrt)", current_ore_kwh: 200.6 },
+  price: {
+    available: true,
+    tier: "red",
+    tier_label_sv: "Rött (dyrt)",
+    current_ore_kwh: 200.6,
+    lowest_ore_kwh: 42.3,
+    highest_ore_kwh: 215.8,
+  },
+  solar: {
+    available: true,
+    expected_today_kwh: 38.4,
+    remaining_today_kwh: 13.7,
+    forecast_curve: solarSeries.points,
+  },
   flow: {
     available: true,
     nodes: [
@@ -120,6 +135,7 @@ export const MOCKUP_OVERVIEW: DisplayOverview = {
     charging_mode_sv: "Smart laddning",
     ready_by: "2026-08-24T06:00:00Z",
     cost_today_sek: 0,
+    target_soc_pct: 80,
   },
   charger: {
     available: true,
@@ -130,6 +146,7 @@ export const MOCKUP_OVERVIEW: DisplayOverview = {
     smart_charging_active: true,
     ready_by: "2026-08-24T06:00:00Z",
     price_tier_label_sv: "Rött (dyrt)",
+    decision_reason_sv: "Väntar på lägre pris",
   },
   spa: {
     available: true,
@@ -139,6 +156,8 @@ export const MOCKUP_OVERVIEW: DisplayOverview = {
     consumption_today_kwh: 3.2,
     cost_today_sek: 1.28,
     power_w: 600,
+    filter_cycles_completed_today: 2,
+    filter_cycles_target_today: 4,
   },
   economy: {
     available: true,

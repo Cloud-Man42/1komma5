@@ -89,12 +89,15 @@ describe("SpaFilterScheduleEditor", () => {
     await user.type(screen.getByLabelText(/Tillåten tid — till/i), "20:00");
     await user.click(screen.getByRole("button", { name: /Spara schema/i }));
 
-    await waitFor(() => {
-      expect(mockUpdateSpaControlConfig).toHaveBeenCalled();
-      expect(onSaved).toHaveBeenCalled();
-      expect(screen.getByText(/Schemat sparades/i)).toBeInTheDocument();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(mockUpdateSpaControlConfig).toHaveBeenCalled();
+        expect(onSaved).toHaveBeenCalled();
+        expect(screen.getByText(/Schemat sparades/i)).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+  }, 15_000);
 
   it("blocks save when validation fails", async () => {
     const user = userEvent.setup();

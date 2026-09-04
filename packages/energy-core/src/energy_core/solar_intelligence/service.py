@@ -27,8 +27,52 @@ from energy_core.solar_intelligence.physical_model import PvArraySpec
 from energy_core.solar_forecast.intelligence_bridge import persist_intelligence_v2_forecast
 from energy_core.solar_intelligence.provider_factory import SolarIntelligenceProviderFactory
 from energy_core.solar_intelligence.snapshot import local_today
+from energy_core.solar_intelligence.types import ForecastStatus, IntelligenceForecast, RadiationSourceConfidence
 
 logger = logging.getLogger(__name__)
+
+
+async def _load_last_known_good(hourly_repo: SolarHourlyForecastRepository, site_id: int) -> IntelligenceForecast | None:
+    points = await hourly_repo.list_for_site(site_id)
+    if not points:
+        return None
+    from sqlalchemy import desc, select
+    from energy_core.db.models import SolarForecastHourlyModel
+
+    session = hourly_repo._session
+    row = await session.scalar(
+        select(SolarForecastHourlyModel)
+        .where(SolarForecastHourlyModel.site_id == site_id)
+        .order_by(desc(SolarForecastHourlyModel.generated_at))
+        .limit(1)
+    )
+    if row is None:
+        return None
+    generated_at = row.generated_at
+    if generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=UTC)
+    return IntelligenceForecast(
+        site_id=site_id,
+        generated_at=generated_at,
+        model_version=row.engine_version or "solar-intelligence",
+        status=ForecastStatus.HEALTHY,
+        expected_today_kwh=0.0,
+        remaining_today_kwh=0.0,
+        expected_tomorrow_kwh=None,
+        expected_day_after_kwh=None,
+        peak_power_w=max((p.corrected_w for p in points), default=0.0),
+        peak_time=points[0].timestamp if points else None,
+        lower_today_kwh=0.0,
+        upper_today_kwh=0.0,
+        confidence=row.confidence or 0.5,
+        confidence_label="cached",
+        radiation_confidence=RadiationSourceConfidence.MEDIUM,
+        hourly=tuple(points),
+        physical_today_kwh=0.0,
+        learned_correction_pct=0.0,
+        weather_source="last_known_good",
+        last_known_good_at=generated_at,
+    )
 
 
 class SolarIntelligenceCoordinator:
@@ -58,9 +102,16 @@ class SolarIntelligenceCoordinator:
         health_repo = SolarProviderHealthRepository(session)
         model_repo = SolarModelRepository(session)
         champion = await model_repo.get_champion(site.id)
+        hourly_repo = SolarHourlyForecastRepository(session)
+        last_known_good = await _load_last_known_good(hourly_repo, site.id)
 
         try:
-            forecast = await bundle.engine.generate(site=domain, champion=champion, now=now)
+            forecast = await bundle.engine.generate(
+                site=domain,
+                champion=champion,
+                now=now,
+                last_known_good=last_known_good,
+            )
             await health_repo.record_success(site.id, bundle.radiation_name)
             await health_repo.record_success(site.id, bundle.weather_name)
         except Exception as exc:

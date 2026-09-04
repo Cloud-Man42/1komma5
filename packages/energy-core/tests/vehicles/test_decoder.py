@@ -72,6 +72,28 @@ def test_decoder_prefers_display_value_for_chargingstatus():
     assert any(attr.name == "chargingstatus" and attr.value == "Not charging" for attr in mapped.attributes)
 
 
+def test_decoder_prefers_display_soc_when_it_diverges_from_int():
+    decoder = MercedesMessageDecoder()
+    status_msg = vehicle_events_pb2.VehicleStatus()
+    status_msg.vin = "W1KTESTVIN1234567"
+    status_msg.attributes["soc"].int_value = 31
+    status_msg.attributes["soc"].display_value = "37 %"
+    mapped = decoder.decode_vehicle_status(status_msg.SerializeToString())
+    assert mapped is not None
+    assert any(attr.name == ATTRIBUTE_SOC and attr.value == 37.0 for attr in mapped.attributes)
+
+
+def test_decoder_vehicle_status_update_prefers_display_soc():
+    decoder = MercedesMessageDecoder()
+    update = vehicle_events_pb2.VehicleStatusUpdate()
+    update.fin_or_vin = "W1KTESTVIN1234567"
+    update.soc.value = 31
+    update.soc.display_value = "37 %"
+    mapped = decoder.decode_vehicle_status(update.SerializeToString())
+    assert mapped is not None
+    assert any(attr.name == ATTRIBUTE_SOC and attr.value == 37.0 for attr in mapped.attributes)
+
+
 def test_decoder_maps_vehicle_status_update_rest_payload():
     decoder = MercedesMessageDecoder()
     update = vehicle_events_pb2.VehicleStatusUpdate()

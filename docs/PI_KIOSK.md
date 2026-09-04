@@ -8,14 +8,14 @@ Dedicated wall display for Åkarp at `/display/akarp`, served through a local Ca
   `wlan0`, so it answers on two addresses. Replaced the original board, which is
   what fixed the colour fault below.
 - **Pi URL (browser):** `http://127.0.0.1:8080/display/akarp`
-- **EMIC server:** `http://192.168.50.54`
+- **EMIC server:** `https://emic.inacloud.se` (split-horizon DNS to the LAN IP is fine)
 - **API:** `GET /api/v1/display/overview/akarp` (requires `display.read` device token)
 - **Token storage:** `/etc/emic/kiosk.env` (`chmod 600`, never committed)
 
 Caddy on the Pi injects `Authorization: Bearer …` for `/api/*` requests only. Chromium never sees the token, and the route is not public — requesting the API directly without the proxy returns `401`.
 
 ```
-Chromium → 127.0.0.1:8080 (emic-caddy) → 192.168.50.54 (EMIC)
+Chromium → 127.0.0.1:8080 (emic-caddy) → https://emic.inacloud.se (EMIC)
                 ↑ Bearer token on /api/*
 ```
 
@@ -50,10 +50,10 @@ Pi-side config update is required after a frontend deploy.
 Dev preview (mockup data, fixed clock): `/display/preview` and
 `/display/preview/{section}`.
 
-**Phase 2 (not yet in the API):** solar forecast curve, battery
-charge/discharge today, price min/max, charger decision reason, spa filter-cycle
-counts, vehicle target SoC. Detail views show `--` for these until
-`display_service.py` is extended behind `display.read`.
+**Phase 2 (in API since Phase 21):** solar forecast curve, battery
+charge/discharge today, price min/max, charger `decision_reason_sv`, spa
+filter-cycle counts (`completed/target`), vehicle `target_soc_pct`. See
+`GET /api/v1/display/overview/{slug}`.
 
 ## Pi inventory (EMIC-MON, 192.168.0.112)
 
@@ -509,8 +509,10 @@ Ensure `/etc/emic/Caddyfile` contains `admin off` in the global block.
 
 ### Proxy returns 200 with empty body
 
-Add `header_up Host 192.168.50.54` to all `reverse_proxy` blocks in the Caddyfile.
-Without it the upstream sees `Host: 127.0.0.1:8080`.
+Add `header_up Host emic.inacloud.se` to all `reverse_proxy` blocks in the Caddyfile
+(or set `EMIC_SERVER_HOST` in `/etc/emic/display.env`). Without it the upstream
+may see `Host: 127.0.0.1:8080` or the raw LAN IP and Caddy on EMIC won't match
+the HTTPS site block.
 
 ### API returns 401 through proxy
 

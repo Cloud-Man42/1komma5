@@ -35,6 +35,8 @@ export interface DisplayOverview {
     self_consumption_pct: number | null;
     self_sufficiency_pct: number | null;
     battery_soh_pct: number | null;
+    battery_charged_today_kwh: number | null;
+    battery_discharged_today_kwh: number | null;
   };
   sparklines: Record<string, { points: { timestamp: string; value: number }[] }>;
   weather: DisplaySectionMeta & {
@@ -46,6 +48,13 @@ export interface DisplayOverview {
     tier?: string | null;
     tier_label_sv?: string | null;
     current_ore_kwh?: number | null;
+    lowest_ore_kwh?: number | null;
+    highest_ore_kwh?: number | null;
+  };
+  solar: DisplaySectionMeta & {
+    expected_today_kwh?: number | null;
+    remaining_today_kwh?: number | null;
+    forecast_curve?: { timestamp: string; value: number }[];
   };
   flow: DisplaySectionMeta & {
     nodes: { key: string; label_sv: string; power_kw: number | null; status_sv?: string | null }[];
@@ -59,6 +68,7 @@ export interface DisplayOverview {
     charging_mode_sv?: string | null;
     ready_by?: string | null;
     cost_today_sek?: number | null;
+    target_soc_pct?: number | null;
   };
   charger: DisplaySectionMeta & {
     name?: string | null;
@@ -68,6 +78,7 @@ export interface DisplayOverview {
     smart_charging_active?: boolean | null;
     ready_by?: string | null;
     price_tier_label_sv?: string | null;
+    decision_reason_sv?: string | null;
   };
   spa: DisplaySectionMeta & {
     water_temperature_c?: number | null;
@@ -76,6 +87,8 @@ export interface DisplayOverview {
     consumption_today_kwh?: number | null;
     cost_today_sek?: number | null;
     power_w?: number | null;
+    filter_cycles_completed_today?: number | null;
+    filter_cycles_target_today?: number | null;
   };
   economy: DisplaySectionMeta & {
     total_savings_sek?: number | null;
@@ -111,4 +124,8 @@ export async function fetchDisplayOverview(slug: string): Promise<DisplayOvervie
     throw new Error(`Display overview failed: ${response.status}`);
   }
   return response.json() as Promise<DisplayOverview>;
+}
+
+export function buildDisplayOverviewStreamUrl(slug: string): string {
+  return `/api/v1/display/overview/${slug}/stream`;
 }

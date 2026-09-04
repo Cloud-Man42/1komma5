@@ -53,6 +53,10 @@ def merge_csi_fields(
         merged["station_name"] = existing.station_name
     if not merged.get("charger_operator") and existing.charger_operator:
         merged["charger_operator"] = existing.charger_operator
+    existing_price_model = getattr(existing, "price_model", None)
+    if merged.get("price_model") in {None, "UNKNOWN"} and existing_price_model not in {None, "UNKNOWN"}:
+        merged["price_model"] = existing_price_model
+        merged["price_value_sek_kwh"] = getattr(existing, "price_value_sek_kwh", None)
     if not merged.get("station_provider") and existing.station_provider:
         merged["station_provider"] = existing.station_provider
     if not merged.get("station_provider_id") and existing.station_provider_id:
@@ -88,6 +92,9 @@ def apply_station_resolution_to_csi(
         updated["charger_operator"] = station_resolution.operator_name
     if station_resolution.charging_type:
         updated["charging_type"] = station_resolution.charging_type
+    if station_resolution.price_model not in {None, "UNKNOWN"}:
+        updated["price_model"] = station_resolution.price_model
+        updated["price_value_sek_kwh"] = station_resolution.price_value_sek_kwh
     if station_resolution.connector_type:
         updated["connector_type"] = station_resolution.connector_type
     if station_resolution.confidence is not None:

@@ -1,0 +1,156 @@
+﻿[
+    {
+        "Route":  "/api/sites/akarp/snapshot",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  166.3,
+        "P95Ms":  166.3
+    },
+    {
+        "Route":  "/api/sites/akarp/snapshot",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  246.4,
+        "P95Ms":  307.6
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  138.2,
+        "P95Ms":  138.2
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  138.8,
+        "P95Ms":  157.4
+    },
+    {
+        "Route":  "/api/sites/akarp/readings?bucket=5\u0026hours=24",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  229.2,
+        "P95Ms":  229.2
+    },
+    {
+        "Route":  "/api/sites/akarp/readings?bucket=5\u0026hours=24",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  291.4,
+        "P95Ms":  436.4
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  178.5,
+        "P95Ms":  178.5
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  243.4,
+        "P95Ms":  329
+    },
+    {
+        "Route":  "/api/sites/akarp/price-engine/current",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  176.5,
+        "P95Ms":  176.5
+    },
+    {
+        "Route":  "/api/sites/akarp/price-engine/current",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  372.4,
+        "P95Ms":  623.2
+    },
+    {
+        "Route":  "/api/sites/akarp/battery-opportunity",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  202.1,
+        "P95Ms":  202.1
+    },
+    {
+        "Route":  "/api/sites/akarp/battery-opportunity",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  271.9,
+        "P95Ms":  358.4
+    },
+    {
+        "Route":  "/api/sites/akarp/horizon-optimizer",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  1127.8,
+        "P95Ms":  1127.8
+    },
+    {
+        "Route":  "/api/sites/akarp/horizon-optimizer",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  4657,
+        "P95Ms":  6245.7
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=day",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  193.2,
+        "P95Ms":  193.2
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=day",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  231.3,
+        "P95Ms":  256
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=month",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  165.8,
+        "P95Ms":  165.8
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=month",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  246.6,
+        "P95Ms":  289.9
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=year",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  205.3,
+        "P95Ms":  205.3
+    },
+    {
+        "Route":  "/api/sites/akarp/financial-stats?period=year",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  235.4,
+        "P95Ms":  253.4
+    },
+    {
+        "Route":  "/api/sites",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  207.2,
+        "P95Ms":  207.2
+    },
+    {
+        "Route":  "/api/sites",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  265.6,
+        "P95Ms":  311.9
+    }
+]

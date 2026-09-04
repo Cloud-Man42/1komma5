@@ -7,6 +7,8 @@ import logging
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.deps import get_db_session
 from app.schemas import (
     SpaConfigResponse,
@@ -69,7 +71,7 @@ from energy_core.spa_energy.filter_policy import SpaFilterPolicy
 from energy_core.spa_energy.service import SmartSpaEnergyService
 from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration, mask_api_key
 from energy_core.integrations.arctic_spa.service import ArcticSpaService
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["spa"])
@@ -581,7 +583,9 @@ async def get_spa_config(slug: str, session: AsyncSession = Depends(get_db_sessi
 async def update_spa_config(
     slug: str,
     payload: SpaConfigUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> SpaConfigResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     repo = ConsumerRepository(session)
@@ -595,6 +599,15 @@ async def update_spa_config(
         energy_collection_enabled=payload.energy_collection_enabled,
         cost_calculation_enabled=payload.cost_calculation_enabled,
     )
+    await audit_admin_mutation(
+        request,
+        session,
+        action="spa.config.update",
+        site_slug=slug,
+        resource_type="spa",
+        resource_id=str(consumer.id),
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     return await get_spa_config(slug, session)
 
@@ -602,7 +615,9 @@ async def update_spa_config(
 @router.post("/sites/{slug}/spa/test-connection", response_model=SpaConnectionTestResponse)
 async def test_spa_connection(
     slug: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> SpaConnectionTestResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     repo = ConsumerRepository(session)
@@ -617,6 +632,16 @@ async def test_spa_connection(
         db_profiles_json=config.power_profiles_json,
     )
     result = await ArcticSpaService(cfg).test_connection()
+    await audit_admin_mutation(
+        request,
+        session,
+        action="spa.test_connection",
+        site_slug=slug,
+        resource_type="spa",
+        resource_id=str(consumer.id),
+        summary={"success": result.success, "spa_online": result.spa_online},
+    )
+    await session.commit()
     return SpaConnectionTestResponse(
         success=result.success,
         spa_found=result.spa_found,
@@ -676,7 +701,9 @@ async def get_spa_control_config(slug: str, session: AsyncSession = Depends(get_
 async def update_spa_control_config(
     slug: str,
     payload: SpaControlConfigUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> SpaControlConfigResponse:
     _site, consumer, _config = await _get_spa_context(session, slug)
     if payload.strategy is not None and payload.strategy not in VALID_STRATEGIES:
@@ -721,6 +748,15 @@ async def update_spa_control_config(
     policy = SpaFilterPolicy.from_control(updated)
     synced = policy.sync_legacy_control_fields()
     updated = await repo.update(consumer.id, **synced)
+    await audit_admin_mutation(
+        request,
+        session,
+        action="spa.control.update",
+        site_slug=slug,
+        resource_type="spa_control",
+        resource_id=str(consumer.id),
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     if updated is None:
         raise HTTPException(status_code=404, detail="Spa control config not found")
@@ -1031,7 +1067,12 @@ async def get_spa_shadow(slug: str, session: AsyncSession = Depends(get_db_sessi
 
 
 @router.post("/sites/{slug}/spa/cleaning/run-now", response_model=SpaRunCleaningResponse)
-async def run_spa_cleaning_now(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaRunCleaningResponse:
+async def run_spa_cleaning_now(
+    slug: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
+) -> SpaRunCleaningResponse:
     _site, consumer, _config = await _get_spa_context(session, slug)
     control_repo = SpaControlConfigRepository(session)
     control = await control_repo.get_or_create(consumer.id)
@@ -1039,6 +1080,15 @@ async def run_spa_cleaning_now(slug: str, session: AsyncSession = Depends(get_db
         raise HTTPException(status_code=422, detail="Smartstyrning är inte aktiverad")
     service = SmartSpaEnergyService(get_settings())
     decision = await service.run_cleaning_now(session, slug)
+    await audit_admin_mutation(
+        request,
+        session,
+        action="spa.cleaning.run_now",
+        site_slug=slug,
+        resource_type="spa",
+        resource_id=str(consumer.id),
+        summary={"dry_run": control.dry_run, "shadow_mode": control.shadow_mode},
+    )
     await session.commit()
     if decision is None:
         raise HTTPException(status_code=404, detail="Spa hittades inte")

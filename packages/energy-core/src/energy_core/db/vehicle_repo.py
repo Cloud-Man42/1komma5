@@ -22,6 +22,8 @@ from energy_core.db.models import (
 from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleCapabilities, VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
+from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.vehicles.mercedes.soc_estimation import apply_range_based_soc_correction
 from energy_core.vehicles.mercedes.telemetry_plausibility import has_plausible_vehicle_telemetry
 from energy_core.vehicles.diagnostics.events import (
     IntegrationEventDraft,
@@ -31,6 +33,13 @@ from energy_core.vehicles.diagnostics.events import (
 )
 
 HISTORY_MIN_INTERVAL = timedelta(minutes=5)
+
+
+def _utc_age_seconds(timestamp: datetime | None, *, now: datetime) -> float | None:
+    if timestamp is None:
+        return None
+    ts = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=UTC)
+    return max(0.0, (now - ts).total_seconds())
 
 _TELEMETRY_FIELDS = (
     "state_of_charge_percent",
@@ -79,6 +88,13 @@ def _merge_last_known_good(
         merged["is_plugged_in"] = False
     if incoming.get("is_charging") is False and (incoming.get("charging_power_kw") or 0) > 0:
         merged["charging_power_kw"] = 0.0
+    now = datetime.now(UTC)
+    ch_ts = merged.get("charging_updated_at") or (getattr(latest, "charging_updated_at", None) if latest else None)
+    ch_age = _utc_age_seconds(ch_ts, now=now)
+    if ch_age is not None and ch_age > STALE_TELEMETRY_SECONDS and incoming.get("is_charging") is not True:
+        merged["charging_power_kw"] = 0.0 if incoming.get("is_charging") is False else None
+    if incoming.get("is_plugged_in") is True and incoming.get("is_charging") is None:
+        merged["is_charging"] = None
     return merged
 
 
@@ -434,8 +450,39 @@ class VehicleRepository:
         now = datetime.now(UTC)
         latest = await self.get_latest_state(vehicle_id)
         prior_soc = latest.state_of_charge_percent if latest else None
+        prior_range = latest.electric_range_km if latest else None
         incoming_had_soc = state.state_of_charge_percent is not None
         events: list[IntegrationEventDraft] = []
+
+        corrected = apply_range_based_soc_correction(
+            state,
+            prior_soc=prior_soc,
+            prior_range_km=prior_range,
+        )
+        if (
+            corrected.state_of_charge_percent is not None
+            and prior_soc is not None
+            and corrected.state_of_charge_percent != prior_soc
+            and state.state_of_charge_percent == prior_soc
+        ):
+            events.append(
+                IntegrationEventDraft(
+                    event_type=IntegrationEventType.SOC_ESTIMATED_FROM_RANGE,
+                    severity=IntegrationEventSeverity.INFO,
+                    message=(
+                        f"SoC estimated from range: {prior_soc}% → {corrected.state_of_charge_percent}% "
+                        f"(range {prior_range} → {corrected.electric_range_km} km)"
+                    ),
+                    details={
+                        "prior_soc": prior_soc,
+                        "estimated_soc": corrected.state_of_charge_percent,
+                        "prior_range_km": prior_range,
+                        "new_range_km": corrected.electric_range_km,
+                    },
+                )
+            )
+            state = corrected
+
         incoming = {
             "state_of_charge_percent": state.state_of_charge_percent,
             "target_soc_percent": state.target_soc_percent,
@@ -454,9 +501,16 @@ class VehicleRepository:
             "last_provider_update": state.last_provider_update,
             "updated_at": now,
         }
+        if state.is_charging is False:
+            incoming["charging_power_kw"] = 0.0
         if state.state_of_charge_percent is not None:
             prior_soc = latest.state_of_charge_percent if latest else None
-            if prior_soc is None or prior_soc != state.state_of_charge_percent:
+            vehicle_age = _utc_age_seconds(state.last_vehicle_update, now=now)
+            if (
+                prior_soc is None
+                or prior_soc != state.state_of_charge_percent
+                or (vehicle_age is not None and vehicle_age <= STALE_TELEMETRY_SECONDS)
+            ):
                 incoming["soc_updated_at"] = now
         if (
             state.charging_power_kw is not None
@@ -495,11 +549,34 @@ class VehicleRepository:
                     details={"prior_soc": prior_soc, "new_soc": merged_soc},
                 )
             )
+        elif incoming_had_soc and merged_soc is not None and prior_soc is not None and merged_soc == prior_soc:
+            soc_ts = getattr(latest, "soc_updated_at", None) if latest else None
+            soc_age = _utc_age_seconds(soc_ts, now=now)
+            range_changed = (
+                state.electric_range_km is not None
+                and prior_range is not None
+                and state.electric_range_km != prior_range
+            )
+            if soc_age is not None and soc_age > 120 and not range_changed:
+                events.append(
+                    IntegrationEventDraft(
+                        event_type=IntegrationEventType.SOC_STALE_AT_SOURCE,
+                        severity=IntegrationEventSeverity.WARN,
+                        message=(
+                            f"Mercedes returned unchanged stale SoC {merged_soc}% "
+                            f"({int(soc_age)}s old); REST/widget data likely stale at source"
+                        ),
+                        details={
+                            "soc": merged_soc,
+                            "soc_age_seconds": round(soc_age, 1),
+                            "incoming_range_km": state.electric_range_km,
+                            "prior_range_km": prior_range,
+                        },
+                    )
+                )
         elif not incoming_had_soc and prior_soc is not None and merged_soc == prior_soc:
             soc_ts = getattr(latest, "soc_updated_at", None) if latest else None
-            soc_age = None
-            if soc_ts is not None:
-                soc_age = max(0.0, (now - soc_ts).total_seconds())
+            soc_age = _utc_age_seconds(soc_ts, now=now)
             if soc_age is None or soc_age > 120:
                 events.append(
                     IntegrationEventDraft(

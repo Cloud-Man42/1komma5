@@ -1,0 +1,42 @@
+﻿[
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  207.4,
+        "P95Ms":  207.4,
+        "Skipped":  false
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  5,
+        "Ok":  5,
+        "AvgMs":  263.1,
+        "P95Ms":  306.2,
+        "Skipped":  false
+    },
+    {
+        "Route":  "/api/v1/display/overview/akarp",
+        "Users":  1,
+        "Ok":  null,
+        "AvgMs":  1144.8,
+        "P95Ms":  1144.8,
+        "Skipped":  false
+    },
+    {
+        "Route":  "/api/v1/display/overview/akarp",
+        "Users":  5,
+        "Ok":  5,
+        "AvgMs":  211.5,
+        "P95Ms":  240,
+        "Skipped":  false
+    },
+    {
+        "Route":  "/api/v1/display/overview/akarp/stream",
+        "Users":  1,
+        "Ok":  0,
+        "AvgMs":  null,
+        "P95Ms":  null,
+        "Skipped":  false
+    }
+]

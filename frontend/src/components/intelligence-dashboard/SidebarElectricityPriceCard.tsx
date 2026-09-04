@@ -12,15 +12,32 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { MarketPricesResponse } from "@/lib/api";
+import type { EnergyStrategyCurrent, PricePeriodSnapshot } from "@/lib/api";
 import {
-  buildSidebarElectricityPriceModel,
+  buildSidebarElectricityPriceModelFromImportPeriods,
   enrichPointsWithSegments,
   lineColorForOre,
 } from "@/lib/sidebarElectricityPrice";
+import { toOrePerKwh } from "@/lib/prices";
 
-export function SidebarElectricityPriceCard({ prices }: { prices: MarketPricesResponse | null }) {
-  const model = useMemo(() => buildSidebarElectricityPriceModel(prices), [prices]);
+function formatTripleOre(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return `${Math.round(toOrePerKwh(value))} öre`;
+}
+
+export function SidebarElectricityPriceCard({
+  periods,
+  timezone,
+  strategy,
+}: {
+  periods: PricePeriodSnapshot[] | null;
+  timezone: string;
+  strategy?: EnergyStrategyCurrent | null;
+}) {
+  const model = useMemo(
+    () => (periods ? buildSidebarElectricityPriceModelFromImportPeriods(periods, timezone) : null),
+    [periods, timezone],
+  );
   const chartData = useMemo(
     () => (model ? enrichPointsWithSegments(model.points) : []),
     [model],
@@ -30,7 +47,10 @@ export function SidebarElectricityPriceCard({ prices }: { prices: MarketPricesRe
     return (
       <section className="idash-elprice-card" data-testid="sidebar-elprice-card">
         <header className="idash-elprice-header">
-          <h2>ELPRIS IDAG</h2>
+          <div>
+            <h2>ELPRIS IDAG</h2>
+            <p className="idash-elprice-subtitle">Faktiskt köp · 1komma5</p>
+          </div>
           <span className="idash-elprice-live">
             <span className="idash-elprice-live-dot" aria-hidden="true" />
             LIVE
@@ -48,7 +68,10 @@ export function SidebarElectricityPriceCard({ prices }: { prices: MarketPricesRe
   return (
     <section className="idash-elprice-card" data-testid="sidebar-elprice-card">
       <header className="idash-elprice-header">
-        <h2>ELPRIS IDAG</h2>
+        <div>
+          <h2>ELPRIS IDAG</h2>
+          <p className="idash-elprice-subtitle">Faktiskt köp · 1komma5</p>
+        </div>
         <span className="idash-elprice-live">
           <span className="idash-elprice-live-dot" aria-hidden="true" />
           LIVE
@@ -163,6 +186,23 @@ export function SidebarElectricityPriceCard({ prices }: { prices: MarketPricesRe
               model.trend.text
             )}
           </span>
+        </div>
+      ) : null}
+
+      {strategy ? (
+        <div className="idash-elprice-triple" data-testid="sidebar-elprice-triple">
+          <div>
+            <span>Nord Pool</span>
+            <strong>{formatTripleOre(strategy.market_price_sek_kwh)}</strong>
+          </div>
+          <div>
+            <span>Köp</span>
+            <strong>{formatTripleOre(strategy.import_price_sek_kwh)}</strong>
+          </div>
+          <div>
+            <span>Sälj</span>
+            <strong>{formatTripleOre(strategy.export_price_sek_kwh)}</strong>
+          </div>
         </div>
       ) : null}
     </section>

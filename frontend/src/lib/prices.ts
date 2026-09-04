@@ -1,10 +1,92 @@
-/** Convert Heartbeat price (kr/kWh) to öre/kWh for display. */
-export function toOrePerKwh(pricePerKwh: number): number {
-  return pricePerKwh * 100;
+/** Match backend EUR_TO_SEK_RATE default. */
+export const DEFAULT_EUR_TO_SEK_RATE = 11;
+
+/** Values above this in legacy Heartbeat DB *_eur_kwh columns were stored as SEK/kWh. */
+export const LEGACY_SEK_IN_EUR_COLUMN_THRESHOLD = 0.25;
+
+/** Convert SEK/kWh to öre/kWh. */
+export function toOrePerKwh(sekKwh: number): number {
+  return sekKwh * 100;
 }
 
-export function formatOrePerKwh(pricePerKwh: number): string {
-  return `${toOrePerKwh(pricePerKwh).toFixed(1)} öre/kWh`;
+/** Convert öre/kWh display value from SEK/kWh. */
+export function sekKwhToOre(sekKwh: number): number {
+  return Math.round(toOrePerKwh(sekKwh));
+}
+
+/** Price-engine API values from sek_to_eur() — always multiply back to SEK. */
+export function priceEngineEurToSekKwh(
+  priceEur: number,
+  eurToSek = DEFAULT_EUR_TO_SEK_RATE,
+): number {
+  return priceEur * eurToSek;
+}
+
+/** Legacy Heartbeat rows stored as SEK in *_eur_kwh columns (pre-migration). */
+export function legacyMarketEurToSekKwh(pricePerKwh: number): number {
+  if (pricePerKwh > LEGACY_SEK_IN_EUR_COLUMN_THRESHOLD) {
+    return pricePerKwh;
+  }
+  return priceEngineEurToSekKwh(pricePerKwh);
+}
+
+export interface MarketPricePointLike {
+  spot_eur_kwh: number;
+  all_in_eur_kwh?: number | null;
+  spot_sek_kwh?: number | null;
+  import_sek_kwh?: number | null;
+}
+
+export function marketPointSpotSek(point: MarketPricePointLike): number | null {
+  if (point.spot_sek_kwh != null) {
+    return point.spot_sek_kwh;
+  }
+  if (!Number.isFinite(point.spot_eur_kwh)) {
+    return null;
+  }
+  return legacyMarketEurToSekKwh(point.spot_eur_kwh);
+}
+
+export function marketPointImportSek(point: MarketPricePointLike): number | null {
+  if (point.import_sek_kwh != null) {
+    return point.import_sek_kwh;
+  }
+  if (point.all_in_eur_kwh != null) {
+    return legacyMarketEurToSekKwh(point.all_in_eur_kwh);
+  }
+  return marketPointSpotSek(point);
+}
+
+export function marketPointSpotOre(point: MarketPricePointLike): number | null {
+  const sek = marketPointSpotSek(point);
+  return sek == null ? null : sekKwhToOre(sek);
+}
+
+export function marketPointImportOre(point: MarketPricePointLike): number | null {
+  const sek = marketPointImportSek(point);
+  return sek == null ? null : sekKwhToOre(sek);
+}
+
+/** @deprecated Prefer marketPointSpotOre / marketPointImportOre with SEK fields from API. */
+export function marketApiPriceToSekKwh(
+  pricePerKwh: number,
+  eurToSek = DEFAULT_EUR_TO_SEK_RATE,
+): number {
+  return legacyMarketEurToSekKwh(pricePerKwh);
+}
+
+/** @deprecated Prefer marketPointSpotOre / marketPointImportOre with SEK fields from API. */
+export function marketApiPriceToOre(pricePerKwh: number): number {
+  return sekKwhToOre(marketApiPriceToSekKwh(pricePerKwh));
+}
+
+export function formatOrePerKwh(sekKwh: number): string {
+  return `${toOrePerKwh(sekKwh).toFixed(1)} öre/kWh`;
+}
+
+export function formatMarketPointImportOrePerKwh(point: MarketPricePointLike): string {
+  const ore = marketPointImportOre(point);
+  return ore == null ? "—" : `${ore.toFixed(1)} öre/kWh`;
 }
 
 /** Format SEK amount as "X kr Y öre" (Swedish). */

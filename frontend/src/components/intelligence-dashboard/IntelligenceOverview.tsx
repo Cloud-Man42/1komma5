@@ -3,7 +3,14 @@
 import { AlertBannerList, ErrorState, Skeleton } from "@/components/dashboard";
 import type { SiteDashboard } from "@/lib/api";
 import { BestSolarWindowPanel, computeBestSolarWindow } from "./BestSolarWindow";
+import { BestChargeWindowCard } from "./BestChargeWindowCard";
 import { ConfidencePanel } from "./ConfidencePanel";
+import { ForecastLearningCard } from "./ForecastLearningCard";
+import { ForecastLearningRecentCard } from "./ForecastLearningRecentCard";
+import { EnergyControlTimelineCard } from "./EnergyControlTimelineCard";
+import { PeakProtectionCard } from "./PeakProtectionCard";
+import { SolarAccuracySummaryCard } from "./SolarAccuracySummaryCard";
+import { ForecastLearningLoopCard } from "./ForecastLearningLoopCard";
 import { VehicleChargingWidget } from "@/components/dashboard/VehicleChargingWidget";
 import {
   confidenceTierSv,
@@ -11,6 +18,9 @@ import {
   shouldShowModelCalibration,
 } from "./confidenceLabels";
 import { EnergyFlowStrip } from "./EnergyFlowStrip";
+import { EnergyStrategyCard } from "./EnergyStrategyCard";
+import { BatteryOpportunityPanel } from "./BatteryOpportunityPanel";
+import { HorizonOptimizerPanel } from "./HorizonOptimizerPanel";
 import { LiveGaugeCards } from "./LiveGaugeCards";
 import { buildPerformanceMetrics, PerformancePanel } from "./PerformancePanel";
 import { ProductionForecastPanel } from "./ProductionForecastPanel";
@@ -22,6 +32,7 @@ import {
   extractSparklines,
   useOverviewExtraData,
 } from "./useOverviewData";
+import { IntegrationHealthStrip } from "@/components/IntegrationHealthStrip";
 
 export function IntelligenceOverview({
   slug,
@@ -65,6 +76,10 @@ export function IntelligenceOverview({
         </div>
       </header>
 
+      <IntegrationHealthStrip siteSlug={slug} />
+
+      <PeakProtectionCard dashboard={dashboard} />
+
       <AlertBannerList alerts={dashboard.alerts.map((a) => a.message_sv)} />
 
       {!reading ? (
@@ -82,6 +97,10 @@ export function IntelligenceOverview({
 
           <div className="idash-overview-grid">
             <div className="idash-overview-main">
+              <EnergyStrategyCard slug={slug} timezone={dashboard.site.timezone} />
+              <BatteryOpportunityPanel slug={slug} />
+              <HorizonOptimizerPanel slug={slug} />
+              <EnergyControlTimelineCard slug={slug} timezone={dashboard.site.timezone} />
               <EnergyFlowStrip reading={reading} />
               <TodayStatsGrid today={dashboard.today} />
               {extra.loading ? (
@@ -107,6 +126,9 @@ export function IntelligenceOverview({
               )}
               <BestSolarWindowPanel window={solarWindow} />
               {dashboard.vehicle_integration_enabled ? (
+                <BestChargeWindowCard slug={slug} timezone={dashboard.site.timezone} />
+              ) : null}
+              {dashboard.vehicle_integration_enabled ? (
                 <VehicleChargingWidget vehicle={dashboard.vehicle} />
               ) : null}
               <ConfidencePanel
@@ -118,6 +140,10 @@ export function IntelligenceOverview({
                   showModelCalibration ? extra.forecast?.historical_samples : undefined
                 }
               />
+              <ForecastLearningCard slug={slug} />
+              <ForecastLearningRecentCard slug={slug} timezone={dashboard.site.timezone} />
+              <SolarAccuracySummaryCard slug={slug} />
+              <ForecastLearningLoopCard slug={slug} />
             </div>
           </div>
         </>

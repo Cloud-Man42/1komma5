@@ -1,66 +1,20 @@
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
+from energy_core.db.models import PricePeriodModel
 from energy_core.db.repositories import SiteRepository
-
-
-def _v4_market_payload() -> dict:
-    now = datetime(2026, 8, 21, 8, tzinfo=UTC)
-    timestamps = [
-        now.isoformat().replace("+00:00", "Z"),
-        (now + timedelta(hours=1)).isoformat().replace("+00:00", "Z"),
-    ]
-    spot = [0.11, 0.13]
-    all_in = [0.14, 0.16]
-
-    def _price_node(amount: float) -> dict:
-        return {"price": {"amount": amount}}
-
-    timeseries = {
-        ts: {
-            "marketPrice": s,
-            "marketPriceWithGridCostAndVat": a,
-        }
-        for ts, s, a in zip(timestamps, spot, all_in, strict=True)
-    }
-    return {
-        "energyMarket": {
-            "averagePrice": _price_node(sum(spot) / len(spot)),
-            "highestPrice": _price_node(max(spot)),
-            "lowestPrice": _price_node(min(spot)),
-        },
-        "energyMarketWithGridCosts": {
-            "averagePrice": _price_node(sum(all_in) / len(all_in)),
-            "highestPrice": _price_node(max(all_in)),
-            "lowestPrice": _price_node(min(all_in)),
-        },
-        "energyMarketWithGridCostsAndVat": {
-            "averagePrice": _price_node(sum(all_in) / len(all_in)),
-            "highestPrice": _price_node(max(all_in)),
-            "lowestPrice": _price_node(min(all_in)),
-        },
-        "timeseries": timeseries,
-        "gridCostsTotal": _price_node(0.02),
-        "vat": 0.25,
-        "usesFallbackGridCosts": False,
-        "gridCostsComponents": {},
-    }
+from energy_core.price_engine.periods import current_period_start
+from energy_core.price_engine.types import PriceArea
 
 
 @pytest.mark.asyncio
-async def test_market_prices_requires_heartbeat(client):
-    ac, session_factory, _ = client
-    async with session_factory() as session:
-        repo = SiteRepository(session)
-        site = await repo.get_by_slug("akarp")
-        assert site is not None
-        site.external_system_id = "00000000-0000-0000-0000-000000000001"
-        await session.commit()
-
+async def test_market_prices_empty_when_no_cached_data(client):
+    ac, _, _ = client
     res = await ac.get("/api/sites/akarp/market-prices")
-    assert res.status_code == 503
+    assert res.status_code == 200
+    body = res.json()
+    assert body["points"] == []
+    assert body["current_price_eur_kwh"] is None
 
 
 @pytest.mark.asyncio
@@ -71,37 +25,58 @@ async def test_market_prices_404(client):
 
 
 @pytest.mark.asyncio
-async def test_market_prices_missing_system_id(client):
-    ac, session_factory, _ = client
-    async with session_factory() as session:
-        site = await SiteRepository(session).get_by_slug("summer-house-denmark")
-        assert site is not None
-        site.external_system_id = None
-        await session.commit()
-
-    res = await ac.get("/api/sites/summer-house-denmark/market-prices")
-    assert res.status_code == 400
-
-
-@pytest.mark.asyncio
-async def test_market_prices_success(client, monkeypatch):
+async def test_market_prices_success_from_price_engine(client):
     ac, session_factory, _ = client
     async with session_factory() as session:
         site = await SiteRepository(session).get_by_slug("akarp")
         assert site is not None
-        site.external_system_id = "00000000-0000-0000-0000-000000000001"
+        start = current_period_start(timezone=site.timezone)
+        session.add(
+            PricePeriodModel(
+                site_id=site.id,
+                period_start=start,
+                period_end=start + timedelta(minutes=15),
+                price_area=PriceArea.SE4.value,
+                currency="SEK",
+                market_price_sek_kwh=1.10,
+                import_price_sek_kwh=1.40,
+                export_price_sek_kwh=0.39,
+                source="heartbeat",
+                quality="REAL",
+                is_estimated=False,
+            )
+        )
+        session.add(
+            PricePeriodModel(
+                site_id=site.id,
+                period_start=start + timedelta(hours=1),
+                period_end=start + timedelta(hours=1, minutes=15),
+                price_area=PriceArea.SE4.value,
+                currency="SEK",
+                market_price_sek_kwh=1.30,
+                import_price_sek_kwh=1.60,
+                export_price_sek_kwh=0.39,
+                source="heartbeat",
+                quality="REAL",
+                is_estimated=False,
+            )
+        )
         await session.commit()
 
-    mock_client = SimpleNamespace(
-        fetch_market_prices=AsyncMock(return_value=_v4_market_payload()),
+    now = datetime.now(UTC)
+    res = await ac.get(
+        "/api/sites/akarp/market-prices",
+        params={
+            "from": (now - timedelta(hours=2)).isoformat(),
+            "to": (now + timedelta(hours=2)).isoformat(),
+        },
     )
-    monkeypatch.setattr(
-        "app.api.prices.create_heartbeat_client",
-        AsyncMock(return_value=mock_client),
-    )
-
-    res = await ac.get("/api/sites/akarp/market-prices")
     assert res.status_code == 200
     body = res.json()
     assert body["current_price_eur_kwh"] is not None
     assert len(body["points"]) >= 1
+    first = body["points"][0]
+    assert first["spot_sek_kwh"] == pytest.approx(1.10, abs=0.01)
+    assert first["import_sek_kwh"] == pytest.approx(1.40, abs=0.01)
+    assert body["current_import_sek_kwh"] is not None
+    assert body["current_import_sek_kwh"] >= body["current_spot_sek_kwh"]

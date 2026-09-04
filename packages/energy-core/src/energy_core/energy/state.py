@@ -11,6 +11,8 @@ class EnergyState:
     timestamp: datetime
     electricity_price_eur_kwh: float | None = None
     price_forecast: tuple[tuple[datetime, float], ...] = ()
+    import_price_sek_kwh: float | None = None
+    import_price_forecast: tuple[tuple[datetime, float], ...] = ()
     pv_power_w: float | None = None
     grid_power_w: float | None = None
     grid_import_w: float | None = None

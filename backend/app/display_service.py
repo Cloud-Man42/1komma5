@@ -12,6 +12,7 @@ from app.api.dashboard import (
     STALE_SECONDS,
     _compute_ev,
     _compute_price,
+    _compute_solar,
     _compute_today,
 )
 from app.schemas_display import (
@@ -27,6 +28,7 @@ from app.schemas_display import (
     DisplayOverviewResponse,
     DisplayPriceSection,
     DisplaySiteSection,
+    DisplaySolarSection,
     DisplaySparklinePoint,
     DisplaySparklineSeries,
     DisplaySpaSection,
@@ -34,6 +36,7 @@ from app.schemas_display import (
     DisplayVehicleSection,
     DisplayWeatherSection,
 )
+from energy_core.charging.display_status import display_status_sv
 from energy_core.config import Settings
 from energy_core.db.consumer_repo import ConsumerRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
@@ -84,6 +87,34 @@ def _ore_from_eur(eur_kwh: float | None) -> float | None:
     if eur_kwh is None:
         return None
     return round(eur_kwh * 100, 1)
+
+
+async def _solar_section(session: AsyncSession, site, settings: Settings) -> DisplaySolarSection:
+    section = await _compute_solar(session, site)
+    if section.unavailable_reason:
+        return DisplaySolarSection(available=False, unavailable_reason=section.unavailable_reason)
+
+    from energy_core.db.solar_forecast_repo import SolarForecastRepository
+    from energy_core.solar_forecast.day_metrics import today_forecast_points
+
+    forecast_repo = SolarForecastRepository(session)
+    forecast = await forecast_repo.get_latest(site.id)
+    curve: list[DisplaySparklinePoint] = []
+    if forecast is not None:
+        for point in today_forecast_points(forecast.points, timezone=site.timezone):
+            curve.append(
+                DisplaySparklinePoint(
+                    timestamp=point.timestamp,
+                    value=round(point.corrected_power_w / 1000, 3),
+                )
+            )
+
+    return DisplaySolarSection(
+        available=True,
+        expected_today_kwh=section.expected_today_kwh,
+        remaining_today_kwh=section.remaining_kwh,
+        forecast_curve=curve,
+    )
 
 
 async def _sparklines_for_today(
@@ -253,6 +284,21 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
             breakdown={},
         ) else (filter_status_sv(filter_status) or "Data saknas")
 
+        filter_cycles_target = None
+        filter_cycles_completed = None
+        try:
+            from energy_core.db.spa_actuator_repo import SpaActuatorStateRepository
+            from energy_core.db.spa_control_repo import SpaControlConfigRepository
+
+            control = await SpaControlConfigRepository(session).get(consumer.id)
+            if control is not None:
+                filter_cycles_target = control.filter_cycles_per_day
+            runtime = await SpaActuatorStateRepository(session).get_or_create(consumer.id)
+            if runtime.starts_day == datetime.now(ZoneInfo(consumer.timezone or site.timezone)).date().isoformat():
+                filter_cycles_completed = runtime.starts_today
+        except Exception:
+            logger.debug("Spa filter cycle counts unavailable", exc_info=True)
+
         next_cleaning_at = await _next_spa_cleaning_at(session, site.id)
 
         start, end, _gran = _period_range("today", consumer.timezone or site.timezone)
@@ -273,6 +319,8 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
             consumption_today_kwh=round(totals.get("energy_kwh", 0.0), 1) if totals.get("energy_kwh") else None,
             cost_today_sek=round(totals.get("actual_cost_sek", 0.0), 2) if totals.get("actual_cost_sek") else None,
             power_w=latest.power_w if latest else None,
+            filter_cycles_completed_today=filter_cycles_completed,
+            filter_cycles_target_today=filter_cycles_target,
             stale=latest is None,
         )
     except Exception:
@@ -314,6 +362,7 @@ async def _vehicle_section(
         charging_mode_sv="Smart laddning",
         ready_by=ev_section.next_planned_charge_at if ev_section else None,
         cost_today_sek=0.0 if latest and not latest.is_charging else None,
+        target_soc_pct=latest.target_soc_percent if latest else None,
         stale=latest is None,
     )
 
@@ -332,6 +381,11 @@ async def _charger_section(
 
     charger = next((item for item in chargers if item.bridge_enabled), chargers[0])
     status_sv = ev_section.display_status_sv if ev_section and ev_section.display_status_sv else "Väntar på bil"
+    decision_sv = display_status_sv(
+        state=charger.smart_charging_state,
+        reason=charger.last_charging_reason,
+        externally_limited=bool(charger.externally_limited),
+    )
     return DisplayChargerSection(
         available=True,
         name=charger.name or "Charge Amps Halo",
@@ -341,6 +395,7 @@ async def _charger_section(
         smart_charging_active=bool(charger.bridge_enabled),
         ready_by=ev_section.next_planned_charge_at if ev_section else None,
         price_tier_label_sv=_tier_label(price_tier),
+        decision_reason_sv=decision_sv,
     )
 
 
@@ -563,6 +618,7 @@ class DisplayOverviewService:
 
         today = await _compute_today(self._session, site, self._settings)
         price = await _compute_price(self._session, site, self._settings)
+        solar = await _solar_section(self._session, site, self._settings)
         ev = await _compute_ev(self._session, site, self._settings)
 
         spa_row = await ConsumerRepository(self._session).get_spa_by_site_slug(slug)
@@ -653,6 +709,8 @@ class DisplayOverviewService:
                 self_consumption_pct=energy_snapshot.self_consumption_percent,
                 self_sufficiency_pct=energy_snapshot.self_sufficiency_percent,
                 battery_soh_pct=None,
+                battery_charged_today_kwh=energy_snapshot.battery_energy_charged_today_kwh if energy_snapshot else None,
+                battery_discharged_today_kwh=energy_snapshot.battery_energy_discharged_today_kwh if energy_snapshot else None,
             ),
             sparklines=sparklines,
             weather=weather,
@@ -662,7 +720,10 @@ class DisplayOverviewService:
                 tier=price.tier,
                 tier_label_sv=_tier_label(price.tier),
                 current_ore_kwh=_ore_from_eur(price.current_eur_kwh),
+                lowest_ore_kwh=_ore_from_eur(price.lowest_eur_kwh),
+                highest_ore_kwh=_ore_from_eur(price.highest_eur_kwh),
             ),
+            solar=solar,
             flow=flow,
             vehicle=vehicle,
             charger=charger,

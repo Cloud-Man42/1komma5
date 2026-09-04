@@ -14,7 +14,13 @@ import {
   YAxis,
 } from "recharts";
 import { MarketPricesResponse } from "@/lib/api";
-import { formatOrePerKwh, toOrePerKwh } from "@/lib/prices";
+import {
+  formatOrePerKwh,
+  marketPointImportOre,
+  marketPointImportSek,
+  marketPointSpotOre,
+  sekKwhToOre,
+} from "@/lib/prices";
 
 interface PriceChartProps {
   prices: MarketPricesResponse | null;
@@ -42,10 +48,6 @@ function formatHour(timestamp: string, timezone: string, isMobile: boolean) {
   });
 }
 
-function formatPrice(valuePerKwh: number) {
-  return formatOrePerKwh(valuePerKwh);
-}
-
 export const TOOLTIP_BACKGROUND = "#1e293b";
 export const PRICE_TIER_COLORS = {
   expensive: "#f87171",
@@ -68,25 +70,30 @@ export function PriceChart({ prices }: PriceChartProps) {
   const chart = useMemo(() => {
     if (!prices || prices.points.length === 0) return null;
 
-    const average =
-      prices.average_all_in_eur_kwh ??
-      prices.points.reduce((sum, point) => sum + (point.all_in_eur_kwh ?? point.spot_eur_kwh), 0) /
-        prices.points.length;
+    const importSekValues = prices.points
+      .map((point) => marketPointImportSek(point))
+      .filter((value): value is number => value != null);
+    const averageImportSek =
+      prices.average_import_sek_kwh ??
+      (importSekValues.length > 0
+        ? importSekValues.reduce((sum, value) => sum + value, 0) / importSekValues.length
+        : null);
 
     const now = Date.now();
     const data = prices.points.map((point) => {
-      const value = point.all_in_eur_kwh ?? point.spot_eur_kwh;
+      const importOre = marketPointImportOre(point) ?? 0;
+      const spotOre = marketPointSpotOre(point) ?? 0;
       return {
         time: formatHour(point.timestamp, prices.timezone, isMobile),
         timestamp: point.timestamp,
-        allIn: toOrePerKwh(value),
-        spot: toOrePerKwh(point.spot_eur_kwh),
+        allIn: importOre,
+        spot: spotOre,
         isCurrent: Math.abs(new Date(point.timestamp).getTime() - now) < 45 * 60 * 1000,
       };
     });
 
     const currentIndex = data.findIndex((point) => point.isCurrent);
-    const averageOre = toOrePerKwh(average);
+    const averageOre = averageImportSek != null ? sekKwhToOre(averageImportSek) : 0;
 
     return { data, average: averageOre, currentIndex };
   }, [prices, isMobile]);
@@ -102,6 +109,9 @@ export function PriceChart({ prices }: PriceChartProps) {
   const chartHeight = isMobile ? 260 : 320;
   const tickStyle = { fill: "#94a3b8", fontSize: isMobile ? 10 : 12 };
   const labelStyle = { color: "#e2e8f0", fontSize: isMobile ? 12 : 14 };
+  const currentImportSek = prices.current_import_sek_kwh;
+  const lowestImportSek = prices.lowest_import_sek_kwh;
+  const highestImportSek = prices.highest_import_sek_kwh;
 
   return (
     <section className="price-chart-section">
@@ -112,27 +122,21 @@ export function PriceChart({ prices }: PriceChartProps) {
         </div>
         <dl className="price-summary">
           <div>
-            <dt>Nu</dt>
+            <dt>Nu (all-in)</dt>
             <dd>
-              {prices.current_price_eur_kwh != null
-                ? formatPrice(prices.current_price_eur_kwh)
-                : "–"}
+              {currentImportSek != null ? formatOrePerKwh(currentImportSek) : "–"}
             </dd>
           </div>
           <div>
             <dt>Lägst</dt>
             <dd>
-              {prices.lowest_all_in_eur_kwh != null
-                ? formatPrice(prices.lowest_all_in_eur_kwh)
-                : "–"}
+              {lowestImportSek != null ? formatOrePerKwh(lowestImportSek) : "–"}
             </dd>
           </div>
           <div>
             <dt>Högst</dt>
             <dd>
-              {prices.highest_all_in_eur_kwh != null
-                ? formatPrice(prices.highest_all_in_eur_kwh)
-                : "–"}
+              {highestImportSek != null ? formatOrePerKwh(highestImportSek) : "–"}
             </dd>
           </div>
         </dl>

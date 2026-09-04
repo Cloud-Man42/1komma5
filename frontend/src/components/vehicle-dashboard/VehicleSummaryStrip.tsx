@@ -1,5 +1,5 @@
 import type { VehicleDisplay } from "./vehicleDashboardHelpers";
-import { formatSek, healthLabelSv } from "./vehicleDashboardHelpers";
+import { formatGps, formatSek, healthLabelSv } from "./vehicleDashboardHelpers";
 
 export function VehicleSummaryStrip({ display, siteName }: { display: VehicleDisplay; siteName: string }) {
   return (
@@ -27,6 +27,11 @@ export function VehicleSummaryStrip({ display, siteName }: { display: VehicleDis
         <span className="vdash-summary-label">Total besparing</span>
         <strong>{formatSek(display.totalSavingsKr)}</strong>
         <small>EMIC-attribuering</small>
+      </div>
+      <div className="vdash-summary-item">
+        <span className="vdash-summary-label">Position</span>
+        <strong>{display.locationTitle ?? "—"}</strong>
+        <small>{display.locationSubtitle ?? formatGps(display.latitude, display.longitude) ?? "Ingen GPS"}</small>
       </div>
       <div className="vdash-summary-item">
         <span className="vdash-summary-label">Garage</span>

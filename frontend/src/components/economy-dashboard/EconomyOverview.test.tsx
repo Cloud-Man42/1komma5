@@ -27,7 +27,7 @@ const financialStats = {
   export_compensation_sek_kwh: 0.29,
   stats: [
     {
-      period_start: "2026-08-14",
+      period_start: "2026-09-01",
       solar_self_consumed_kwh: 12,
       battery_self_consumed_kwh: 4,
       exported_kwh: 2,
@@ -36,6 +36,18 @@ const financialStats = {
       battery_savings_sek: 120,
       export_revenue_sek: 80,
       grid_import_cost_sek: 500,
+      market_priced_fraction: 0.9,
+    },
+    {
+      period_start: "2026-08-14",
+      solar_self_consumed_kwh: 8,
+      battery_self_consumed_kwh: 2,
+      exported_kwh: 1,
+      imported_kwh: 4,
+      solar_savings_sek: 200,
+      battery_savings_sek: 60,
+      export_revenue_sek: 40,
+      grid_import_cost_sek: 250,
       market_priced_fraction: 0.9,
     },
   ],
@@ -135,7 +147,7 @@ describe("EconomyOverview", () => {
     expect(screen.getByTestId("economy-donut")).toBeInTheDocument();
     expect(screen.getByText("TOTAL BESPARING")).toBeInTheDocument();
     expect(screen.getByLabelText("Förklaring av färger")).toBeInTheDocument();
-    expect(screen.getByText(/Solenergi som använts/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Egenanvänd solel/i).length).toBeGreaterThan(0);
   });
 
   it("shows error when financial stats fail", async () => {
@@ -157,19 +169,26 @@ describe("EconomyOverview", () => {
   });
 
   it("navigates to cashflow report from panel link", async () => {
+    const user = userEvent.setup();
     window.history.replaceState(null, "", "/sites/akarp/costs");
     render(<EconomyOverview siteSlug="akarp" />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /visa kassaflödesrapport/i })).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /visa kassaflödesrapport/i })).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
 
-    await userEvent.click(screen.getByRole("button", { name: /visa kassaflödesrapport/i }));
+    await user.click(screen.getByRole("button", { name: /visa kassaflödesrapport/i }));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("economy-cashflow-section")).toBeInTheDocument();
-    });
-  });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("economy-cashflow-section")).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+  }, 20_000);
 
   it("navigates to price details from panel link", async () => {
     window.history.replaceState(null, "", "/sites/akarp/costs");

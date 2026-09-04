@@ -42,6 +42,7 @@ def evaluate_vehicle_self_heal(
     soc_age = _age_seconds(getattr(latest, "soc_updated_at", None), now=current)
     vehicle_age = _age_seconds(latest.last_vehicle_update, now=current)
     charging_age = _age_seconds(getattr(latest, "charging_updated_at", None), now=current)
+    range_age = _age_seconds(getattr(latest, "range_updated_at", None), now=current)
 
     if soc_age is not None and soc_age > STALE_TELEMETRY_SECONDS:
         events.append(
@@ -62,6 +63,22 @@ def evaluate_vehicle_self_heal(
             )
         )
         actions.append(SelfHealAction.FORCE_REST_SYNC)
+        if range_age is not None and range_age > STALE_TELEMETRY_SECONDS:
+            events.append(
+                IntegrationEventDraft(
+                    event_type=IntegrationEventType.WS_RECONNECT_REQUESTED,
+                    severity=IntegrationEventSeverity.ACTION,
+                    message=(
+                        "SoC and range both stale at Mercedes source; "
+                        "requesting websocket reconnect for live VehicleStatusUpdates"
+                    ),
+                    details={
+                        "soc_age_seconds": round(soc_age, 1),
+                        "range_age_seconds": round(range_age, 1),
+                    },
+                )
+            )
+            actions.append(SelfHealAction.FORCE_WS_RECONNECT)
     elif (
         soc_age is not None
         and vehicle_age is not None

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvOverview } from "./EvOverview";
 import { makeEvCharger } from "@/test/fixtures";
@@ -17,6 +17,7 @@ const mockFetchEnergyBalanceHistory = vi.fn();
 const mockFetchEnergyReasoning = vi.fn();
 const mockFetchSiteDashboard = vi.fn();
 const mockFetchSiteEnergyConfig = vi.fn();
+const mockControlEvCharger = vi.fn();
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -32,6 +33,7 @@ vi.mock("@/lib/api", async () => {
     fetchEnergyReasoning: (...args: unknown[]) => mockFetchEnergyReasoning(...args),
     fetchSiteDashboard: (...args: unknown[]) => mockFetchSiteDashboard(...args),
     fetchSiteEnergyConfig: (...args: unknown[]) => mockFetchSiteEnergyConfig(...args),
+    controlEvCharger: (...args: unknown[]) => mockControlEvCharger(...args),
   };
 });
 
@@ -42,6 +44,7 @@ vi.mock("@/lib/useDashboardRefresh", () => ({
 const charger = makeEvCharger({ power_w: 0, deadline_at: "2026-08-24T08:00:00Z" });
 
 beforeEach(() => {
+  mockControlEvCharger.mockResolvedValue(charger);
   mockFetchEvChargers.mockResolvedValue([charger]);
   mockFetchEvBridgeStatus.mockResolvedValue({
     charger_id: 1,
@@ -187,6 +190,64 @@ describe("EvOverview", () => {
     expect(screen.getByTestId("ev-mini-stats")).toBeTruthy();
     expect(screen.getByTestId("ev-sessions-table")).toBeTruthy();
     expect(screen.getByTestId("ev-manual-control")).toBeTruthy();
+  });
+
+  it("shows deadline controls in laddinställningar panel", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const panel = await screen.findByTestId("ev-manual-control");
+    expect(within(panel).getByLabelText(/Använd deadline klar senast/i)).toBeTruthy();
+    expect(within(panel).getByText(/^Klar senast$/i)).toBeTruthy();
+    expect(within(panel).getByLabelText(/Avfärdstid/i)).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: /Spara avresa & deadline/i })).toBeTruthy();
+  });
+
+  it("hides deadline date inputs when deadline toggle is off", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const panel = await screen.findByTestId("ev-manual-control");
+    const toggle = within(panel).getByLabelText(/Använd deadline klar senast/i);
+    fireEvent.click(toggle);
+    expect(within(panel).queryByText(/^Klar senast$/i)).toBeNull();
+    expect(within(panel).getByText(/Deadline är avaktiverad/i)).toBeTruthy();
+  });
+
+  it("clears deadline via control endpoint when toggle is off", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const panel = await screen.findByTestId("ev-manual-control");
+    fireEvent.click(within(panel).getByLabelText(/Använd deadline klar senast/i));
+    fireEvent.click(within(panel).getByRole("button", { name: /Spara avresa & deadline/i }));
+    await waitFor(() => {
+      expect(mockControlEvCharger).toHaveBeenCalledWith("akarp", 1, expect.objectContaining({
+        departure_time: "07:00",
+        clear_deadline_at: true,
+        target_soc_pct: 80,
+      }));
+    });
+    expect(mockControlEvCharger.mock.calls.at(-1)?.[2]).not.toHaveProperty("deadline_at");
+  });
+
+  it("hides deadline controls in price-only mode", async () => {
+    mockFetchEvChargers.mockResolvedValueOnce([
+      makeEvCharger({ power_w: 0, charging_mode: "PRICE_CHARGE" }),
+    ]);
+    render(<EvOverview siteSlug="akarp" />);
+    const panel = await screen.findByTestId("ev-manual-control");
+    expect(within(panel).queryByLabelText(/Avfärdstid/i)).toBeNull();
+    expect(within(panel).queryByText(/^Klar senast$/i)).toBeNull();
+    expect(within(panel).getByText(/Avresa och klar senast används inte/i)).toBeTruthy();
+  });
+
+  it("saves deadline via control endpoint", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const saveButton = await screen.findByRole("button", { name: /Spara avresa & deadline/i });
+    fireEvent.click(saveButton);
+    await waitFor(() => {
+      expect(mockControlEvCharger).toHaveBeenCalledWith("akarp", 1, expect.objectContaining({
+        departure_time: "07:00",
+        deadline_at: "2026-08-24T08:00:00Z",
+        clear_deadline_at: false,
+        target_soc_pct: 80,
+      }));
+    });
   });
 
   it("shows empty state without chargers", async () => {

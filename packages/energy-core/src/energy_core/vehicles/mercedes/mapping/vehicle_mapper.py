@@ -172,8 +172,12 @@ class MercedesVehicleMapper:
                     "notconnected",
                     "notcharging",
                 }
-        elif power_kw is not None:
+        elif power_kw is not None and is_charging is None:
             is_charging = power_kw >= 0.3
+
+        if is_charging is not True:
+            if power_kw is not None and power_kw >= 0.3:
+                power_kw = 0.0
 
         quality = base.data_quality
         if soc is not None and soc > 0:

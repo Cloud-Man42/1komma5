@@ -54,6 +54,8 @@ class DisplayLiveMetrics(BaseModel):
     self_consumption_pct: float | None = None
     self_sufficiency_pct: float | None = None
     battery_soh_pct: float | None = None
+    battery_charged_today_kwh: float | None = None
+    battery_discharged_today_kwh: float | None = None
 
 
 class DisplayWeatherSection(DisplaySectionMeta):
@@ -66,6 +68,14 @@ class DisplayPriceSection(DisplaySectionMeta):
     tier: str | None = None
     tier_label_sv: str | None = None
     current_ore_kwh: float | None = None
+    lowest_ore_kwh: float | None = None
+    highest_ore_kwh: float | None = None
+
+
+class DisplaySolarSection(DisplaySectionMeta):
+    expected_today_kwh: float | None = None
+    remaining_today_kwh: float | None = None
+    forecast_curve: list[DisplaySparklinePoint] = Field(default_factory=list)
 
 
 class DisplayVehicleSection(DisplaySectionMeta):
@@ -77,6 +87,7 @@ class DisplayVehicleSection(DisplaySectionMeta):
     charging_mode_sv: str | None = None
     ready_by: datetime | None = None
     cost_today_sek: float | None = None
+    target_soc_pct: float | None = None
 
 
 class DisplayChargerSection(DisplaySectionMeta):
@@ -87,6 +98,7 @@ class DisplayChargerSection(DisplaySectionMeta):
     smart_charging_active: bool | None = None
     ready_by: datetime | None = None
     price_tier_label_sv: str | None = None
+    decision_reason_sv: str | None = None
 
 
 class DisplaySpaSection(DisplaySectionMeta):
@@ -96,6 +108,8 @@ class DisplaySpaSection(DisplaySectionMeta):
     consumption_today_kwh: float | None = None
     cost_today_sek: float | None = None
     power_w: float | None = None
+    filter_cycles_completed_today: int | None = None
+    filter_cycles_target_today: int | None = None
 
 
 class DisplayEconomyDayPoint(BaseModel):
@@ -150,6 +164,7 @@ class DisplayOverviewResponse(BaseModel):
     sparklines: dict[str, DisplaySparklineSeries] = Field(default_factory=dict)
     weather: DisplayWeatherSection
     price: DisplayPriceSection
+    solar: DisplaySolarSection
     flow: DisplayFlowSection
     vehicle: DisplayVehicleSection
     charger: DisplayChargerSection

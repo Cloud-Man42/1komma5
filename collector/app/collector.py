@@ -14,7 +14,6 @@ from energy_core.config import get_settings
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.repositories import (
     EnergyReadingRepository,
-    MarketPriceRepository,
     SiteRepository,
 )
 from energy_core.db.session import create_engine, create_session_factory
@@ -35,11 +34,10 @@ from energy_core.seed import seed_sites
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.aggregation.service import EnergyAggregationService
 from energy_core.snapshots.writer import SnapshotWriter
-from energy_core.heartbeat.market_prices import parse_market_prices
-from energy_core.heartbeat.feed_in_prices import parse_feed_in_tariff
-from energy_core.market_prices.currency import stored_eur_to_sek_kwh
 from energy_core.vehicles.sessions.coordinator import VehicleChargeSessionCoordinator
 from energy_core.vehicles.supervisor import VehicleIntegrationSupervisor
+from energy_core.financial.service import FinancialAggregationService
+from energy_core.performance.task_metrics import record_collector_task
 from app.site_poll_context import SitePollContext
 
 logger = logging.getLogger(__name__)
@@ -62,6 +60,8 @@ class Collector:
         self._vehicle_charge_sessions = VehicleChargeSessionCoordinator(self._settings)
         self._snapshot_writer = SnapshotWriter(self._settings)
         self._energy_aggregation = EnergyAggregationService(is_sqlite=self._settings.is_sqlite)
+        self._financial_aggregation = FinancialAggregationService(self._settings)
+        self._lane_tasks: list[asyncio.Task] = []
 
     async def setup(self) -> None:
         assert_chargeamps_production_safe(app_env=self._settings.app_env.value)
@@ -73,6 +73,34 @@ class Collector:
         await self._vehicle_supervisor.start()
 
     async def poll_once(self) -> None:
+        """Compatibility wrapper: run all lanes sequentially."""
+        await self.run_fast_lane()
+        await self.run_medium_lane()
+        await self.run_slow_lane()
+
+    async def _run_lane(self, lane: str, task_name: str, coro) -> None:
+        import time
+
+        started = time.perf_counter()
+        success = True
+        error_class: str | None = None
+        try:
+            await asyncio.wait_for(coro, timeout=float(self._settings.collector_lane_timeout_seconds))
+        except Exception as exc:
+            success = False
+            error_class = type(exc).__name__
+            logger.exception("Collector %s lane task %s failed", lane, task_name)
+        duration_ms = (time.perf_counter() - started) * 1000.0
+        await record_collector_task(
+            self._session_factory,
+            task_name=task_name,
+            lane=lane,
+            duration_ms=duration_ms,
+            success=success,
+            error_class=error_class,
+        )
+
+    async def run_fast_lane(self) -> None:
         reading_count = 0
         async with self._session_factory() as session:
             provider = await create_heartbeat_provider_from_db(session)
@@ -97,21 +125,23 @@ class Collector:
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
-                await self._collect_market_prices(session, site_repo)
+                await self._run_lane("fast", "market_prices", self._collect_market_prices(session, site_repo))
                 poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
                 sites = await site_repo.list_all()
-                live_overviews = await self._prefetch_live_overviews(sites, poll_ctx)
-                await self._run_spa_integration(session, site_repo, live_overviews)
-                await self._run_ev_accounting(session, site_repo, live_overviews)
-                await self._run_vehicle_charge_sessions(session, site_repo, live_overviews)
-                await self._run_energy_balance(session, site_repo, live_overviews)
-                await self._run_solar_forecast(session, site_repo)
-                for site in sites:
-                    await self._energy_aggregation.rollup_site(session, site)
-                await self._snapshot_writer.write_all_sites(session, sites)
+                live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
+                await self._run_lane(
+                    "fast",
+                    "energy_balance",
+                    self._run_energy_balance(session, site_repo, live_overviews),
+                )
+                await self._run_lane(
+                    "fast",
+                    "snapshot_write",
+                    self._snapshot_writer.write_all_sites(session, sites),
+                )
                 await session.commit()
         except Exception:
-            logger.exception("Collector enrichment cycle failed")
+            logger.exception("Collector fast lane failed")
 
         bridge_count = 0
         try:
@@ -120,97 +150,248 @@ class Collector:
         except Exception:
             logger.exception("Smart charging cycle failed")
 
+        logger.info("Fast lane: %d readings, smart charging processed %d chargers", reading_count, bridge_count)
+
+    async def run_medium_lane(self) -> None:
         try:
             async with self._session_factory() as session:
-                await self._run_virtual_bridge_cycle(session)
-                await self._run_ems_shadow_simulation(session)
+                site_repo = SiteRepository(session)
+                poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
+                sites = await site_repo.list_all()
+                live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
+                await self._run_lane(
+                    "medium",
+                    "spa_integration",
+                    self._run_spa_integration(session, site_repo, live_overviews),
+                )
+                await self._run_lane(
+                    "medium",
+                    "ev_accounting",
+                    self._run_ev_accounting(session, site_repo, live_overviews),
+                )
+                await self._run_lane(
+                    "medium",
+                    "vehicle_charge_sessions",
+                    self._run_vehicle_charge_sessions(session, site_repo, live_overviews),
+                )
+                for site in sites:
+                    await self._energy_aggregation.rollup_site(session, site)
+                await session.commit()
         except Exception:
-            logger.exception("Virtual Heartbeat bridge cycle failed")
+            logger.exception("Collector medium lane failed")
 
-        logger.info("Stored %d readings, smart charging processed %d chargers", reading_count, bridge_count)
+        try:
+            async with self._session_factory() as session:
+                await self._run_lane("medium", "virtual_bridge", self._run_virtual_bridge_cycle(session))
+                await self._run_lane("medium", "ems_shadow", self._run_ems_shadow_simulation(session))
+        except Exception:
+            logger.exception("Collector medium bridge lane failed")
+
+    async def run_slow_lane(self) -> None:
+        try:
+            async with self._session_factory() as session:
+                site_repo = SiteRepository(session)
+                sites = await site_repo.list_all()
+                await self._run_lane("slow", "solar_forecast", self._run_solar_forecast(session, site_repo))
+                await self._run_lane("slow", "forecast_learning", self._run_forecast_learning(session, site_repo))
+                await self._run_lane("slow", "energy_control", self._run_energy_control(session, site_repo))
+                await self._run_lane(
+                    "slow",
+                    "chargefinder_health",
+                    self._sync_chargefinder_health(session),
+                )
+                for site in sites:
+                    await self._run_lane(
+                        "slow",
+                        f"financial_rollup:{site.slug}",
+                        self._financial_aggregation.rollup_site(session, site),
+                    )
+                await self._run_lane(
+                    "slow",
+                    "timescale_retention",
+                    self._ensure_timescale_retention(session),
+                )
+                await self._run_lane(
+                    "slow",
+                    "timescale_compression",
+                    self._ensure_timescale_compression(session),
+                )
+                await session.commit()
+        except Exception:
+            logger.exception("Collector slow lane failed")
 
     async def _collect_market_prices(self, session, site_repo: SiteRepository) -> None:
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+        from energy_core.price_engine.engine import EmicPriceEngine
+        from energy_core.price_engine.observability import log_refresh_result
+        import time
+
         client = await create_heartbeat_client(session)
         if client is None:
             return
-        current_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-        price_repo = MarketPriceRepository(session, is_sqlite=self._settings.is_sqlite)
+
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
+        engine = EmicPriceEngine(session, is_sqlite=self._settings.is_sqlite)
         for site in await site_repo.list_all():
             if not site.external_system_id:
                 continue
-            zone = ZoneInfo(site.timezone)
-            now_local = datetime.now(zone)
-            day_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end_local = day_start_local + timedelta(days=1)
-            from_time = day_start_local.astimezone(UTC)
-            to_time = day_end_local.astimezone(UTC)
-            feed_in_eur = await self._sync_feed_in_tariff(
-                client,
-                site,
-                site_repo,
-                price_repo,
-                from_time,
-                to_time,
+            started = time.perf_counter()
+            error: str | None = None
+            error_class: str | None = None
+            count = 0
+            try:
+                count = await engine.refresh_site(site, client)
+            except Exception as exc:
+                error = str(exc)
+                error_class = type(exc).__name__
+                logger.exception("Price engine refresh failed for site %s", site.slug)
+            duration_ms = (time.perf_counter() - started) * 1000
+            log_refresh_result(site_slug=site.slug, periods_written=count, duration_ms=duration_ms, error=error)
+            await record_provider_outcome(
+                recorder,
+                site.id,
+                "price_engine",
+                success=error is None,
+                error_class=error_class,
+                latency_ms=duration_ms,
             )
-            if await price_repo.has_price_at(site.id, current_hour):
+
+    async def _run_forecast_learning(self, session, site_repo: SiteRepository) -> None:
+        from energy_core.forecast_learning.service import ForecastLearningService
+
+        service = ForecastLearningService(session, is_sqlite=self._settings.is_sqlite)
+        total = 0
+        for site in await site_repo.list_all():
+            try:
+                result = await service.sync_site(site.id, timezone=site.timezone)
+                total += sum(result.values())
+            except Exception:
+                logger.exception("Forecast learning sync failed for site %s", site.slug)
+        if total:
+            logger.debug("Forecast learning synced %d snapshot operations", total)
+
+    async def _ensure_timescale_retention(self, session) -> None:
+        from energy_core.db.timescale_retention import ensure_timescale_retention
+
+        result = await ensure_timescale_retention(session, self._settings)
+        status = result.get("status")
+        if status == "applied":
+            logger.info("Timescale retention policies: %s", result.get("policies"))
+
+    async def _ensure_timescale_compression(self, session) -> None:
+        from energy_core.db.timescale_retention import ensure_timescale_compression
+
+        result = await ensure_timescale_compression(session, self._settings)
+        status = result.get("status")
+        if status == "applied":
+            logger.info("Timescale compression policies: %s", result.get("policies"))
+
+    async def _run_energy_control(self, session, site_repo: SiteRepository) -> None:
+        if not self._settings.energy_control_collector_enabled:
+            return
+        from energy_core.energy_control.service import EnergyControlService
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+        from energy_core.price_engine.strategy_service import build_current_strategy_snapshot
+        from energy_core.price_engine.types import OptimizationMode
+
+        service = EnergyControlService(session)
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
+        count = 0
+        for site in await site_repo.list_all():
+            if site.optimization_mode == OptimizationMode.MONITOR_ONLY.value:
                 continue
             try:
-                raw = await client.fetch_market_prices(
-                    site.external_system_id,
-                    from_iso=from_time.isoformat().replace("+00:00", "Z"),
-                    to_iso=to_time.isoformat().replace("+00:00", "Z"),
-                    resolution="1h",
+                snapshot = await build_current_strategy_snapshot(
+                    session,
+                    site,
+                    is_sqlite=self._settings.is_sqlite,
                 )
-                parsed = parse_market_prices(raw)
-                await price_repo.upsert_prices(
+                result = await service.sync_from_strategy(site, snapshot)
+                await record_provider_outcome(recorder, site.id, "energy_control", success=True)
+                if result is not None:
+                    count += 1
+            except Exception as exc:
+                await record_provider_outcome(
+                    recorder,
                     site.id,
-                    [
-                        (
-                            point.timestamp,
-                            point.spot_eur_kwh,
-                            point.all_in_eur_kwh,
-                            feed_in_eur,
-                        )
-                        for point in parsed.points
-                    ],
+                    "energy_control",
+                    success=False,
+                    error_class=type(exc).__name__,
                 )
-            except Exception:
-                logger.exception("Failed to collect market prices for site %s", site.slug)
+                logger.exception("Energy control sync failed for site %s", site.slug)
+        if count:
+            logger.debug("Energy control synced %d site actions", count)
 
-    async def _sync_feed_in_tariff(
-        self,
-        client,
-        site,
-        site_repo: SiteRepository,
-        price_repo: MarketPriceRepository,
-        from_time: datetime,
-        to_time: datetime,
-    ) -> float | None:
+    async def _sync_chargefinder_health(self, session) -> None:
+        from energy_core.db.chargefinder_integration_status_repo import ChargeFinderIntegrationStatusRepository
+        from energy_core.db.vehicle_repo import VehicleProviderRepository
+        from energy_core.integrations.charging_stations.chargefinder.provider import ChargeFinderMode
+        from energy_core.integrations.charging_stations.chargefinder_health import (
+            ChargeFinderHealthStatus,
+            ChargeFinderIntegrationHealthService,
+        )
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+
+        if not self._settings.chargefinder_enabled:
+            return
+
         try:
-            hb_raw = await client.fetch_heartbeat_prices(site.external_system_id)
-            feed_in = parse_feed_in_tariff(hb_raw)
-            feed_in_eur = feed_in.feed_in_tariff_eur_kwh
-            if feed_in_eur is None or feed_in_eur <= 0:
-                return None
-            await price_repo.apply_feed_in_tariff(site.id, from_time, to_time, feed_in_eur)
-            await price_repo.backfill_missing_feed_in(site.id, feed_in_eur)
-            feed_in_sek = stored_eur_to_sek_kwh(feed_in_eur)
-            if feed_in_sek is not None and abs(site.export_compensation_sek_kwh - feed_in_sek) > 0.01:
-                await site_repo.update_site(
-                    site.slug,
-                    export_compensation_sek_kwh=round(feed_in_sek, 4),
-                )
-            return feed_in_eur
-        except Exception:
-            logger.exception("Failed to collect feed-in tariff for site %s", site.slug)
-            return None
+            mode = ChargeFinderMode(str(self._settings.chargefinder_mode).upper())
+        except ValueError:
+            mode = ChargeFinderMode.WEB
+        if mode == ChargeFinderMode.DISABLED:
+            return
 
-    async def _prefetch_live_overviews(self, sites, poll_ctx: SitePollContext) -> dict[str, dict]:
+        provider_repo = VehicleProviderRepository(session)
+        enabled_sites = [site for _row, site in await provider_repo.list_enabled()]
+        if not enabled_sites:
+            return
+
+        status_repo = ChargeFinderIntegrationStatusRepository(session)
+        status = await status_repo.get_or_create()
+        health = ChargeFinderIntegrationHealthService().evaluate(
+            enabled=self._settings.chargefinder_enabled,
+            mode=mode,
+            status=status,
+        )
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
+        success = health.status in {
+            ChargeFinderHealthStatus.AVAILABLE,
+            ChargeFinderHealthStatus.DEGRADED,
+        }
+        error_class = None if success else health.status.value
+        circuit_breaker_state = None
+        if health.status == ChargeFinderHealthStatus.BLOCKED:
+            circuit_breaker_state = "open"
+        elif health.status == ChargeFinderHealthStatus.DEGRADED:
+            circuit_breaker_state = "degraded"
+
+        for site in enabled_sites:
+            await record_provider_outcome(
+                recorder,
+                site.id,
+                "chargefinder",
+                success=success,
+                error_class=error_class,
+                latency_ms=float(health.last_latency_ms) if health.last_latency_ms is not None else None,
+                circuit_breaker_state=circuit_breaker_state,
+            )
+
+    async def _prefetch_live_overviews(self, session, sites, poll_ctx: SitePollContext) -> dict[str, dict]:
+        from energy_core.integrations.health import IntegrationHealthRecorder
+
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         live_overviews: dict[str, dict] = {}
         for site in sites:
             overview = await poll_ctx.live_overview(site)
             if overview is not None:
                 live_overviews[site.slug] = overview
+                await recorder.record_success(site.id, "heartbeat")
+            else:
+                await recorder.record_failure(site.id, "heartbeat", error_class="Unavailable")
         return live_overviews
 
     async def _run_spa_integration(
@@ -221,6 +402,18 @@ class Collector:
     ) -> None:
         if not self._settings.arctic_spa_enabled:
             return
+        from energy_core.db.consumer_repo import ConsumerRepository
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+
+        spa_sites = {
+            site.id: site
+            for _, _, site in await ConsumerRepository(session).list_enabled_spa_consumers()
+        }
+        if not spa_sites:
+            return
+
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         try:
             polled = await self._spa_polling.poll_due_consumers(
                 session,
@@ -242,7 +435,17 @@ class Collector:
                     logger.debug("Spa energy planned for %d consumers", planned)
             except Exception:
                 logger.exception("Spa smart energy planning failed")
-        except Exception:
+            for site_id in spa_sites:
+                await record_provider_outcome(recorder, site_id, "arctic_spa", success=True)
+        except Exception as exc:
+            for site_id in spa_sites:
+                await record_provider_outcome(
+                    recorder,
+                    site_id,
+                    "arctic_spa",
+                    success=False,
+                    error_class=type(exc).__name__,
+                )
             logger.exception("Arctic Spa integration failed")
 
     async def _run_ev_accounting(
@@ -446,36 +649,85 @@ class Collector:
             logger.debug("EMS shadow simulation processed %d sites", processed)
 
     async def _run_solar_forecast(self, session, site_repo: SiteRepository) -> None:
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+
         sites = await site_repo.list_all()
         now = datetime.now(UTC)
+        recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         for site in sites:
             try:
                 await self._solar_forecast.evaluate_site_observations(session, site, now=now)
-            except Exception:
+                await record_provider_outcome(recorder, site.id, "solar_forecast", success=True)
+            except Exception as exc:
+                await record_provider_outcome(
+                    recorder,
+                    site.id,
+                    "solar_forecast",
+                    success=False,
+                    error_class=type(exc).__name__,
+                )
                 logger.exception("Solar observation evaluation failed for site %s", site.slug)
-        count = await self._solar_forecast.run_due_sites(session, sites)
-        if count:
-            logger.debug("Solar forecast refreshed for %d sites", count)
+        try:
+            count = await self._solar_forecast.run_due_sites(session, sites)
+            if count:
+                logger.debug("Solar forecast refreshed for %d sites", count)
+        except Exception as exc:
+            for site in sites:
+                await record_provider_outcome(
+                    recorder,
+                    site.id,
+                    "solar_forecast",
+                    success=False,
+                    error_class=type(exc).__name__,
+                )
+            logger.exception("Solar forecast refresh failed")
 
-    async def run(self) -> None:
-        logging.basicConfig(level=self._settings.log_level)
-        await self.setup()
-        logger.info("Collector started")
-
+    async def _fast_lane_loop(self) -> None:
         while self._running:
             try:
                 async with self._session_factory() as session:
                     hb_repo = HeartbeatSettingsRepository(session)
                     hb_settings = await hb_repo.get_record()
                 interval = hb_settings.poll_interval_seconds
-                await self.poll_once()
+                await self.run_fast_lane()
             except Exception:
-                logger.exception("Poll cycle failed")
+                logger.exception("Fast lane loop failed")
                 interval = self._settings.heartbeat_poll_interval
             await asyncio.sleep(interval)
 
+    async def _medium_lane_loop(self) -> None:
+        while self._running:
+            try:
+                await self.run_medium_lane()
+            except Exception:
+                logger.exception("Medium lane loop failed")
+            await asyncio.sleep(self._settings.collector_medium_lane_interval)
+
+    async def _slow_lane_loop(self) -> None:
+        while self._running:
+            try:
+                await self.run_slow_lane()
+            except Exception:
+                logger.exception("Slow lane loop failed")
+            await asyncio.sleep(self._settings.collector_slow_lane_interval)
+
+    async def run(self) -> None:
+        logging.basicConfig(level=self._settings.log_level)
+        await self.setup()
+        logger.info("Collector started with fast/medium/slow lanes")
+
+        self._lane_tasks = [
+            asyncio.create_task(self._fast_lane_loop(), name="collector-fast-lane"),
+            asyncio.create_task(self._medium_lane_loop(), name="collector-medium-lane"),
+            asyncio.create_task(self._slow_lane_loop(), name="collector-slow-lane"),
+        ]
+        await asyncio.gather(*self._lane_tasks)
+
     def stop(self) -> None:
         self._running = False
+        for task in self._lane_tasks:
+            task.cancel()
 
     async def shutdown(self) -> None:
         await self._vehicle_supervisor.stop()

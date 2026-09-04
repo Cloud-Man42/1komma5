@@ -1,3 +1,5 @@
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.deps import get_db_session, get_reading_repository
 from app.schemas import (
     HistoricalEnergyMonth,
@@ -17,7 +19,7 @@ from energy_core.db.repositories import (
     HistoricalMonthlyEnergy,
     SiteRepository,
 )
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["sites"])
@@ -159,7 +161,9 @@ async def list_sites(
 @router.post("/sites", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_site(
     payload: SiteCreateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> SiteResponse:
     repo = SiteRepository(session)
     try:
@@ -173,6 +177,15 @@ async def create_site(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="site.create",
+        site_slug=site.slug,
+        resource_type="site",
+        resource_id=site.slug,
+        summary=payload.model_dump(),
+    )
     await session.commit()
     return SiteResponse(
         slug=site.slug,
@@ -189,8 +202,10 @@ async def create_site(
 async def update_site(
     slug: str,
     payload: SiteUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
+    _: None = Depends(require_admin_token),
 ) -> SiteResponse:
     repo = SiteRepository(session)
     updates = payload.model_dump(exclude_unset=True)
@@ -198,6 +213,15 @@ async def update_site(
         site = await repo.update_site(slug, **updates)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found") from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="site.update",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary=updates,
+    )
     await session.commit()
     latest = await reading_repo.get_latest_for_site(site.id)
     return _site_response(site, latest)
@@ -225,7 +249,9 @@ async def get_site_energy_config(
 async def update_site_energy_config(
     slug: str,
     payload: SiteEnergyConfigUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> SiteEnergyConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -237,6 +263,15 @@ async def update_site_energy_config(
         inverter_display_name=payload.inverter_display_name,
         physical_ev_charger_label=payload.physical_ev_charger_label,
         ev_vehicle_label=payload.ev_vehicle_label,
+    )
+    await audit_admin_mutation(
+        request,
+        session,
+        action="site.energy_config.update",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary=payload.model_dump(exclude_unset=True),
     )
     await session.commit()
     return SiteEnergyConfigResponse(
@@ -251,11 +286,21 @@ async def update_site_energy_config(
 @router.delete("/sites/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_site(
     slug: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> None:
     repo = SiteRepository(session)
     try:
         await repo.delete_site(slug)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found") from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="site.delete",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+    )
     await session.commit()

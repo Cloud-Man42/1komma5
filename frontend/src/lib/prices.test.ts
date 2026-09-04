@@ -1,14 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { formatOrePerKwh, formatSekAmount, formatSekDecimal, formatSekSigned, toOrePerKwh } from "./prices";
+import {
+  formatOrePerKwh,
+  formatSekAmount,
+  formatSekDecimal,
+  formatSekSigned,
+  marketApiPriceToOre,
+  marketApiPriceToSekKwh,
+  marketPointImportOre,
+  marketPointSpotOre,
+  priceEngineEurToSekKwh,
+  sekKwhToOre,
+  toOrePerKwh,
+} from "./prices";
 
 describe("prices", () => {
-  it("converts kr/kWh to öre/kWh", () => {
+  it("converts SEK/kWh to öre/kWh", () => {
     expect(toOrePerKwh(2.824)).toBeCloseTo(282.4);
   });
 
-  it("formats öre/kWh for display", () => {
-    expect(formatOrePerKwh(0.92638125)).toBe("92.6 öre/kWh");
-    expect(formatOrePerKwh(4.04329375)).toBe("404.3 öre/kWh");
+  it("converts price-engine EUR/kWh API values to SEK/kWh", () => {
+    expect(priceEngineEurToSekKwh(0.2)).toBeCloseTo(2.2, 2);
+    expect(sekKwhToOre(priceEngineEurToSekKwh(0.26))).toBe(286);
+  });
+
+  it("prefers explicit SEK fields from price-engine API", () => {
+    const point = {
+      spot_eur_kwh: 0.13,
+      all_in_eur_kwh: 0.26,
+      spot_sek_kwh: 1.46,
+      import_sek_kwh: 2.86,
+    };
+    expect(marketPointSpotOre(point)).toBe(146);
+    expect(marketPointImportOre(point)).toBe(286);
+  });
+
+  it("treats legacy SEK magnitudes in *_eur_kwh fields as SEK/kWh", () => {
+    expect(marketApiPriceToSekKwh(0.84)).toBe(0.84);
+    expect(marketApiPriceToOre(0.84)).toBe(84);
+    expect(marketApiPriceToOre(1.87)).toBe(187);
+  });
+
+  it("formats SEK prices for display", () => {
+    expect(formatOrePerKwh(2.86)).toBe("286.0 öre/kWh");
+    expect(formatOrePerKwh(1.46)).toBe("146.0 öre/kWh");
   });
 
   it("formats SEK amounts with kronor and öre", () => {

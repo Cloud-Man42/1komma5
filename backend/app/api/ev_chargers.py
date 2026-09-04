@@ -1,6 +1,8 @@
 import logging
 from datetime import UTC, datetime, timedelta
 
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.api.energy_balance_helpers import snapshot_to_response
 from app.deps import get_db_session
 from app.schemas import (
@@ -40,7 +42,7 @@ from energy_core.db.energy_balance_repo import EnergyBalanceRepository, SiteEner
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.heartbeat_client import CHARGING_MODES
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["ev-chargers"])
@@ -259,7 +261,9 @@ async def list_ev_chargers(
 async def create_ev_charger(
     slug: str,
     payload: EvChargerCreateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -318,6 +322,15 @@ async def create_ev_charger(
         external_charger_id=external_id,
         connection_settings=payload.connection_settings,
     )
+    await audit_admin_mutation(
+        request,
+        session,
+        action="ev_charger.create",
+        site_slug=slug,
+        resource_type="ev_charger",
+        resource_id=str(charger.id),
+        summary={"name": payload.name, "manufacturer": payload.manufacturer, "model": payload.model},
+    )
     await session.commit()
     return await _enrich_charger(session, charger, slug)
 
@@ -330,6 +343,7 @@ async def test_ev_charger_connection_draft(
     slug: str,
     payload: EvChargerConnectionTestRequest,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -366,6 +380,7 @@ async def test_ev_charger_connection(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -386,7 +401,9 @@ async def update_ev_charger(
     slug: str,
     charger_id: int,
     payload: EvChargerUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -446,6 +463,15 @@ async def update_ev_charger(
         external_charger_id=payload.external_charger_id,
         connection_settings=payload.connection_settings,
     )
+    await audit_admin_mutation(
+        request,
+        session,
+        action="ev_charger.update",
+        site_slug=slug,
+        resource_type="ev_charger",
+        resource_id=str(charger_id),
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     return await _enrich_charger(session, charger, slug)
 
@@ -454,7 +480,9 @@ async def update_ev_charger(
 async def delete_ev_charger(
     slug: str,
     charger_id: int,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> None:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -465,6 +493,15 @@ async def delete_ev_charger(
     if charger is None or charger.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EV charger not found")
 
+    await audit_admin_mutation(
+        request,
+        session,
+        action="ev_charger.delete",
+        site_slug=slug,
+        resource_type="ev_charger",
+        resource_id=str(charger_id),
+        summary={"name": charger.name},
+    )
     await repo.delete(charger)
     await session.commit()
 
@@ -472,7 +509,9 @@ async def delete_ev_charger(
 @router.post("/sites/{slug}/ev-chargers/sync", response_model=list[EvChargerResponse])
 async def sync_ev_chargers_from_heartbeat(
     slug: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> list[EvChargerResponse]:
     from energy_core.heartbeat_client_factory import create_heartbeat_client
 
@@ -540,6 +579,14 @@ async def sync_ev_chargers_from_heartbeat(
                 charging_mode="SMART_CHARGE",
             )
 
+    await audit_admin_mutation(
+        request,
+        session,
+        action="ev_charger.sync",
+        site_slug=slug,
+        resource_type="ev_charger",
+        summary={"heartbeat_ev_count": len(evs), "wallbox_count": len(wallboxes)},
+    )
     await session.commit()
     chargers = await repo.list_for_site(site.id)
     return [await _enrich_charger(session, c, slug) for c in chargers]
@@ -551,6 +598,7 @@ async def control_ev_charger(
     charger_id: int,
     payload: EvChargerControlRequest,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -585,6 +633,7 @@ async def set_ev_charger_override(
     charger_id: int,
     payload: EvChargerOverrideRequest,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)

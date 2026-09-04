@@ -98,5 +98,9 @@ if ($LASTEXITCODE -ne 0) { throw "Remote deploy failed" }
 
 Remove-Item $archive -Force -ErrorAction SilentlyContinue
 Write-Host ""
-Write-Host "Deploy complete. Application should be available at: http://${Server}/"
-Write-Host "Config view: http://${Server}/config"
+$scheme = if ($Server -match '^[0-9.]+$') { "http" } else { "https" }
+Write-Host "Deploy complete. Application should be available at: ${scheme}://${Server}/"
+Write-Host "Config view: ${scheme}://${Server}/config"
+if ($Server -match '^[0-9.]+$') {
+  Write-Host "Tip: set CADDY_DOMAIN=emic.inacloud.se in .env on the server for HTTPS via Let's Encrypt."
+}

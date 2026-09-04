@@ -56,6 +56,9 @@ from energy_core.solar_forecast.calibration import metrics_insufficient
 
 from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 
+from energy_core.solar_forecast.api_read import load_solar_forecast_snapshot, resolve_forecast_for_read
+from energy_core.solar_forecast.api_response import payload_to_solar_forecast_response
+
 from energy_core.solar_forecast.rollup_queries import (
     actual_solar_kwh_today,
     count_production_days_observed,
@@ -74,6 +77,8 @@ from energy_core.solar_forecast.weather_conditions import (
 
 )
 
+from energy_core.cache.service import get_cache_service, solar_forecast_cache_key
+from energy_core.config import Settings
 from energy_core.solar_intelligence.geometry import SolarGeometryService
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -190,7 +195,7 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 
     if record.solar_intelligence_enabled:
 
-        if _is_stale(forecast):
+        if _is_stale(forecast) and settings.solar_forecast_sync_refresh_on_read:
 
             from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
 
@@ -207,6 +212,12 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
             return forecast
 
     elif forecast is not None:
+
+        return forecast
+
+
+
+    if not settings.solar_forecast_sync_refresh_on_read:
 
         return forecast
 
@@ -346,6 +357,12 @@ async def _forecast_response(session, site, forecast, settings) -> SolarForecast
         historical_samples=getattr(forecast, "historical_samples", model_profile.historical_samples),
 
         production_days_observed=production_days,
+
+        age_seconds=0.0,
+
+        freshness="LIVE",
+
+        stale=False,
 
         points=[
 
@@ -589,7 +606,7 @@ async def get_solar_forecast(
 
     session: AsyncSession = Depends(get_db_session),
 
-    settings=Depends(get_app_settings),
+    settings: Settings = Depends(get_app_settings),
 
 ) -> SolarForecastResponse:
 
@@ -599,9 +616,55 @@ async def get_solar_forecast(
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
-    forecast = await _resolve_forecast(session, site, settings)
+    cache = get_cache_service(settings)
 
-    return await _forecast_response(session, site, forecast, settings)
+    cache_key = solar_forecast_cache_key(site.id)
+
+    ttl_seconds = settings.solar_forecast_redis_cache_ttl_seconds
+
+    cached = await cache.get(cache_key)
+
+    if cached is not None:
+
+        return SolarForecastResponse.model_validate(cached)
+
+    async def factory() -> dict:
+
+        snapshot = await load_solar_forecast_snapshot(session, site.id, settings)
+
+        if snapshot is not None:
+
+            response = payload_to_solar_forecast_response(
+
+                snapshot,
+
+                SolarForecastResponse,
+
+                SolarForecastPointResponse,
+
+            )
+
+        else:
+
+            forecast = await _resolve_forecast(session, site, settings)
+
+            if forecast is None:
+
+                raise HTTPException(
+
+                    status_code=503,
+
+                    detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
+
+                )
+
+            response = await _forecast_response(session, site, forecast, settings)
+
+        return response.model_dump(mode="json")
+
+    payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
+
+    return SolarForecastResponse.model_validate(payload)
 
 
 

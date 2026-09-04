@@ -1,0 +1,23 @@
+[
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  1,
+        "Ok":  1,
+        "AvgMs":  138.2,
+        "P95Ms":  138.2
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  5,
+        "Ok":  5,
+        "AvgMs":  123.3,
+        "P95Ms":  134.5
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  10,
+        "Ok":  10,
+        "AvgMs":  138.8,
+        "P95Ms":  157.4
+    }
+]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -50,5 +52,39 @@ async def test_performance_metrics_endpoint(app) -> None:
     body = res.json()
     assert "request_count" in body
     assert "cache" in body
+    assert body["cache"]["backend"] == "memory"
+    assert body["cache"]["redis_configured"] is False
+    assert body["cache"]["snapshot_pubsub_configured"] is False
     assert "site_snapshots" in body
     assert isinstance(body["site_snapshots"], list)
+    assert "tasks" in body
+    assert isinstance(body["tasks"], dict)
+
+
+@pytest.mark.asyncio
+async def test_snapshot_sse_generator_emits_initial_payload(client) -> None:
+    from unittest.mock import AsyncMock, patch
+
+    from app.api.snapshot import _snapshot_sse_generator
+    from energy_core.db.repositories import SiteRepository
+
+    _ac, session_factory, settings = client
+    request = AsyncMock()
+    request.is_disconnected = AsyncMock(return_value=True)
+
+    async with session_factory() as session:
+        site = await SiteRepository(session).get_by_slug("akarp")
+        assert site is not None
+        with patch(
+            "app.api.snapshot.snapshot_pubsub_available",
+            AsyncMock(return_value=False),
+        ):
+            chunks = [
+                chunk
+                async for chunk in _snapshot_sse_generator(request, session, site, settings)
+            ]
+
+    assert len(chunks) == 1
+    assert chunks[0].startswith("data: ")
+    payload = json.loads(chunks[0].removeprefix("data: ").strip())
+    assert payload["site"]["slug"] == "akarp"

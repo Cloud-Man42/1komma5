@@ -8,6 +8,7 @@ from typing import Any
 
 from app.deps import get_app_settings, get_db_session
 from energy_core.cache.service import get_cache_service, site_snapshot_cache_key
+from energy_core.cache.snapshot_pubsub import listen_snapshot_events, snapshot_pubsub_available
 from energy_core.config import Settings
 from energy_core.db.repositories import SiteRepository
 from energy_core.db.snapshot_repo import SiteLiveSnapshotRepository
@@ -23,7 +24,7 @@ SNAPSHOT_CACHE_TTL = 5.0
 
 
 async def _load_snapshot(session: AsyncSession, site, settings: Settings) -> dict[str, Any]:
-    cache = get_cache_service()
+    cache = get_cache_service(settings)
     cache_key = site_snapshot_cache_key(site.id)
 
     async def factory() -> dict[str, Any]:
@@ -42,6 +43,47 @@ async def _load_snapshot(session: AsyncSession, site, settings: Settings) -> dic
 
     payload = await cache.get_or_set(cache_key, factory, ttl_seconds=SNAPSHOT_CACHE_TTL)
     return payload
+
+
+async def _snapshot_sse_generator(
+    request: Request,
+    session: AsyncSession,
+    site,
+    settings: Settings,
+):
+    last_generated_at: str | None = None
+
+    def format_payload(payload: dict[str, Any]) -> str | None:
+        nonlocal last_generated_at
+        generated_at = payload.get("generated_at")
+        if generated_at != last_generated_at:
+            last_generated_at = generated_at
+            return f"data: {json.dumps(payload, default=str)}\n\n"
+        return None
+
+    initial = await _load_snapshot(session, site, settings)
+    if chunk := format_payload(initial):
+        yield chunk
+
+    if await snapshot_pubsub_available(settings):
+        async for event in listen_snapshot_events(settings, site.id):
+            if await request.is_disconnected():
+                return
+            payload = event.get("payload")
+            if not isinstance(payload, dict):
+                payload = await _load_snapshot(session, site, settings)
+            if chunk := format_payload(payload):
+                yield chunk
+        if await request.is_disconnected():
+            return
+
+    while True:
+        if await request.is_disconnected():
+            break
+        payload = await _load_snapshot(session, site, settings)
+        if chunk := format_payload(payload):
+            yield chunk
+        await asyncio.sleep(1)
 
 
 def _summary_from_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
@@ -98,16 +140,8 @@ async def site_live_stream(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
 
     async def event_generator():
-        last_generated_at: str | None = None
-        while True:
-            if await request.is_disconnected():
-                break
-            payload = await _load_snapshot(session, site, settings)
-            generated_at = payload.get("generated_at")
-            if generated_at != last_generated_at:
-                last_generated_at = generated_at
-                yield f"data: {json.dumps(payload, default=str)}\n\n"
-            await asyncio.sleep(1)
+        async for chunk in _snapshot_sse_generator(request, session, site, settings):
+            yield chunk
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

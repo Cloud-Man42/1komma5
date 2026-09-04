@@ -1,5 +1,5 @@
-import type { MarketPricePoint, MarketPricesResponse } from "@/lib/api";
-import { toOrePerKwh } from "@/lib/prices";
+import type { MarketPricePoint, MarketPricesResponse, PricePeriodSnapshot } from "@/lib/api";
+import { marketPointImportOre, toOrePerKwh } from "@/lib/prices";
 
 export interface TodayPricePoint {
   timestamp: string;
@@ -29,7 +29,7 @@ export interface SidebarElectricityPriceModel {
 }
 
 export function pointOre(point: MarketPricePoint): number {
-  return Math.round(toOrePerKwh(point.all_in_eur_kwh ?? point.spot_eur_kwh));
+  return marketPointImportOre(point) ?? 0;
 }
 
 export function localDayKey(iso: string, timezone: string): string {
@@ -112,6 +112,79 @@ export function buildPriceTrend(
     deltaOre: 0,
     atHourLabel: "",
     text: "Priset är stabilt resten av dagen",
+  };
+}
+
+export function importPeriodOre(period: PricePeriodSnapshot): number | null {
+  const sek = period.import_price_sek_kwh ?? period.market_price_sek_kwh;
+  if (sek == null) return null;
+  return Math.round(toOrePerKwh(sek));
+}
+
+/** Build today's buy-price curve from price-engine import periods (SEK/kWh from 1komma5 Heartbeat). */
+export function buildSidebarElectricityPriceModelFromImportPeriods(
+  periods: PricePeriodSnapshot[],
+  timezone: string,
+  now = new Date(),
+): SidebarElectricityPriceModel | null {
+  if (periods.length < 2) return null;
+
+  const todayKey = now.toLocaleDateString("sv-SE", { timeZone: timezone });
+  const todayPoints = periods
+    .map((period) => {
+      const ore = importPeriodOre(period);
+      if (ore == null) return null;
+      return {
+        timestamp: period.period_start,
+        hour: hourFraction(period.period_start, timezone),
+        ore,
+        isCurrent: false as boolean,
+      };
+    })
+    .filter((point): point is TodayPricePoint => point !== null)
+    .filter((point) => localDayKey(point.timestamp, timezone) === todayKey);
+
+  if (todayPoints.length < 2) return null;
+
+  const nowMs = now.getTime();
+  const mapped = todayPoints.map((point) => ({
+    ...point,
+    isCurrent: Math.abs(new Date(point.timestamp).getTime() - nowMs) < 45 * 60 * 1000,
+  }));
+
+  mapped.sort((a, b) => a.hour - b.hour);
+  const filled = fillHourlyCurve(mapped);
+
+  const ores = filled.map((p) => p.ore);
+  const lowestOre = Math.min(...ores);
+  const highestOre = Math.max(...ores);
+  let currentIndex = filled.findIndex((p) => p.isCurrent);
+  if (currentIndex < 0) {
+    currentIndex = filled.reduce(
+      (best, point, idx) =>
+        Math.abs(new Date(point.timestamp).getTime() - nowMs) <
+        Math.abs(new Date(filled[best].timestamp).getTime() - nowMs)
+          ? idx
+          : best,
+      0,
+    );
+  }
+  const currentOre = filled[currentIndex]?.ore ?? lowestOre;
+  const padding = Math.max(4, Math.round((highestOre - lowestOre) * 0.12));
+  const yMin = Math.max(0, lowestOre - padding);
+  const yMax = Math.max(highestOre + padding, lowestOre + 8);
+
+  return {
+    timezone,
+    points: filled,
+    currentOre,
+    lowestOre,
+    highestOre,
+    currentIndex,
+    yMin,
+    yMax,
+    trend: buildPriceTrend(filled, currentIndex, timezone),
+    segmentCount: Math.max(0, filled.length - 1),
   };
 }
 

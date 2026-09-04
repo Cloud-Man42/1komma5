@@ -15,6 +15,8 @@ from energy_core.db.repositories import EnergyReadingRepository, MarketPriceRepo
 from energy_core.export_revenue.site_config import sell_price_config_from_site
 from energy_core.db.solar_forecast_repo import SolarForecastRepository, SolarSiteConfigRepository
 from energy_core.db.snapshot_repo import SiteLiveSnapshotRepository
+from energy_core.db.solar_api_snapshot_repo import SolarForecastApiSnapshotRepository
+from energy_core.solar_forecast.api_snapshot_builder import build_solar_forecast_api_payload
 from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -204,9 +206,41 @@ class SnapshotWriter:
 
     async def write_all_sites(self, session: AsyncSession, sites) -> int:
         repo = SiteLiveSnapshotRepository(session, is_sqlite=self._settings.is_sqlite)
+        solar_repo = SolarForecastApiSnapshotRepository(session, is_sqlite=self._settings.is_sqlite)
+        forecast_repo = SolarForecastRepository(session)
+        config_repo = SolarSiteConfigRepository(session)
+        stale_after = float(self._settings.solar_forecast_refresh_minutes * 60)
         count = 0
         for site in sites:
             payload = await self._builder.build(session, site)
             await repo.upsert(site.id, payload)
+            from energy_core.cache.service import get_cache_service, site_snapshot_cache_key
+
+            cache = get_cache_service(self._settings)
+            await cache.set(
+                site_snapshot_cache_key(site.id),
+                payload,
+                ttl_seconds=self._settings.snapshot_redis_cache_ttl_seconds,
+            )
+            from energy_core.cache.snapshot_pubsub import publish_snapshot_event
+
+            await publish_snapshot_event(self._settings, site.id, payload)
+
+            config = await config_repo.get(site.id, timezone=site.timezone)
+            if config is not None and config.enabled:
+                forecast = await forecast_repo.get_latest(site.id)
+                if forecast is not None:
+                    api_payload = await build_solar_forecast_api_payload(
+                        session,
+                        site,
+                        forecast,
+                        self._settings,
+                    )
+                    await solar_repo.upsert(
+                        site.id,
+                        api_payload,
+                        forecast_generated_at=forecast.generated_at,
+                        stale_after_seconds=stale_after,
+                    )
             count += 1
         return count

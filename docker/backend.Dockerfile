@@ -17,6 +17,7 @@ COPY alembic ./alembic
 COPY alembic.ini ./
 COPY scripts/seed.py ./scripts/seed.py
 COPY scripts/repair_ev_sessions.py ./scripts/repair_ev_sessions.py
+COPY scripts/backfill_financial_daily.py ./scripts/backfill_financial_daily.py
 
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app

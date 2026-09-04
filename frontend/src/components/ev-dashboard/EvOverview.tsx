@@ -131,10 +131,7 @@ export function EvOverview({ siteSlug }: { siteSlug: string }) {
         );
       case "settings":
         return (
-          <EvPlaceholderSection
-            title="INSTÄLLNINGAR"
-            text="Avancerade laddinställningar finns under Konfiguration → Laddboxar."
-          />
+          <EvManualControlPanel siteSlug={siteSlug} charger={charger} onUpdated={() => void data.reload()} />
         );
       case "access":
         return (

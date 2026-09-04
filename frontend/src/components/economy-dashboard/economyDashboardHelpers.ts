@@ -29,7 +29,12 @@ import type {
   MarketPricesResponse,
   YearForecastResponse,
 } from "@/lib/api";
-import { toOrePerKwh } from "@/lib/prices";
+import {
+  marketPointImportSek,
+  marketPointSpotSek,
+  sekKwhToOre,
+  toOrePerKwh,
+} from "@/lib/prices";
 
 export type EconomyValueQuality = "ACTUAL" | "CALCULATED" | "ESTIMATED" | "MISSING";
 
@@ -482,18 +487,13 @@ export function buildDailyCostSeries(stats: FinancialStat[]): DailyCostPoint[] {
     };
   });
 }
-/** Heartbeat prices are stored in kr/kWh; convert to whole öre for display. */
-export function marketPriceToOre(pricePerKwh: number): number {
-  return Math.round(toOrePerKwh(pricePerKwh));
+/** Convert SEK/kWh to whole öre/kWh for display. */
+export function marketPriceToOre(sekKwh: number): number {
+  return sekKwhToOre(sekKwh);
 }
 
 export function formatPriceOre(value: number | null): string {
-  return value == null ? "—" : `${value} öre`;
-}
-
-function effectiveAllInPrice(point: MarketPricePoint): number | null {
-  const value = point.all_in_eur_kwh ?? point.spot_eur_kwh;
-  return Number.isFinite(value) ? value : null;
+  return value == null ? "—" : `${value} öre/kWh`;
 }
 
 function averagePrice(values: number[]): number | null {
@@ -527,40 +527,45 @@ export function buildPriceAnalysis(
   const todayPoints = allPoints.filter((point) => localDayKey(point.timestamp, timezone) === todayKey);
   const points = todayPoints.length > 0 ? todayPoints : allPoints;
 
-  const spotValues = points.map((point) => point.spot_eur_kwh).filter(Number.isFinite);
-  const allInValues = points.map((point) => effectiveAllInPrice(point)).filter((value): value is number => value != null);
+  const spotValues = points
+    .map((point) => marketPointSpotSek(point))
+    .filter((value): value is number => value != null);
+  const importValues = points
+    .map((point) => marketPointImportSek(point))
+    .filter((value): value is number => value != null);
 
   let cheapest: MarketPricePoint | null = null;
   let expensive: MarketPricePoint | null = null;
   for (const point of points) {
-    const price = effectiveAllInPrice(point);
+    const price = marketPointImportSek(point);
     if (price == null) continue;
-    if (!cheapest || price < (effectiveAllInPrice(cheapest) ?? Number.POSITIVE_INFINITY)) {
+    if (!cheapest || price < (marketPointImportSek(cheapest) ?? Number.POSITIVE_INFINITY)) {
       cheapest = point;
     }
-    if (!expensive || price > (effectiveAllInPrice(expensive) ?? Number.NEGATIVE_INFINITY)) {
+    if (!expensive || price > (marketPointImportSek(expensive) ?? Number.NEGATIVE_INFINITY)) {
       expensive = point;
     }
   }
 
   const spotAverage = averagePrice(spotValues);
-  const purchaseAverage = averagePrice(allInValues);
+  const purchaseAverage =
+    averagePrice(importValues) ?? marketPrices?.average_import_sek_kwh ?? null;
   const cheapestPrice =
     cheapest != null
-      ? effectiveAllInPrice(cheapest)
-      : marketPrices?.lowest_all_in_eur_kwh ?? null;
+      ? marketPointImportSek(cheapest)
+      : marketPrices?.lowest_import_sek_kwh ?? null;
   const expensivePrice =
     expensive != null
-      ? effectiveAllInPrice(expensive)
-      : marketPrices?.highest_all_in_eur_kwh ?? null;
+      ? marketPointImportSek(expensive)
+      : marketPrices?.highest_import_sek_kwh ?? null;
 
   return {
-    spotOre: spotAverage != null ? marketPriceToOre(spotAverage) : null,
-    purchaseOre: purchaseAverage != null ? marketPriceToOre(purchaseAverage) : null,
-    exportOre: Number.isFinite(exportPriceSekKwh) ? marketPriceToOre(exportPriceSekKwh) : null,
-    cheapestOre: cheapestPrice != null ? marketPriceToOre(cheapestPrice) : null,
+    spotOre: spotAverage != null ? sekKwhToOre(spotAverage) : null,
+    purchaseOre: purchaseAverage != null ? sekKwhToOre(purchaseAverage) : null,
+    exportOre: Number.isFinite(exportPriceSekKwh) ? sekKwhToOre(exportPriceSekKwh) : null,
+    cheapestOre: cheapestPrice != null ? sekKwhToOre(cheapestPrice) : null,
     cheapestAt: formatPriceTimestamp(cheapest?.timestamp ?? null, timezone),
-    expensiveOre: expensivePrice != null ? marketPriceToOre(expensivePrice) : null,
+    expensiveOre: expensivePrice != null ? sekKwhToOre(expensivePrice) : null,
     expensiveAt: formatPriceTimestamp(expensive?.timestamp ?? null, timezone),
   };
 }

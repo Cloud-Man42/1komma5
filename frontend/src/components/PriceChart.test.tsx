@@ -56,20 +56,29 @@ describe("PriceChart", () => {
           slug: "akarp",
           timezone: "Europe/Stockholm",
           resolution: "1h",
-          current_price_eur_kwh: 0.22,
-          average_all_in_eur_kwh: 0.2,
-          highest_all_in_eur_kwh: 0.28,
-          lowest_all_in_eur_kwh: 0.14,
+          current_price_eur_kwh: 0.02,
+          average_all_in_eur_kwh: 0.018,
+          highest_all_in_eur_kwh: 0.028,
+          lowest_all_in_eur_kwh: 0.014,
+          current_spot_sek_kwh: 1.22,
+          current_import_sek_kwh: 2.86,
+          average_import_sek_kwh: 1.99,
+          highest_import_sek_kwh: 3.08,
+          lowest_import_sek_kwh: 1.54,
           points: [
             {
               timestamp: "2026-08-13T18:00:00Z",
-              spot_eur_kwh: 0.12,
-              all_in_eur_kwh: 0.22,
+              spot_eur_kwh: 0.011,
+              all_in_eur_kwh: 0.02,
+              spot_sek_kwh: 1.22,
+              import_sek_kwh: 2.86,
             },
             {
               timestamp: "2026-08-13T19:00:00Z",
-              spot_eur_kwh: 0.1,
-              all_in_eur_kwh: 0.18,
+              spot_eur_kwh: 0.009,
+              all_in_eur_kwh: 0.018,
+              spot_sek_kwh: 1.0,
+              import_sek_kwh: 1.54,
             },
           ],
         }}
@@ -77,9 +86,9 @@ describe("PriceChart", () => {
     );
 
     expect(screen.getByText("Elpris 24 timmar")).toBeTruthy();
-    expect(screen.getByText("22.0 öre/kWh")).toBeTruthy();
-    expect(screen.getByText("14.0 öre/kWh")).toBeTruthy();
-    expect(screen.getByText("28.0 öre/kWh")).toBeTruthy();
+    expect(screen.getByText("286.0 öre/kWh")).toBeTruthy();
+    expect(screen.getByText("154.0 öre/kWh")).toBeTruthy();
+    expect(screen.getByText("308.0 öre/kWh")).toBeTruthy();
   });
 
   it("shows empty state when no points are available", () => {

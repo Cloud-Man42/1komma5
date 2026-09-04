@@ -172,7 +172,7 @@ class MercedesProvider:
             raise RuntimeError("Mercedes provider is not authenticated")
         if not self._vehicles:
             await self._discover_vehicles()
-        await self._app_version.refresh(self._rest.get_config, force=True)
+        await self._app_version.refresh(self._rest.get_config, force=False)
         await self._hydrate_vehicle_snapshots(vins=vins)
         return await self.get_vehicles()
 

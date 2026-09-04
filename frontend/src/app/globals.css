@@ -99,6 +99,73 @@ body {
   font-size: 1rem;
 }
 
+.admin-audit-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.admin-audit-table th,
+.admin-audit-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-audit-summary {
+  max-width: 24rem;
+  word-break: break-word;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+}
+
+.display-enroll-result {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.display-enroll-result-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.display-enroll-qr {
+  display: block;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.display-enroll-actions {
+  display: grid;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+
+.display-enroll-open-link {
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.display-enroll-url {
+  margin: 0;
+  word-break: break-all;
+}
+
+.display-enroll-url code {
+  font-size: 0.8rem;
+}
+
 .config-section-title {
   margin: 0 0 0.75rem;
   font-size: 1rem;
@@ -2183,6 +2250,55 @@ body {
   margin-bottom: 1rem;
 }
 
+.diag-audit-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.diag-audit-metrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.diag-audit-metrics span {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.diag-audit-metrics strong {
+  font-size: 0.95rem;
+  color: #e2e8f0;
+}
+
+.diag-audit-table-wrap {
+  overflow-x: auto;
+}
+
+.diag-audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.diag-audit-table th,
+.diag-audit-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-align: left;
+}
+
+.diag-audit-table th {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
 .reasoning-summary {
   margin-bottom: 0.75rem;
 }
@@ -2604,4 +2720,56 @@ body {
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.energy-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.energy-control-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.energy-control-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.6);
+  color: inherit;
+}
+
+.energy-control-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+
+.energy-control-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+}
+
+.energy-control-meta dt {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.energy-control-meta dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.energy-control-note {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
 }

@@ -21,6 +21,7 @@ class HorizonInputs:
     initial_battery_soc_pct: float | None
     higher_priority_loads_w: float = 0.0
     battery_capacity_kwh: float = 10.0
+    price_by_period: dict[datetime, object] | None = None
 
 
 class EnergyHorizonBuilder:

@@ -12,6 +12,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from energy_core.performance.context import PerformanceContext, clear_performance_context, set_performance_context
+from energy_core.performance.logging_context import request_id_var
 from energy_core.performance.store import RequestMetric, get_performance_store
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())[:12]
+        request_id_var.set(request_id)
         route = request.url.path
         ctx = PerformanceContext(request_id=request_id, route=route)
         set_performance_context(ctx)

@@ -2,9 +2,8 @@
 # Token is injected from environment — never stored in this file.
 #
 # Install: copy to /etc/emic/Caddyfile, set EMIC_KIOSK_TOKEN in /etc/emic/kiosk.env
-# and EMIC_SERVER / EMIC_SERVER_SCHEME in /etc/emic/display.env. The upstream is
-# a placeholder so a Pi at another site (or reaching EMIC over the internet)
-# needs no edit to this file.
+# and EMIC_SERVER / EMIC_SERVER_SCHEME / EMIC_SERVER_HOST in /etc/emic/display.env.
+# Prefer https://emic.inacloud.se (split-horizon DNS) over raw LAN IP.
 {
 	auto_https off
 	admin off
@@ -13,12 +12,12 @@
 :8080 {
 	@api path /api/*
 
-	reverse_proxy @api {$EMIC_SERVER_SCHEME:http}://{$EMIC_SERVER:192.168.50.54} {
-		header_up Host {$EMIC_SERVER:192.168.50.54}
+	reverse_proxy @api {$EMIC_SERVER_SCHEME:https}://{$EMIC_SERVER:emic.inacloud.se} {
+		header_up Host {$EMIC_SERVER_HOST:emic.inacloud.se}
 		header_up Authorization "Bearer {env.EMIC_KIOSK_TOKEN}"
 	}
 
-	reverse_proxy {$EMIC_SERVER_SCHEME:http}://{$EMIC_SERVER:192.168.50.54} {
-		header_up Host {$EMIC_SERVER:192.168.50.54}
+	reverse_proxy {$EMIC_SERVER_SCHEME:https}://{$EMIC_SERVER:emic.inacloud.se} {
+		header_up Host {$EMIC_SERVER_HOST:emic.inacloud.se}
 	}
 }

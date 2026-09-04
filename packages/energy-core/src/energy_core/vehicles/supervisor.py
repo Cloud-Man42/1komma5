@@ -15,6 +15,7 @@ from energy_core.db.integration_event_repo import VehicleIntegrationEventReposit
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
+from energy_core.vehicles.connection_signals import _trusted_power_kw, resolve_effective_connection
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import VehicleConnectionState, VehicleState
 from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
@@ -27,9 +28,12 @@ from energy_core.vehicles.diagnostics.events import (
 )
 from energy_core.vehicles.diagnostics.self_heal import evaluate_vehicle_self_heal
 from energy_core.vehicles.mercedes.provider import MercedesProvider
+from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.mock.provider import MockVehicleProvider, MockVehicleScenario
 
 REST_REFRESH_SECONDS = 300
+REST_SKIP_SOC_FRESH_SECONDS = 120
+REST_FAILURE_BACKOFF_SECONDS = 900
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +51,7 @@ class _PollingContext:
     is_charging: bool | None = None
     is_plugged_in: bool | None = None
     charging_power_kw: float | None = None
+    charging_updated_at: datetime | None = None
     last_vehicle_update: datetime | None = None
     soc_updated_at: datetime | None = None
     missing_gps: bool = True
@@ -67,21 +72,36 @@ def _halo_charger_active(charger) -> bool | None:
 
 
 def _build_polling_context(db_latest, latest_state, correlation, charger) -> _PollingContext:
-    is_charging = db_latest.is_charging if db_latest is not None else (latest_state.is_charging if latest_state else None)
-    is_plugged_in = (
-        db_latest.is_plugged_in if db_latest is not None else (latest_state.is_plugged_in if latest_state else None)
+    now = datetime.now(UTC)
+    effective = resolve_effective_connection(
+        db_latest,
+        plugged_agreement=correlation.plugged_agreement if correlation else None,
     )
-    charging_power_kw = (
+    raw_charging = db_latest.is_charging if db_latest is not None else None
+    raw_plugged = db_latest.is_plugged_in if db_latest is not None else None
+    is_charging = raw_charging
+    is_plugged_in = raw_plugged if raw_plugged is not None else effective.is_plugged_in
+    raw_power = (
         db_latest.charging_power_kw
         if db_latest is not None
         else (latest_state.charging_power_kw if latest_state else None)
     )
+    charging_power_kw = _trusted_power_kw(
+        is_charging=db_latest.is_charging if db_latest is not None else None,
+        charging_power_kw=raw_power,
+    )
+    charging_updated_at = getattr(db_latest, "charging_updated_at", None) if db_latest is not None else None
+    if charging_updated_at is not None:
+        charging_age = max(0.0, (now - charging_updated_at).total_seconds())
+        if charging_age > STALE_TELEMETRY_SECONDS and not effective.is_charging:
+            charging_power_kw = 0.0
     last_vehicle_update = (
         db_latest.last_vehicle_update
         if db_latest is not None
         else (latest_state.last_vehicle_update if latest_state else None)
     )
     soc_updated_at = getattr(db_latest, "soc_updated_at", None) if db_latest is not None else None
+    charging_updated_at = getattr(db_latest, "charging_updated_at", None) if db_latest is not None else None
     latitude = db_latest.latitude if db_latest is not None else (latest_state.latitude if latest_state else None)
     longitude = db_latest.longitude if db_latest is not None else (latest_state.longitude if latest_state else None)
     halo = (
@@ -93,13 +113,14 @@ def _build_polling_context(db_latest, latest_state, correlation, charger) -> _Po
         is_charging=is_charging,
         is_plugged_in=is_plugged_in,
         charging_power_kw=charging_power_kw,
+        charging_updated_at=charging_updated_at,
         last_vehicle_update=last_vehicle_update,
         soc_updated_at=soc_updated_at,
         missing_gps=latitude is None or longitude is None,
         away_from_home=is_away_charging(
             halo=halo,
-            mercedes_plugged=is_plugged_in,
-            mercedes_charging=is_charging,
+            mercedes_plugged=effective.is_plugged_in,
+            mercedes_charging=effective.is_charging,
             mercedes_power_kw=charging_power_kw,
             halo_charger_active=_halo_charger_active(charger),
         ),
@@ -133,6 +154,31 @@ class VehicleIntegrationSupervisor:
             await self._stop_site(runtime)
         self._runtimes.clear()
         logger.info("Vehicle integration supervisor stopped")
+
+    async def _record_mercedes_health(
+        self,
+        site_id: int,
+        *,
+        success: bool,
+        error_class: str | None = None,
+        latency_ms: float | None = None,
+        circuit_breaker_state: str | None = None,
+    ) -> None:
+        from energy_core.integrations.collector_health import record_provider_outcome
+        from energy_core.integrations.health import IntegrationHealthRecorder
+
+        async with self._session_factory() as session:
+            recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
+            await record_provider_outcome(
+                recorder,
+                site_id,
+                "mercedes",
+                success=success,
+                error_class=error_class,
+                latency_ms=latency_ms,
+                circuit_breaker_state=circuit_breaker_state,
+            )
+            await session.commit()
 
     async def _supervisor_loop(self) -> None:
         while self._running:
@@ -247,6 +293,11 @@ class VehicleIntegrationSupervisor:
             raise
         except Exception as exc:
             logger.exception("Vehicle integration failed for site %s: %s", runtime.site_slug, exc)
+            await self._record_mercedes_health(
+                runtime.site_id,
+                success=False,
+                error_class=type(exc).__name__,
+            )
             async with self._session_factory() as session:
                 repo = VehicleProviderRepository(session, secret_box=self._secret_box)
                 row = await repo.get_for_site(runtime.site_id)
@@ -276,6 +327,16 @@ class VehicleIntegrationSupervisor:
 
         await manager.run(connect=connect, watch=watch)
         await self._persist_connection_status(runtime.site_id, provider)
+        status = provider.connection_manager.status
+        if status.connection_state == VehicleConnectionState.CONNECTED:
+            await self._record_mercedes_health(runtime.site_id, success=True)
+        else:
+            await self._record_mercedes_health(
+                runtime.site_id,
+                success=False,
+                error_class=status.connection_state.value,
+                circuit_breaker_state=status.connection_state.value,
+            )
 
     async def _persist_connection_status(self, site_id: int, provider: MercedesProvider) -> None:
         status = provider.connection_manager.status
@@ -357,6 +418,9 @@ class VehicleIntegrationSupervisor:
                     ),
                 )
             await session.commit()
+        if isinstance(provider, MercedesProvider):
+            latency_ms = getattr(provider.rest_client.api_client, "last_latency_ms", None)
+            await self._record_mercedes_health(site_id, success=True, latency_ms=latency_ms)
 
     async def _periodic_rest_refresh(self, runtime: _SiteRuntime, provider: MercedesProvider) -> None:
         planner = AdaptivePollingPlanner()
@@ -385,6 +449,7 @@ class VehicleIntegrationSupervisor:
                 is_charging=polling_context.is_charging,
                 is_plugged_in=polling_context.is_plugged_in,
                 charging_power_kw=polling_context.charging_power_kw,
+                charging_updated_at=polling_context.charging_updated_at,
                 last_vehicle_update=polling_context.last_vehicle_update,
                 soc_updated_at=polling_context.soc_updated_at,
                 missing_gps=polling_context.missing_gps,
@@ -397,6 +462,24 @@ class VehicleIntegrationSupervisor:
                 polling_interval_seconds=decision.interval_seconds,
             )
             force_sync = SelfHealAction.FORCE_REST_SYNC in heal.actions
+            force_ws_reconnect = SelfHealAction.FORCE_WS_RECONNECT in heal.actions
+            soc_age: float | None = None
+            if polling_context.soc_updated_at is not None:
+                soc_ts = (
+                    polling_context.soc_updated_at
+                    if polling_context.soc_updated_at.tzinfo
+                    else polling_context.soc_updated_at.replace(tzinfo=UTC)
+                )
+                soc_age = max(0.0, (datetime.now(UTC) - soc_ts).total_seconds())
+            ws_connected = provider.connection_manager.status.connection_state == VehicleConnectionState.CONNECTED
+            skip_rest = (
+                ws_connected
+                and soc_age is not None
+                and soc_age <= REST_SKIP_SOC_FRESH_SECONDS
+                and not force_sync
+                and decision.mode.value not in {"STALE_RECOVERY", "POSITION_RECOVERY"}
+            )
+            sleep_seconds = decision.interval_seconds
             async with self._session_factory() as session:
                 repo = VehicleProviderRepository(session, secret_box=self._secret_box)
                 event_repo = VehicleIntegrationEventRepository(session)
@@ -413,6 +496,9 @@ class VehicleIntegrationSupervisor:
                         current_polling_interval_seconds=decision.interval_seconds,
                     )
                 await session.commit()
+            if skip_rest:
+                await asyncio.sleep(sleep_seconds)
+                continue
             try:
                 if force_sync:
                     async with self._session_factory() as session:
@@ -432,6 +518,13 @@ class VehicleIntegrationSupervisor:
                 states = await provider.sync_from_rest()
                 if states:
                     await self._persist_vehicle_states(runtime.site_id, states, provider=provider)
+                if force_ws_reconnect and isinstance(provider, MercedesProvider):
+                    provider.connection_manager.reset_circuit()
+                    logger.info(
+                        "Mercedes websocket reconnect requested for site %s (stale SoC/range at source)",
+                        runtime.site_slug,
+                    )
+                if states:
                     soc_values = [
                         state.state_of_charge_percent
                         for state in states
@@ -472,6 +565,15 @@ class VehicleIntegrationSupervisor:
                 raise
             except Exception as exc:
                 logger.exception("Mercedes periodic REST refresh failed for site %s", runtime.site_slug)
+                sleep_seconds = max(sleep_seconds, REST_FAILURE_BACKOFF_SECONDS)
+                error_text = str(exc)
+                if "429" in error_text or "AUTH" in error_text.upper():
+                    sleep_seconds = max(sleep_seconds, REST_FAILURE_BACKOFF_SECONDS * 2)
+                await self._record_mercedes_health(
+                    runtime.site_id,
+                    success=False,
+                    error_class=type(exc).__name__,
+                )
                 async with self._session_factory() as session:
                     repo = VehicleProviderRepository(session, secret_box=self._secret_box)
                     await VehicleIntegrationEventRepository(session).record_events(
@@ -495,7 +597,7 @@ class VehicleIntegrationSupervisor:
                             last_error=str(exc)[:512],
                         )
                         await session.commit()
-            await asyncio.sleep(decision.interval_seconds)
+            await asyncio.sleep(sleep_seconds)
 
     async def _stop_site(self, runtime: _SiteRuntime) -> None:
         if runtime.task is not None:

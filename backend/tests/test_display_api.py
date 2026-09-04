@@ -33,10 +33,66 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_phone_device_gets_display_read_scope(client):
+    ac, _, _ = client
+    device = await _create_pi_device(ac, name="Henriks mobil", device_type="phone")
+    assert device["device_type"] == "phone"
+    assert device["scopes"] == "display.read"
+
+
+@pytest.mark.asyncio
 async def test_display_overview_requires_auth(client):
     ac, _, _ = client
     response = await ac.get("/api/v1/display/overview/akarp")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_display_overview_stream_requires_auth(client):
+    ac, _, _ = client
+    response = await ac.get("/api/v1/display/overview/akarp/stream")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_display_overview_sse_generator_emits_initial_payload(client):
+    from unittest.mock import AsyncMock, patch
+
+    from app.api.display import _display_overview_sse_generator
+    from app.display_service import DisplayOverviewService
+
+    ac, session_factory, settings = client
+    await _create_pi_device(ac)
+    await seed_recent_readings(
+        session_factory,
+        settings,
+        "akarp",
+        [(3200, 1780, 0, 1240, 58)],
+    )
+
+    request = AsyncMock()
+    request.is_disconnected = AsyncMock(return_value=True)
+
+    async with session_factory() as session:
+        service = DisplayOverviewService(session, settings)
+        with patch(
+            "app.api.display.snapshot_pubsub_available",
+            AsyncMock(return_value=False),
+        ):
+            chunks = [
+                chunk
+                async for chunk in _display_overview_sse_generator(
+                    request,
+                    session,
+                    settings,
+                    "akarp",
+                    service,
+                )
+            ]
+
+    assert len(chunks) == 1
+    assert chunks[0].startswith("data: ")
+    assert '"slug":"akarp"' in chunks[0] or '"slug": "akarp"' in chunks[0]
 
 
 @pytest.mark.asyncio
@@ -84,6 +140,29 @@ async def test_display_overview_sections_expose_deadline_fields(client):
     assert "ready_by" in body["charger"]
     assert "next_cleaning_at" in body["spa"]
     assert body["spa"]["next_cleaning_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_display_overview_includes_phase2_fields(client):
+    ac, session_factory, settings = client
+    device = await _create_pi_device(ac, name="Pi phase2")
+    await seed_recent_readings(session_factory, settings, "akarp", [(3200, 1780, 0, 1240, 58)])
+
+    response = await ac.get(
+        "/api/v1/display/overview/akarp",
+        headers=_auth_headers(device["token"]),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert "solar" in body
+    assert "forecast_curve" in body["solar"]
+    assert "lowest_ore_kwh" in body["price"]
+    assert "highest_ore_kwh" in body["price"]
+    assert "battery_charged_today_kwh" in body["live"]
+    assert "battery_discharged_today_kwh" in body["live"]
+    assert "decision_reason_sv" in body["charger"]
+    assert "filter_cycles_completed_today" in body["spa"]
+    assert "target_soc_pct" in body["vehicle"]
 
 
 @pytest.mark.asyncio
@@ -496,6 +575,21 @@ async def test_enroll_cookie_is_secure_over_https(client):
     device = await _create_pi_device(ac, name="Surfplatta", device_type="tablet")
 
     response = await ac.get(f"https://test/api/v1/display/enroll?token={device['token']}")
+
+    assert response.status_code == 303
+    assert "Secure" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_enroll_cookie_is_secure_with_forwarded_proto(client):
+    """Caddy terminates TLS and forwards X-Forwarded-Proto to the backend."""
+    ac, _, _ = client
+    device = await _create_pi_device(ac, name="Surfplatta", device_type="tablet")
+
+    response = await ac.get(
+        f"http://test/api/v1/display/enroll?token={device['token']}",
+        headers={"X-Forwarded-Proto": "https", "X-Forwarded-For": "203.0.113.10"},
+    )
 
     assert response.status_code == 303
     assert "Secure" in response.headers["set-cookie"]

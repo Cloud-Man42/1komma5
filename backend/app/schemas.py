@@ -557,6 +557,9 @@ class MarketPricePointResponse(BaseModel):
     timestamp: datetime
     spot_eur_kwh: float
     all_in_eur_kwh: float | None = None
+    spot_sek_kwh: float | None = None
+    import_sek_kwh: float | None = None
+    export_sek_kwh: float | None = None
 
 
 class MarketPricesResponse(BaseModel):
@@ -567,6 +570,11 @@ class MarketPricesResponse(BaseModel):
     average_all_in_eur_kwh: float | None = None
     highest_all_in_eur_kwh: float | None = None
     lowest_all_in_eur_kwh: float | None = None
+    current_spot_sek_kwh: float | None = None
+    current_import_sek_kwh: float | None = None
+    average_import_sek_kwh: float | None = None
+    highest_import_sek_kwh: float | None = None
+    lowest_import_sek_kwh: float | None = None
     points: list[MarketPricePointResponse] = Field(default_factory=list)
 
 
@@ -798,6 +806,10 @@ class SolarForecastResponse(BaseModel):
     confidence_label: str | None = None
     historical_samples: int = 0
     production_days_observed: int = 0
+    age_seconds: float = 0.0
+    freshness: str = "LIVE"
+    stale: bool = False
+    snapshot_generated_at: datetime | None = None
     points: list[SolarForecastPointResponse] = Field(default_factory=list)
 
 
@@ -1397,6 +1409,12 @@ class DashboardTodaySection(DashboardSectionMeta):
     exported_kwh: float | None = None
     energy_cost_sek: float | None = None
     savings_sek: float | None = None
+    produced_kwh_yesterday: float | None = None
+    consumed_kwh_yesterday: float | None = None
+    imported_kwh_yesterday: float | None = None
+    exported_kwh_yesterday: float | None = None
+    energy_cost_sek_yesterday: float | None = None
+    savings_sek_yesterday: float | None = None
 
 
 class DashboardEvSection(DashboardSectionMeta):
@@ -1542,6 +1560,10 @@ class VehicleListItemResponse(BaseModel):
     is_charging: bool | None = None
     charging_power_kw: float | None = None
     last_vehicle_update: datetime | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_name: str | None = None
+    charger_operator: str | None = None
     capabilities: VehicleCapabilitiesResponse
     halo_correlation: VehicleHaloCorrelationResponse | None = None
     state_of_charge: VehicleValueResponse | None = None
@@ -1727,6 +1749,8 @@ class VehicleChargeSessionResponse(BaseModel):
     estimated_energy_kwh: float | None = None
     charging_cost_sek: float | None = None
     cost_source: str | None = None
+    price_model: str | None = None
+    price_value_sek_kwh: float | None = None
     detection_confidence: str | None = None
     identification_method: str | None = None
     vehicle_data_quality: str | None = None
@@ -1978,3 +2002,286 @@ class EnergyOrchestrationPriorityItem(BaseModel):
 
 class EnergyOrchestrationPrioritiesUpdateRequest(BaseModel):
     loads: list[EnergyOrchestrationPriorityItem] = Field(default_factory=list)
+
+
+class PricePeriodResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    price_area: str
+    currency: str
+    market_price_sek_kwh: float | None = None
+    import_price_sek_kwh: float | None = None
+    export_price_sek_kwh: float | None = None
+    source: str
+    quality: str
+    is_estimated: bool
+    components: dict = Field(default_factory=dict)
+
+
+class PriceEngineCurrentResponse(BaseModel):
+    slug: str
+    timezone: str
+    period: PricePeriodResponse | None = None
+
+
+class PriceEngineDayResponse(BaseModel):
+    slug: str
+    timezone: str
+    day: date
+    periods: list[PricePeriodResponse] = Field(default_factory=list)
+
+
+class PriceEngineRangeResponse(BaseModel):
+    slug: str
+    timezone: str
+    from_time: datetime
+    to_time: datetime
+    periods: list[PricePeriodResponse] = Field(default_factory=list)
+
+
+class PriceEngineStatusResponse(BaseModel):
+    slug: str
+    last_market_refresh_at: datetime | None = None
+    last_import_refresh_at: datetime | None = None
+    last_export_refresh_at: datetime | None = None
+    last_error: str | None = None
+    missing_periods_count: int = 0
+    data_age_seconds: int | None = None
+    optimization_mode: str = "MONITOR_ONLY"
+
+
+class EvRecommendationResponse(BaseModel):
+    charger_id: int
+    charger_name: str
+    window_start: datetime
+    window_end: datetime
+    avg_import_sek_kwh: float
+    current_import_sek_kwh: float
+    estimated_saving_sek: float | None = None
+    reason_sv: str
+
+
+class EnergyStrategyCurrentResponse(BaseModel):
+    slug: str
+    timezone: str
+    period_start: datetime
+    market_price_sek_kwh: float | None = None
+    import_price_sek_kwh: float | None = None
+    export_price_sek_kwh: float | None = None
+    market_quality: str
+    import_quality: str
+    export_quality: str
+    battery_soc_pct: float | None = None
+    strategy_state: str
+    confidence: float
+    reason: str
+    reason_sv: str
+    next_peak_at: datetime | None = None
+    next_peak_import_sek_kwh: float | None = None
+    optimization_mode: str
+    expected_saving_today_sek: float | None = None
+    recommended_reserve_soc_pct: float | None = None
+    recommended_action: str | None = None
+    eov_value_sek_kwh: float | None = None
+    grid_surcharge_sek_kwh: float | None = None
+    fuse_headroom_a: float | None = None
+    fuse_utilization_pct: float | None = None
+    ev_recommendations: list[EvRecommendationResponse] = Field(default_factory=list)
+
+
+class BatteryOpportunityResponse(BaseModel):
+    slug: str
+    timezone: str
+    available: bool
+    monitor_only: bool = True
+    unavailable_reason_sv: str | None = None
+    action: str | None = None
+    action_label_sv: str | None = None
+    headline_sv: str | None = None
+    reason_sv: str | None = None
+    confidence: float | None = None
+    battery_soc_pct: float | None = None
+    recommended_reserve_soc_pct: float | None = None
+    expected_value_sek_kwh: float | None = None
+    next_peak_at: datetime | None = None
+    next_peak_import_sek_kwh: float | None = None
+    optimization_mode: str | None = None
+    strategy_state: str | None = None
+
+
+class HorizonLoadRecommendationResponse(BaseModel):
+    load_id: str
+    name: str
+    load_type: str
+    priority: int
+    strategy: str
+    window_start: datetime | None = None
+    window_end: datetime | None = None
+    expected_energy_kwh: float | None = None
+    expected_cost_sek: float | None = None
+    expected_energy_source: str | None = None
+    savings_sek: float | None = None
+    reason_sv: str | None = None
+    explanation_sv: str | None = None
+
+
+class HorizonOptimizerResponse(BaseModel):
+    slug: str
+    timezone: str
+    available: bool
+    monitor_only: bool = True
+    unavailable_reason_sv: str | None = None
+    horizon_hours: int
+    horizon_blocks: int
+    generated_at: datetime | None = None
+    total_planned_savings_sek: float | None = None
+    headline_sv: str | None = None
+    summary_sv: str | None = None
+    loads: list[HorizonLoadRecommendationResponse] = Field(default_factory=list)
+    battery: BatteryOpportunityResponse | None = None
+
+
+class HeartbeatAuditRollupResponse(BaseModel):
+    actual_energy_cost_sek: float
+    baseline_cost_without_optimization_sek: float
+    heartbeat_saving_sek: float
+    emic_theoretical_optimal_cost_sek: float
+    additional_optimization_potential_sek: float
+    heartbeat_efficiency_pct: float | None = None
+    imported_kwh: float
+    exported_kwh: float
+
+
+class HeartbeatAuditPeriodSnapshotResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    import_price_sek_kwh: float | None = None
+    export_price_sek_kwh: float | None = None
+    grid_import_w: float | None = None
+    grid_export_w: float | None = None
+    battery_soc_pct: float | None = None
+    ev_power_w: float | None = None
+    heartbeat_mode: str | None = None
+    ai_decision: str | None = None
+    heartbeat_reason: str | None = None
+    emic_strategy_state: str | None = None
+    emic_recommended_action: str | None = None
+
+
+class HeartbeatAuditDailyResponse(BaseModel):
+    slug: str
+    timezone: str
+    day: str
+    rollup: HeartbeatAuditRollupResponse
+    solar_self_consumed_kwh: float
+    battery_self_consumed_kwh: float
+    period_count: int
+    periods: list[HeartbeatAuditPeriodSnapshotResponse] = Field(default_factory=list)
+
+
+class HeartbeatAuditMonthlyResponse(BaseModel):
+    slug: str
+    timezone: str
+    month: str
+    rollup: HeartbeatAuditRollupResponse
+    days_with_data: int
+    daily: list[HeartbeatAuditDailyResponse] = Field(default_factory=list)
+
+
+class ForecastMetricSummaryResponse(BaseModel):
+    kind: str
+    mae: float | None = None
+    bias: float | None = None
+    sample_count: int = 0
+    mape_pct: float | None = None
+
+
+class ForecastSnapshotResponse(BaseModel):
+    period_start: datetime
+    period_end: datetime
+    kind: str
+    predicted_value: float
+    actual_value: float | None = None
+    forecast_recorded_at: datetime
+    actual_recorded_at: datetime | None = None
+    model_version: str | None = None
+
+
+class ForecastLearningSummaryResponse(BaseModel):
+    slug: str
+    timezone: str
+    days: int
+    metrics: list[ForecastMetricSummaryResponse] = Field(default_factory=list)
+    last_reconciled_at: datetime | None = None
+
+
+class ForecastLearningRecentResponse(BaseModel):
+    slug: str
+    timezone: str
+    kind: str | None = None
+    snapshots: list[ForecastSnapshotResponse] = Field(default_factory=list)
+
+
+class EnergyControlActionResponse(BaseModel):
+    id: int
+    recorded_at: datetime
+    optimization_mode: str
+    action: str
+    target: str
+    outcome: str
+    dry_run: bool
+    reason: str | None = None
+
+
+class AdminAuditEntryResponse(BaseModel):
+    id: int
+    recorded_at: datetime
+    http_method: str
+    path: str
+    action: str
+    site_slug: str | None = None
+    resource_type: str | None = None
+    resource_id: str | None = None
+    outcome: str
+    summary: dict[str, Any] | None = None
+
+
+class AdminAuditLogResponse(BaseModel):
+    entries: list[AdminAuditEntryResponse] = Field(default_factory=list)
+
+
+class EnergyControlStatusResponse(BaseModel):
+    slug: str
+    timezone: str
+    optimization_mode: str
+    control_enabled: bool
+    writes_allowed: bool
+    automatic_allowed: bool
+    provider: str
+    last_action: EnergyControlActionResponse | None = None
+
+
+class EnergyControlSettingsUpdateRequest(BaseModel):
+    optimization_mode: str | None = None
+    control_enabled: bool | None = None
+
+
+class EnergyControlPreviewRequest(BaseModel):
+    action: str
+    target: str = "site"
+
+
+class EnergyControlResultResponse(BaseModel):
+    slug: str
+    action: str
+    target: str
+    outcome: str
+    dry_run: bool
+    reason: str
+    reason_sv: str
+    provider: str
+
+
+class EnergyControlRecentResponse(BaseModel):
+    slug: str
+    actions: list[EnergyControlActionResponse] = Field(default_factory=list)

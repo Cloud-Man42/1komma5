@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.admin_audit_helpers import audit_admin_mutation
+from app.admin_auth import require_admin_token
 from app.deps import get_app_settings, get_db_session
 from app.schemas import (
     ChargeAmpsConfigResponse,
@@ -113,7 +115,9 @@ async def get_charging_readiness(session: AsyncSession = Depends(get_db_session)
 @router.put("/system/heartbeat-config", response_model=HeartbeatConfigResponse)
 async def update_heartbeat_config(
     payload: HeartbeatConfigUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
+    _: None = Depends(require_admin_token),
 ) -> HeartbeatConfigResponse:
     if payload.connection_type == HeartbeatConnectionType.LOCAL and not payload.host:
         raise HTTPException(
@@ -163,6 +167,24 @@ async def update_heartbeat_config(
         record = await repo.get_record()
 
     sites = await repo.list_site_mappings()
+    await audit_admin_mutation(
+        request,
+        session,
+        action="system.heartbeat_config.update",
+        resource_type="heartbeat_config",
+        summary={
+            "connection_type": payload.connection_type.value,
+            "host": payload.host,
+            "port": payload.port,
+            "use_tls": payload.use_tls,
+            "poll_interval_seconds": payload.poll_interval_seconds,
+            "dashboard_refresh_seconds": payload.dashboard_refresh_seconds,
+            "username": payload.username,
+            "password_provided": payload.password is not None,
+            "api_token_provided": payload.api_token is not None,
+            "sites": [site.model_dump() for site in payload.sites],
+        },
+    )
     await session.commit()
 
     info = build_heartbeat_connection_info(record, sites)
@@ -220,6 +242,9 @@ async def get_performance_metrics(
     from energy_core.performance.provider_metrics import get_provider_metrics_store
     from energy_core.performance.store import get_performance_store
 
+    from energy_core.performance.task_metrics import summarize_collector_tasks
+    from energy_core.cache.service import cache_service_status_async
+
     store = get_performance_store()
     site_repo = SiteRepository(session)
     snapshot_repo = SiteLiveSnapshotRepository(session, is_sqlite=settings.is_sqlite)
@@ -237,6 +262,8 @@ async def get_performance_metrics(
     ]
     return {
         **store.summary(),
+        "cache": {**store.cache_stats(), **await cache_service_status_async(settings)},
         "providers": get_provider_metrics_store().summary(),
         "site_snapshots": site_snapshots,
+        "tasks": await summarize_collector_tasks(session),
     }

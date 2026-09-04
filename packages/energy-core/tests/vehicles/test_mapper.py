@@ -137,3 +137,27 @@ def test_vehicle_mapper_rest_snapshot_replaces_stale_bucket_soc():
         source="REST",
     )
     assert refreshed.state_of_charge_percent == 37
+
+
+def test_vehicle_mapper_clears_stale_power_when_unplugged():
+    mapper = MercedesVehicleMapper()
+    base = mapper.apply_discovery(
+        vehicle_id="vin-1",
+        vin="W1K12345678901234",
+        manufacturer="Mercedes-Benz",
+        model="EQE 500",
+        capabilities=VehicleCapabilities(can_read_soc=True),
+    )
+    updated = mapper.apply_push(
+        base,
+        MercedesPushMessage(
+            attributes=(
+                MercedesAttributeUpdate(name="soc", value=37),
+                MercedesAttributeUpdate(name="chargingpowerkw", value=10.9),
+                MercedesAttributeUpdate(name="chargingstatus", value=8),
+            ),
+        ),
+        source="REST",
+    )
+    assert updated.is_charging is False
+    assert updated.charging_power_kw == 0.0

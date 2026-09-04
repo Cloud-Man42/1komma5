@@ -4,6 +4,7 @@ import {
   computeCo2SavedKg,
   sessionAveragePowerW,
   formatEvDuration,
+  isPriceOnlyMode,
   modeLabel,
   sessionSourceLabel,
   totalChargeMinutesToday,
@@ -27,6 +28,11 @@ describe("evSection", () => {
 describe("evDashboardHelpers", () => {
   it("labels charging modes", () => {
     expect(modeLabel("SMART_CHARGE")).toBe("Smart laddning");
+  });
+
+  it("detects price-only charging mode", () => {
+    expect(isPriceOnlyMode("PRICE_CHARGE")).toBe(true);
+    expect(isPriceOnlyMode("SMART_CHARGE")).toBe(false);
   });
 
   it("formats session duration", () => {

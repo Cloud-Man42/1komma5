@@ -542,6 +542,39 @@
   color: #94a3b8;
 }
 
+.evdash-control-field input[type="text"],
+.evdash-control-field input[type="number"] {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #e2e8f0;
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+}
+
+.evdash-control-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.evdash-control-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.evdash-control-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: #38bdf8;
+}
+
 .evdash-stepper {
   display: inline-flex;
   align-items: center;

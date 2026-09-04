@@ -96,6 +96,10 @@ class ChargingSessionContext:
 
     charging_station_id: int | None = None
 
+    price_model: str | None = None
+
+    price_value_sek_kwh: float | None = None
+
 
 
 
@@ -141,6 +145,8 @@ class ChargingSessionService:
         meter: MeterSnapshot | None,
 
         previous_soc: float | None,
+
+        session_start_soc: float | None = None,
 
         halo: HaloCorrelationHint | None = None,
 
@@ -321,6 +327,8 @@ class ChargingSessionService:
 
         soc_delta = estimate_battery_delta_kwh(previous_soc, soc)
 
+        session_energy_kwh = estimate_battery_delta_kwh(session_start_soc, soc)
+
         energy = resolve_session_energy(
 
             charger_meter_kwh=None,
@@ -329,7 +337,17 @@ class ChargingSessionService:
 
             integrated_power_kwh=None,
 
-            soc_estimate_kwh=soc_delta,
+            soc_estimate_kwh=session_energy_kwh if session_energy_kwh is not None else soc_delta,
+
+        )
+
+        price_from_chargefinder = bool(
+
+            station_resolution is not None
+
+            and station_resolution.price_model not in {None, "UNKNOWN"}
+
+            and station_resolution.price_value_sek_kwh is not None
 
         )
 
@@ -344,6 +362,8 @@ class ChargingSessionService:
             price_value=price_value,
 
             energy_kwh=energy.energy_kwh,
+
+            price_from_chargefinder=price_from_chargefinder,
 
         )
 
@@ -426,6 +446,10 @@ class ChargingSessionService:
             charging_cost_sek=cost.cost_sek,
 
             cost_source=cost.cost_source.value,
+
+            price_model=price_model,
+
+            price_value_sek_kwh=price_value if price_model in {"PER_KWH", "FREE"} else None,
 
             charging_state=sm.state.value,
 

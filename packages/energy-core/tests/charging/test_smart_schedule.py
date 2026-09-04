@@ -168,7 +168,7 @@ def test_balanced_urgency_still_skips_the_most_expensive_hour():
     assert reason == "smart_wait_cheaper"
 
 
-def test_scheduled_cheapest_hour_charges():
+def test_scheduled_green_price_hour_charges():
     now = datetime(2026, 8, 14, 14, 0, tzinfo=UTC)
     forecast = (
         (now - timedelta(hours=2), 0.55),
@@ -188,7 +188,29 @@ def test_scheduled_cheapest_hour_charges():
         timezone="Europe/Stockholm",
     )
     assert charge is True
-    assert reason == "smart_scheduled"
+    assert reason == "smart_green_price"
+
+
+def test_green_hour_charges_even_when_not_absolute_minimum():
+    now = datetime(2026, 8, 14, 13, 0, tzinfo=UTC)
+    forecast = (
+        (now - timedelta(hours=1), 0.05),
+        (now, 0.44),
+        (now + timedelta(hours=1), 0.90),
+        (now + timedelta(hours=2), 0.95),
+        (now + timedelta(hours=3), 0.92),
+    )
+    charge, reason = should_charge_smart(
+        now,
+        departure_time="20:00",
+        price_forecast=forecast,
+        current_price=0.44,
+        expensive_threshold=0.35,
+        charge_hours=1,
+        timezone="Europe/Stockholm",
+    )
+    assert charge is True
+    assert reason in {"cheap_now", "smart_green_price"}
 
 
 def test_green_price_tier_charges_even_if_not_in_top_n_cheapest():

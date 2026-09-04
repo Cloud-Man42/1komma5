@@ -47,8 +47,34 @@ def test_guard_stale_hides_old_charging_last_known_good():
         charging_power_kw=10.9,
         charging_updated_at=datetime.now(UTC) - timedelta(minutes=20),
     )
-    assert is_plugged_in is None
-    assert is_charging is None
+    assert is_plugged_in is True
+    assert is_charging is True
+    assert power == 10.9
+
+
+def test_guard_stale_keeps_explicit_plug_without_charging_telemetry():
+    is_plugged_in, is_charging, power = _guard_stale_connection_fields(
+        "INAKTUELL",
+        is_plugged_in=True,
+        is_charging=False,
+        charging_power_kw=0.0,
+        charging_updated_at=datetime.now(UTC) - timedelta(hours=6),
+    )
+    assert is_plugged_in is True
+    assert is_charging is False
+    assert power is None
+
+
+def test_guard_live_hides_stale_charging_power_when_not_charging():
+    is_plugged_in, is_charging, power = _guard_stale_connection_fields(
+        "LIVE",
+        is_plugged_in=False,
+        is_charging=False,
+        charging_power_kw=10.9,
+        charging_updated_at=datetime.now(UTC) - timedelta(minutes=20),
+    )
+    assert is_plugged_in is False
+    assert is_charging is False
     assert power is None
 
 

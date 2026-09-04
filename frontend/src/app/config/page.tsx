@@ -4,6 +4,9 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { SitesManager } from "@/components/SitesManager";
 import { AppleDevicesAdminPanel } from "@/components/AppleDevicesAdminPanel";
+import { AdminTokenPanel } from "@/components/AdminTokenPanel";
+import { AdminAuditPanel } from "@/components/AdminAuditPanel";
+import { DisplayEnrollPanel } from "@/components/DisplayEnrollPanel";
 import {
   ChargeAmpsConfig,
   ChargingReadiness,
@@ -372,6 +375,12 @@ export default function ConfigPage() {
           {saving ? "Sparar…" : "Spara konfiguration"}
         </button>
       </form>
+
+      <AdminTokenPanel />
+
+      <AdminAuditPanel />
+
+      <DisplayEnrollPanel />
 
       <AppleDevicesAdminPanel />
 

@@ -15,20 +15,21 @@ INSTALL_DIR="${EMIC_KIOSK_HOME:-$KIOSK_HOME/emic-kiosk}"
 ENV_FILE="/etc/emic/kiosk.env"
 DISPLAY_ENV_FILE="/etc/emic/display.env"
 CADDY_FILE="/etc/emic/Caddyfile"
-DISPLAY_KEYS='EMIC_KIOSK_URL|EMIC_KIOSK_HEALTH|EMIC_KIOSK_MODE|EMIC_KIOSK_COLOR_TEMP|EMIC_KIOSK_GAMMA|EMIC_KIOSK_GAMMA_RGB|EMIC_KIOSK_BROADCAST_RGB|EMIC_SITE_SLUG|EMIC_SERVER|EMIC_SERVER_SCHEME'
+DISPLAY_KEYS='EMIC_KIOSK_URL|EMIC_KIOSK_HEALTH|EMIC_KIOSK_MODE|EMIC_KIOSK_COLOR_TEMP|EMIC_KIOSK_GAMMA|EMIC_KIOSK_GAMMA_RGB|EMIC_KIOSK_BROADCAST_RGB|EMIC_SITE_SLUG|EMIC_SERVER|EMIC_SERVER_SCHEME|EMIC_SERVER_HOST'
 
 # Which house this Pi shows, and which EMIC server it talks to. Both are
 # parameters so a Pi at another site needs no edit to any file:
 #   EMIC_SITE_SLUG=summer-house-denmark EMIC_SERVER=emic.example.com \
 #     EMIC_SERVER_SCHEME=https sudo -E bash setup-kiosk.sh
 SITE_SLUG="${EMIC_SITE_SLUG:-akarp}"
-SERVER="${EMIC_SERVER:-192.168.50.54}"
-SERVER_SCHEME="${EMIC_SERVER_SCHEME:-http}"
+SERVER="${EMIC_SERVER:-emic.inacloud.se}"
+SERVER_SCHEME="${EMIC_SERVER_SCHEME:-https}"
+SERVER_HOST="${EMIC_SERVER_HOST:-$SERVER}"
 
 # Re-running the installer must not clobber a hand-tuned URL, so the target is
 # only rewritten when the operator passed it in explicitly.
 RETARGET=0
-if [ -n "${EMIC_SITE_SLUG:-}" ] || [ -n "${EMIC_SERVER:-}" ] || [ -n "${EMIC_SERVER_SCHEME:-}" ]; then
+if [ -n "${EMIC_SITE_SLUG:-}" ] || [ -n "${EMIC_SERVER:-}" ] || [ -n "${EMIC_SERVER_SCHEME:-}" ] || [ -n "${EMIC_SERVER_HOST:-}" ]; then
   RETARGET=1
 fi
 
@@ -114,6 +115,7 @@ if [ ! -f "$DISPLAY_ENV_FILE" ]; then
 EMIC_SITE_SLUG=$SITE_SLUG
 EMIC_SERVER=$SERVER
 EMIC_SERVER_SCHEME=$SERVER_SCHEME
+EMIC_SERVER_HOST=$SERVER_HOST
 EMIC_KIOSK_URL=http://127.0.0.1:8080/display/$SITE_SLUG
 EMIC_KIOSK_HEALTH=http://127.0.0.1:8080/health
 EMIC_KIOSK_COLOR_TEMP=4000
@@ -134,6 +136,7 @@ elif [ "$RETARGET" -eq 1 ]; then
   set_env_key "$DISPLAY_ENV_FILE" EMIC_SITE_SLUG "$SITE_SLUG"
   set_env_key "$DISPLAY_ENV_FILE" EMIC_SERVER "$SERVER"
   set_env_key "$DISPLAY_ENV_FILE" EMIC_SERVER_SCHEME "$SERVER_SCHEME"
+  set_env_key "$DISPLAY_ENV_FILE" EMIC_SERVER_HOST "$SERVER_HOST"
   set_env_key "$DISPLAY_ENV_FILE" EMIC_KIOSK_URL "http://127.0.0.1:8080/display/$SITE_SLUG"
   echo "Re-pointed $DISPLAY_ENV_FILE at $SITE_SLUG on $SERVER_SCHEME://$SERVER"
 fi

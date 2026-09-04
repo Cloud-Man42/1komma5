@@ -13,6 +13,8 @@ class BatteryProjectionConfig:
     max_discharge_power_w: float = 5000.0
     battery_capacity_kwh: float = 10.0
     interval_hours: float = 0.25
+    round_trip_efficiency: float = 0.92
+    degradation_cost_sek_kwh: float = 0.0
 
 
 class BatterySoCProjector:
@@ -38,11 +40,11 @@ class BatterySoCProjector:
             surplus_w = surplus_w_by_ts.get(ts, 0.0)
             if surplus_w > 0:
                 charge_w = min(surplus_w, config.max_charge_power_w)
-                delta_wh = charge_w * config.interval_hours
+                delta_wh = charge_w * config.interval_hours * config.round_trip_efficiency
                 soc_pct = min(100.0, soc_pct + (delta_wh / capacity_wh) * 100.0)
             elif surplus_w < 0:
                 discharge_w = min(abs(surplus_w), config.max_discharge_power_w)
-                delta_wh = discharge_w * config.interval_hours
+                delta_wh = (discharge_w * config.interval_hours) / max(config.round_trip_efficiency, 0.01)
                 soc_pct = max(config.reserve_soc_pct, soc_pct - (delta_wh / capacity_wh) * 100.0)
 
         return result
