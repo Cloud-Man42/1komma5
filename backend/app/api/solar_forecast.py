@@ -82,6 +82,7 @@ from energy_core.config import Settings
 from energy_core.solar_intelligence.geometry import SolarGeometryService
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -621,49 +622,34 @@ async def get_solar_forecast(
     cache_key = solar_forecast_cache_key(site.id)
 
     ttl_seconds = settings.solar_forecast_redis_cache_ttl_seconds
+    l1_warm_ttl = settings.solar_forecast_l1_warm_ttl_seconds
 
     cached = await cache.get(cache_key)
 
     if cached is not None:
-
+        await cache.set(cache_key, cached, ttl_seconds=l1_warm_ttl)
+        if isinstance(cached, dict):
+            return JSONResponse(content=cached)
         return SolarForecastResponse.model_validate(cached)
 
     async def factory() -> dict:
-
         snapshot = await load_solar_forecast_snapshot(session, site.id, settings)
-
         if snapshot is not None:
+            return snapshot
 
-            response = payload_to_solar_forecast_response(
-
-                snapshot,
-
-                SolarForecastResponse,
-
-                SolarForecastPointResponse,
-
+        forecast = await _resolve_forecast(session, site, settings)
+        if forecast is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
             )
-
-        else:
-
-            forecast = await _resolve_forecast(session, site, settings)
-
-            if forecast is None:
-
-                raise HTTPException(
-
-                    status_code=503,
-
-                    detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
-
-                )
-
-            response = await _forecast_response(session, site, forecast, settings)
-
+        response = await _forecast_response(session, site, forecast, settings)
         return response.model_dump(mode="json")
 
     payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
-
+    await cache.set(cache_key, payload, ttl_seconds=l1_warm_ttl)
+    if isinstance(payload, dict):
+        return JSONResponse(content=payload)
     return SolarForecastResponse.model_validate(payload)
 
 

@@ -140,6 +140,9 @@ class Settings(BaseSettings):
     solar_forecast_redis_cache_ttl_seconds: float = Field(
         default=1800.0, ge=60.0, alias="SOLAR_FORECAST_REDIS_CACHE_TTL_SECONDS"
     )
+    solar_forecast_l1_warm_ttl_seconds: float = Field(
+        default=300.0, ge=5.0, alias="SOLAR_FORECAST_L1_WARM_TTL_SECONDS"
+    )
     current_price_redis_cache_ttl_seconds: float = Field(
         default=120.0, ge=15.0, alias="CURRENT_PRICE_REDIS_CACHE_TTL_SECONDS"
     )

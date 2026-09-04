@@ -1,4 +1,36 @@
 import pytest
+from app.deps import set_session_factory
+from app.main import create_app
+from energy_core.config import Settings
+from energy_core.db.models import Base
+from energy_core.db.session import create_engine, create_session_factory
+from energy_core.seed import seed_sites
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.fixture
+async def secured_client(tmp_path):
+    db_file = tmp_path / "secured-system.db"
+    settings = Settings(
+        _env_file=None,
+        APP_ENV="test",
+        DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
+        EMIC_ADMIN_TOKEN="admin-secret",
+    )
+    engine = create_engine(settings)
+    session_factory = create_session_factory(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with session_factory() as session:
+        await seed_sites(session)
+        await session.commit()
+
+    app = create_app(settings)
+    set_session_factory(session_factory, settings)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -193,3 +225,23 @@ async def test_update_heartbeat_config_local_requires_host(client):
         },
     )
     assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_timescale_status_requires_admin_token(secured_client):
+    ac = secured_client
+    res = await ac.get("/api/system/timescale-status")
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_timescale_status_skips_on_sqlite(secured_client):
+    ac = secured_client
+    res = await ac.get(
+        "/api/system/timescale-status",
+        headers={"Authorization": "Bearer admin-secret"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "skipped"
+    assert data["reason"] == "not_timescale"

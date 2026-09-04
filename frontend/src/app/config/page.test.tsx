@@ -1,11 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mockFetchHeartbeat = vi.fn();
 const mockFetchChargeAmps = vi.fn();
 const mockFetchReadiness = vi.fn();
-const mockSaveHeartbeat = vi.fn();
+const mockFetchSites = vi.fn();
 
 vi.mock("next/link", () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -13,15 +12,15 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-vi.mock("@/components/SitesManager", () => ({
-  SitesManager: () => <div data-testid="sites-manager">SitesManager</div>,
-}));
-
 vi.mock("@/lib/api", () => ({
   fetchHeartbeatConfig: (...args: unknown[]) => mockFetchHeartbeat(...args),
   fetchChargeAmpsConfig: (...args: unknown[]) => mockFetchChargeAmps(...args),
   fetchChargingReadiness: (...args: unknown[]) => mockFetchReadiness(...args),
-  saveHeartbeatConfig: (...args: unknown[]) => mockSaveHeartbeat(...args),
+  fetchSites: (...args: unknown[]) => mockFetchSites(...args),
+}));
+
+vi.mock("@/lib/adminAuth", () => ({
+  getAdminToken: () => "",
 }));
 
 const heartbeatConfig = {
@@ -39,45 +38,78 @@ const heartbeatConfig = {
   api_token_configured: false,
   connection_mode: "mock",
   contacting_component: "collector",
-  implementation_status: "ok",
+  implementation_status: "configured",
   notes: [] as string[],
   sites: [] as { slug: string; external_system_id: string | null }[],
   updated_at: null,
 };
 
-describe("ConfigPage", () => {
+describe("ConfigOverviewPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchHeartbeat.mockResolvedValue(heartbeatConfig);
     mockFetchChargeAmps.mockResolvedValue({
       mock: true,
       ready: true,
+      provider: "chargeamps",
+      effective_provider: "chargeamps",
       api_key_configured: false,
       notes: [],
     });
     mockFetchReadiness.mockResolvedValue({
       ready: true,
-      active_bridge_chargers: 0,
+      active_bridge_chargers: 1,
       chargeamps_ready: true,
       issues: [],
       notes: [],
     });
-    mockSaveHeartbeat.mockResolvedValue({ ...heartbeatConfig });
+    mockFetchSites.mockResolvedValue([
+      {
+        slug: "akarp",
+        name: "Demo Home",
+        timezone: "Europe/Stockholm",
+        external_system_id: "uuid",
+        fallback_purchase_price_sek_kwh: 1,
+        export_compensation_sek_kwh: 0.5,
+        main_fuse_a: 25,
+        safety_margin_a: 2,
+      },
+    ]);
   });
 
-  it("loads heartbeat config and renders SitesManager outside the form", async () => {
+  it("renders overview status cards with links", async () => {
     const ConfigPage = (await import("@/app/config/page")).default;
     render(<ConfigPage />);
-    expect(await screen.findByTestId("sites-manager")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Spara konfiguration/i })).toBeTruthy();
+    expect(await screen.findByTestId("config-overview")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /System & Heartbeat/i })).toHaveAttribute(
+      "href",
+      "/config/system",
+    );
+    expect(screen.getByRole("link", { name: /Anläggningar/i })).toHaveAttribute(
+      "href",
+      "/config/sites",
+    );
   });
 
-  it("saves heartbeat config on submit", async () => {
-    const user = userEvent.setup();
+  it("shows readiness issues when present", async () => {
+    mockFetchReadiness.mockResolvedValue({
+      ready: false,
+      active_bridge_chargers: 0,
+      chargeamps_ready: false,
+      issues: [
+        {
+          site_slug: "akarp",
+          charger_id: 1,
+          charger_name: "Halo",
+          code: "missing_bridge",
+          message: "Bridge saknas",
+        },
+      ],
+      notes: [],
+    });
     const ConfigPage = (await import("@/app/config/page")).default;
     render(<ConfigPage />);
-    await screen.findByTestId("sites-manager");
-    await user.click(screen.getByRole("button", { name: /Spara konfiguration/i }));
-    await waitFor(() => expect(mockSaveHeartbeat).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /Aktuella varningar/i })).toBeTruthy());
+    expect(screen.getAllByText(/Bridge saknas/i).length).toBeGreaterThan(0);
   });
 });

@@ -18,6 +18,7 @@ if (-not $AdminToken) { throw "EMIC_ADMIN_TOKEN required" }
 $headers = @{ Authorization = "Bearer $AdminToken"; "Content-Type" = "application/json" }
 
 Write-Host "Phase 22 AUTOMATIC readiness check ($Site @ $BaseUrl)"
+Write-Warning "Deprecated Heartbeat checks. Use scripts/phase24-chargeamps-automatic-readiness.ps1 instead."
 $checks = @()
 
 $status = Invoke-RestMethod -Uri "$BaseUrl/api/sites/$Site/energy-control/status" -Headers $headers

@@ -18,6 +18,8 @@ COPY alembic.ini ./
 COPY scripts/seed.py ./scripts/seed.py
 COPY scripts/repair_ev_sessions.py ./scripts/repair_ev_sessions.py
 COPY scripts/backfill_financial_daily.py ./scripts/backfill_financial_daily.py
+COPY scripts/ensure_timescale_policies.py ./scripts/ensure_timescale_policies.py
+COPY scripts/benchmark_solar_forecast.py ./scripts/benchmark_solar_forecast.py
 
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app

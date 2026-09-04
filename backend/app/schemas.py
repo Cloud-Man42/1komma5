@@ -649,6 +649,20 @@ class ChargeAmpsConfigResponse(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class TimescaleHypertableCompressionStatus(BaseModel):
+    compression_enabled: bool
+    policy: str
+
+
+class TimescalePolicyStatusResponse(BaseModel):
+    status: str
+    reason: str | None = None
+    retention_enabled: bool
+    compression_enabled: bool
+    retention: dict[str, str] = Field(default_factory=dict)
+    compression: dict[str, TimescaleHypertableCompressionStatus] = Field(default_factory=dict)
+
+
 class ChargerReadinessIssueResponse(BaseModel):
     site_slug: str
     charger_id: int

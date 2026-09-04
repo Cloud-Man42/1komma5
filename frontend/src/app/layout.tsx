@@ -14,6 +14,7 @@ import "@/styles/economy-dashboard.css";
 import "@/styles/energy-dashboard.css";
 import "@/styles/ev-dashboard.css";
 import "@/styles/solar-dashboard.css";
+import "@/styles/config-hub.css";
 
 export const metadata: Metadata = {
   title: APP_TITLE,

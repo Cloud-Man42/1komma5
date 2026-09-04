@@ -1,0 +1,26 @@
+﻿[
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  1,
+        "Ok":  null,
+        "P95Ms":  167.5
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  5,
+        "Ok":  5,
+        "P95Ms":  248.8
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  10,
+        "Ok":  10,
+        "P95Ms":  255
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast (server)",
+        "Users":  1,
+        "Ok":  1,
+        "P95Ms":  7.2
+    }
+]

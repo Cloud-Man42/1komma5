@@ -1,6 +1,26 @@
 # Phase 1 Results — Before / After
 
-**Status:** Phases 5–21 deployed to production. Phase 21 (2026-09-04): SEMI_AUTOMATIC, Pi Phase 2 fields, product wave 3. Phase 22 (2026-09-04): dashboard re-benchmark, Heartbeat control diagnostics, doc refresh, AUTOMATIC decision.
+**Status:** Phases 5–25 deployed to production. Phase 24 (2026-09-04): AUTOMATIC via Charge Amps. Phase 25 (2026-09-04): drift monitor, solar forecast perf, timescale verify API, overview UI cards.
+
+---
+
+## Phase 25 (2026-09-04)
+
+| Item | Delivered |
+|------|-----------|
+| Drift | `phase25-automatic-monitor.ps1` |
+| Solar perf | Server p95 **7 ms**; external LAN ~167 ms |
+| Infra | Timescale retention + compression verified on prod |
+| UI | `Co2TodayCard`, `EnergyBalanceQualityCard` on overview |
+
+---
+
+## Phase 24 (2026-09-04)
+
+| Item | Delivered |
+|------|-----------|
+| AUTOMATIC | Enabled on `akarp` via Charge Amps (`phase24-automatic-activate.ps1`) |
+| Manual apply | `USE_NOW` → **APPLIED** on laddare 4 |
 
 ---
 

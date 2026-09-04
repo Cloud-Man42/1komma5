@@ -12,6 +12,7 @@ from app.schemas import (
     HeartbeatConfigUpdateRequest,
     SiteHeartbeatMappingResponse,
     SpaReadinessResponse,
+    TimescalePolicyStatusResponse,
     VehicleReadinessResponse,
 )
 from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
@@ -86,6 +87,29 @@ async def get_chargeamps_config(session: AsyncSession = Depends(get_db_session))
         password_configured=info.password_configured,
         ready=info.ready,
         notes=list(info.notes),
+    )
+
+
+@router.get("/system/timescale-status", response_model=TimescalePolicyStatusResponse)
+async def get_timescale_status(
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_admin_token),
+) -> TimescalePolicyStatusResponse:
+    from energy_core.db.timescale_retention import inspect_timescale_policies
+
+    payload = await inspect_timescale_policies(session, settings)
+    compression = {
+        key: {"compression_enabled": value["compression_enabled"], "policy": value["policy"]}
+        for key, value in (payload.get("compression") or {}).items()
+    }
+    return TimescalePolicyStatusResponse(
+        status=str(payload.get("status") or "unknown"),
+        reason=payload.get("reason"),
+        retention_enabled=bool(payload.get("retention_enabled")),
+        compression_enabled=bool(payload.get("compression_enabled")),
+        retention=dict(payload.get("retention") or {}),
+        compression=compression,
     )
 
 

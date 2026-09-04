@@ -41,7 +41,14 @@ grep -q '^FINANCIAL_AGGREGATES_ENABLED=' .env 2>/dev/null || echo FINANCIAL_AGGR
 grep -q '^DASHBOARD_REDIS_CACHE_TTL_SECONDS=' .env 2>/dev/null || echo DASHBOARD_REDIS_CACHE_TTL_SECONDS=60 >> .env
 grep -q '^HORIZON_OPTIMIZER_REDIS_CACHE_TTL_SECONDS=' .env 2>/dev/null || echo HORIZON_OPTIMIZER_REDIS_CACHE_TTL_SECONDS=300 >> .env
 grep -q '^TIMESCALE_RETENTION_ENABLED=' .env 2>/dev/null || echo TIMESCALE_RETENTION_ENABLED=true >> .env
+if grep -q '^TIMESCALE_RETENTION_ENABLED=' .env 2>/dev/null; then
+  sed -i 's/^TIMESCALE_RETENTION_ENABLED=.*/TIMESCALE_RETENTION_ENABLED=true/' .env
+fi
 grep -q '^TIMESCALE_COMPRESSION_ENABLED=' .env 2>/dev/null || echo TIMESCALE_COMPRESSION_ENABLED=true >> .env
+if grep -q '^TIMESCALE_COMPRESSION_ENABLED=' .env 2>/dev/null; then
+  sed -i 's/^TIMESCALE_COMPRESSION_ENABLED=.*/TIMESCALE_COMPRESSION_ENABLED=true/' .env
+fi
+grep -q '^SOLAR_FORECAST_L1_WARM_TTL_SECONDS=' .env 2>/dev/null || echo SOLAR_FORECAST_L1_WARM_TTL_SECONDS=300 >> .env
 grep -q '^ENERGY_CONTROL_COLLECTOR_ENABLED=' .env 2>/dev/null || echo ENERGY_CONTROL_COLLECTOR_ENABLED=true >> .env
 if grep -q '^ENERGY_CONTROL_PROVIDER=' .env 2>/dev/null; then
   sed -i 's/^ENERGY_CONTROL_PROVIDER=.*/ENERGY_CONTROL_PROVIDER=chargeamps/' .env
@@ -75,6 +82,11 @@ run_docker restart caddy
 if grep -q '^FINANCIAL_AGGREGATES_ENABLED=true' .env 2>/dev/null; then
   echo "Backfilling financial_daily aggregates..."
   run_docker exec -T backend python /app/scripts/backfill_financial_daily.py --site akarp --days 365 || true
+fi
+
+if grep -q '^TIMESCALE_RETENTION_ENABLED=true' .env 2>/dev/null; then
+  echo "Ensuring TimescaleDB retention/compression policies..."
+  run_docker exec -T backend python /app/scripts/ensure_timescale_policies.py || true
 fi
 
 run_docker ps

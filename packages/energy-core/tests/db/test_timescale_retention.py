@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from energy_core.config import Settings
-from energy_core.db.timescale_retention import ensure_timescale_compression, ensure_timescale_retention
+from energy_core.db.timescale_retention import ensure_timescale_compression, ensure_timescale_retention, inspect_timescale_policies
 
 
 @pytest.mark.asyncio
@@ -114,3 +114,16 @@ async def test_ensure_timescale_compression_enables_table_and_policy() -> None:
     assert result["policies"]["consumer_samples:compression"] == "enabled"
     assert result["policies"]["vehicle_state_history:policy"] == "created"
     assert session.execute.await_count == 12
+
+
+@pytest.mark.asyncio
+async def test_inspect_timescale_policies_skips_sqlite() -> None:
+    settings = Settings(
+        _env_file=None,
+        DATABASE_URL="sqlite+aiosqlite:///:memory:",
+        TIMESCALE_RETENTION_ENABLED=True,
+        TIMESCALE_COMPRESSION_ENABLED=True,
+    )
+    result = await inspect_timescale_policies(AsyncMock(), settings)
+    assert result["status"] == "skipped"
+    assert result["reason"] == "not_timescale"

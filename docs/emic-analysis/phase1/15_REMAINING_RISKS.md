@@ -1,6 +1,6 @@
 # Phase 1 — Remaining Risks
 
-**Updated:** 2026-09-04 (post Phase 21–22)
+**Updated:** 2026-09-04 (post Phase 25)
 
 ---
 
@@ -8,9 +8,10 @@
 
 | Flag | Prod | Notes |
 |------|------|-------|
-| `FINANCIAL_AGGREGATES_ENABLED` | **true** | `financial_daily` backfilled; day p95 ~193 ms |
+| `FINANCIAL_AGGREGATES_ENABLED` | **true** | `financial_daily` backfilled |
 | `SOLAR_FORECAST_SYNC_REFRESH_ON_READ` | **false** | Keep false in prod |
-| `ENERGY_CONTROL_PROVIDER` | **heartbeat** | SEMI_AUTOMATIC on `akarp` |
+| `ENERGY_CONTROL_PROVIDER` | **chargeamps** | AUTOMATIC on `akarp` |
+| `optimization_mode` | **AUTOMATIC** | Collector applies via Charge Amps |
 | `EMIC_ADMIN_TOKEN` | **set** | Admin routes require Bearer on LAN |
 
 ---
@@ -19,10 +20,10 @@
 
 | Risk | Mitigation |
 |------|------------|
-| **No Heartbeat-compatible charger** | Class **D** is permanent at Åkarp — do not pursue Heartbeat EV registration |
-| `ENERGY_CONTROL_PROVIDER=heartbeat` | EV apply always **REJECTED** — use Charge Amps smart charging (`bridge_enabled`) for real control; Phase 23: `chargeamps` provider |
-| `write_enabled=false` | Irrelevant until/unless Heartbeat EV path is abandoned or replaced |
-| AUTOMATIC via Heartbeat | **Off table** — see [`phase22/00_AUTOMATIC_DECISION.md`](../phase22/00_AUTOMATIC_DECISION.md) |
+| **No Heartbeat-compatible charger** | Class **D** permanent — use Charge Amps path only |
+| Heartbeat EV apply | **Deprecated** — `chargeamps` provider is prod path |
+| Battery/site EMS writes | Not implemented — Charge Amps EV only |
+| Monitor AUTOMATIC | `scripts/phase25-automatic-monitor.ps1` |
 
 ---
 
@@ -31,49 +32,38 @@
 | Item | Risk |
 |------|------|
 | **Multi-worker** | Per-process L1 cache; Redis L2 shared |
-| **Pi SSE** | Display still polls ~4 s; cold overview p95 ~1.1 s |
-| **Auth on LAN** | Admin token required when `EMIC_ADMIN_TOKEN` set — P0 if network exposure changes |
-
-See [`06_CACHE.md`](06_CACHE.md), [`07_REALTIME.md`](07_REALTIME.md), [`10_SECURITY.md`](10_SECURITY.md).
+| **Pi cold overview** | ~1.1 s first load; warm p95 240 ms @ 5 users |
+| **Auth on LAN** | Admin token when `EMIC_ADMIN_TOKEN` set |
 
 ---
 
-## Pi display
-
-- SSE stream works (GET); benchmark scripts should use GET not HEAD.
-- Warm display overview p95 **240 ms** @ 5 users (measured 2026-09-04).
-- Phase 2 API fields shipped: solar curve, battery today, price min/max, charger decision, spa filter cycles, vehicle target SoC.
-
----
-
-## Performance targets still open
+## Performance targets
 
 | Route | p95 @ 1 user | Target | Status |
 |-------|--------------|--------|--------|
-| `dashboard` | **138 ms** | < 250 | OK (Phase 22 re-benchmark) |
-| `solar/forecast` | **179 ms** | < 100 | FAIL |
+| `dashboard` | **138 ms** | < 250 | OK |
+| `solar/forecast` | **7 ms** server-side p95 (167 ms external LAN) | < 100 server | OK (Phase 25) |
 
 ---
 
 ## Operations
 
-| Area | Risk |
-|------|------|
-| Timescale retention | Policies documented; verify applied on prod DB |
-| Collector slow lane | 15 min interval — `financial_daily` may lag one interval |
+| Area | Status |
+|------|--------|
+| Timescale retention/compression | **OK** — `phase25-timescale-verify.ps1` |
+| Collector slow lane | 15 min — `financial_daily` may lag one interval |
 
 ---
 
 ## Test suite
 
-- `test-windows.ps1`: **1204 backend + 663 frontend** passing (2026-09-04).
-- Test `client` fixture isolates `EMIC_ADMIN_TOKEN` from host environment.
+- `test-windows.ps1`: **1212 backend + 663+ frontend** (2026-09-04).
 
 ---
 
 ## Recommended next steps
 
-1. Register EV in Heartbeat app → re-run discovery
-2. Enable `write_enabled` after write test
-3. Manual apply success → consider AUTOMATIC (`phase22-automatic-readiness.ps1`)
-4. Re-benchmark `solar/forecast` if targeting < 100 ms p95
+1. Monitor AUTOMATIC weekly (`phase25-automatic-monitor.ps1`)
+2. Battery/site control provider (if product requires)
+3. Pi cold-load optimization
+4. Product wave 4 — unified optimization dashboard

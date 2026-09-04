@@ -4,7 +4,9 @@ import { AlertBannerList, ErrorState, Skeleton } from "@/components/dashboard";
 import type { SiteDashboard } from "@/lib/api";
 import { BestSolarWindowPanel, computeBestSolarWindow } from "./BestSolarWindow";
 import { BestChargeWindowCard } from "./BestChargeWindowCard";
+import { Co2TodayCard } from "./Co2TodayCard";
 import { ConfidencePanel } from "./ConfidencePanel";
+import { EnergyBalanceQualityCard } from "./EnergyBalanceQualityCard";
 import { ForecastLearningCard } from "./ForecastLearningCard";
 import { ForecastLearningRecentCard } from "./ForecastLearningRecentCard";
 import { EnergyControlTimelineCard } from "./EnergyControlTimelineCard";
@@ -103,6 +105,8 @@ export function IntelligenceOverview({
               <EnergyControlTimelineCard slug={slug} timezone={dashboard.site.timezone} />
               <EnergyFlowStrip reading={reading} />
               <TodayStatsGrid today={dashboard.today} />
+              <Co2TodayCard today={dashboard.today} />
+              <EnergyBalanceQualityCard slug={slug} />
               {extra.loading ? (
                 <Skeleton lines={6} />
               ) : (

@@ -166,7 +166,7 @@ def build_cache_service(settings: Settings) -> InMemoryCacheService | TieredCach
     return TieredCacheService(
         l1,
         l2,
-        l1_warm_ttl_seconds=5.0,
+        l1_warm_ttl_seconds=60.0,
         l2_min_ttl_seconds=settings.snapshot_redis_cache_ttl_seconds,
     )
 
