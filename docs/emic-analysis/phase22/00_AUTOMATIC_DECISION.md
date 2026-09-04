@@ -26,7 +26,7 @@ Discovery class **D** (`EV_ID_NOT_FOUND`) is expected and **cannot be fixed** by
 
 | Setting | Value | Note |
 |---------|-------|------|
-| `optimization_mode` | `SEMI_AUTOMATIC` | Energy control UI/collector gate |
+| `optimization_mode` | `AUTOMATIC` | Collector applies strategy via Charge Amps |
 | `ENERGY_CONTROL_PROVIDER` | `chargeamps` | EV apply via Charge Amps Halo bridge |
 | Smart charging bridge | Charge Amps | Same physical path as energy_control provider |
 
@@ -37,7 +37,7 @@ Discovery class **D** (`EV_ID_NOT_FOUND`) is expected and **cannot be fixed** by
 1. **Keep smart charging** on existing Charge Amps bridge (collector `SmartChargingEngine`).
 2. **Phase 23 (done):** `ENERGY_CONTROL_PROVIDER=chargeamps` — map `USE_NOW`/`WAIT` to Charge Amps `charging_mode` + current writes.
 3. **Do not wait** for Heartbeat EV discovery / `write_enabled` / EV watcher scripts.
-4. **AUTOMATIC** (if desired) should target Charge Amps provider, not Heartbeat.
+4. **AUTOMATIC** enabled via Phase 24 — Charge Amps provider + collector `sync_from_strategy`.
 
 ---
 
