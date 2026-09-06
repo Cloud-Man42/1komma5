@@ -172,7 +172,7 @@ export function EvOverview({ siteSlug }: { siteSlug: string }) {
 
       {data.error ? <p className="evdash-error" role="alert">{data.error}</p> : null}
 
-      <EvMercedesHaloStrip reasoning={data.reasoning} bridge={data.bridge} />
+      <EvMercedesHaloStrip reasoning={data.reasoning} bridge={data.bridge} testId="ev-mercedes-halo-strip" />
 
       {section !== "overview" && section !== "history" ? (
         <p className="evdash-section-label">{EV_SECTION_LABELS[section]}</p>

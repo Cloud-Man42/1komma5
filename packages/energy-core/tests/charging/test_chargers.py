@@ -274,7 +274,7 @@ async def test_web_login_failure_raises():
     controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
     response = httpx.Response(401, request=httpx.Request("POST", "https://my.charge.space/api/auth/login"))
     with patch(
-        "energy_core.chargers.charge_amps_web.httpx.AsyncClient",
+        "energy_core.integrations.chargeamps.web_controller.httpx.AsyncClient",
     ) as client_cls:
         client = AsyncMock()
         client.__aenter__.return_value = client

@@ -32,9 +32,11 @@ from energy_core.solar_forecast.calibration import metrics_insufficient
 from energy_core.platform.forecasting import (
     build_solar_forecast_coordinator,
     build_solar_geometry_service,
+    load_solar_forecast_snapshot,
+    load_solar_site_config,
+    resolve_forecast_for_read,
     resolve_forecast_with_refresh,
 )
-from energy_core.solar_forecast.api_read import load_solar_forecast_snapshot, resolve_forecast_for_read
 from energy_core.solar_forecast.api_response import payload_to_solar_forecast_response
 from energy_core.solar_forecast.api_snapshot_builder import refresh_solar_forecast_intraday_metrics
 
@@ -101,56 +103,9 @@ async def _production_days_observed(session: AsyncSession, site, settings, *, no
 
 
 async def _resolve_forecast(session: AsyncSession, site, settings):
-
-    config_repo = SolarSiteConfigRepository(session)
-
-    record = await config_repo.get(site.id, timezone=site.timezone)
-
-
-
-    if record is None or not record.enabled:
-
-        raise HTTPException(
-
-            status_code=404,
-
-            detail=(
-
-                "Solprognos är inte aktiverad. Gå till Inställningar → Anläggningar, "
-
-                "fyll i koordinater och kWp, och aktivera prognosen."
-
-            ),
-
-        )
-
-
-
-    if (
-
-        record.latitude is None
-
-        or record.longitude is None
-
-        or record.installed_peak_power_kw is None
-
-        or record.installed_peak_power_kw <= 0
-
-    ):
-
-        raise HTTPException(
-
-            status_code=404,
-
-            detail=(
-
-                "Solprofilen är ofullständig. Ange latitud, longitud och installerad effekt (kWp) "
-
-                "under Inställningar → Anläggningar."
-
-            ),
-
-        )
+    record, issue = await load_solar_site_config(session, site)
+    if issue is not None:
+        raise HTTPException(status_code=issue.status_code, detail=issue.detail)
 
     forecast = await resolve_forecast_with_refresh(session, site, settings)
     if forecast is not None:

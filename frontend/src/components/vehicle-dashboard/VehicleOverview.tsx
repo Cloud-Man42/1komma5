@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Skeleton } from "@/components/dashboard";
 import { startVehicleCharging, stopVehicleCharging, syncVehicles } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
+import { MercedesHaloLinkStrip } from "@/components/charging/MercedesHaloLinkStrip";
 import { VehicleActionsPanel } from "./VehicleActionsPanel";
 import { VehicleBatteryHero } from "./VehicleBatteryHero";
 import { VehicleChargingPlanPanel } from "./VehicleChargingPlanPanel";
@@ -273,6 +274,11 @@ export function VehicleOverview({ siteSlug }: { siteSlug: string }) {
       </header>
 
       {data.error ? <p className="vdash-muted">{data.error}</p> : null}
+
+      <MercedesHaloLinkStrip
+        reasoning={data.reasoning}
+        testId="vehicle-mercedes-halo-strip"
+      />
 
       {renderSection()}
 

@@ -137,11 +137,19 @@ describe("VehicleOverview sections", () => {
     mockFetchCurrentVehicleChargeSession.mockResolvedValue(session);
     mockFetchEnergyReasoning.mockResolvedValue({
       charger_id: 2,
+      bridge_enabled: true,
+      vehicle_linked: true,
+      vehicle_display_name: "Mercedes EQE 500 Sedan",
+      vehicle_soc_pct: 78,
       vehicle_target_soc_pct: 80,
       vehicle_departure_time: "2026-08-28T07:00:00Z",
       vehicle_required_energy_kwh: 12,
       decision_reason_sv: "Laddar med överskott från solen",
-      smart_charging_state: "SOLAR_FIRST",
+      display_status_sv: "Laddar med sol",
+      smart_charging_state: "charging",
+      halo_connected: true,
+      vehicle_connected: true,
+      applied_current_a: 16,
     });
     mockStopVehicleCharging.mockResolvedValue({ success: true, vehicle_id: 1, message: "Laddning stoppad", command: "stop" });
     mockStartVehicleCharging.mockResolvedValue({ success: true, vehicle_id: 1, message: "Laddning startad", command: "start" });
@@ -162,6 +170,8 @@ describe("VehicleOverview sections", () => {
 
     expect(screen.getByTestId("vehicle-battery-card")).toHaveTextContent("78%");
     expect(screen.getByTestId("vehicle-summary-strip")).toHaveTextContent("W1***");
+    expect(screen.getByTestId("vehicle-mercedes-halo-strip")).toHaveTextContent("Mercedes EQE 500 Sedan");
+    expect(screen.getByTestId("vehicle-mercedes-halo-strip")).toHaveTextContent("Laddar med sol");
     expect(screen.queryByTestId("vehicle-section-charging")).not.toBeInTheDocument();
   });
 

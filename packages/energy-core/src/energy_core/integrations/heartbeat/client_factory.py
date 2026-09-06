@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
-from energy_core.heartbeat_client import HeartbeatClient, build_heartbeat_client
+from energy_core.integrations.heartbeat.client import HeartbeatClient, build_heartbeat_client
 from energy_core.integrations.heartbeat.connection import HeartbeatConnectionType
 
 
