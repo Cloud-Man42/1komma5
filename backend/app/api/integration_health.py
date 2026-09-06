@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from app.deps import get_app_settings, get_db_session
+from energy_core.contracts.health import HealthStatus, aggregate_health_status
 from energy_core.db.repositories import SiteRepository
-from energy_core.integrations.health import IntegrationHealthRecorder
+from energy_core.platform.health.aggregator import HealthAggregator
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,7 @@ router = APIRouter(tags=["integration-health"])
 class IntegrationHealthItem(BaseModel):
     provider: str
     status: str
+    health_status: str
     last_success_at: str | None = None
     last_attempt_at: str | None = None
     latency_ms: float | None = None
@@ -26,6 +28,7 @@ class IntegrationHealthItem(BaseModel):
 
 class IntegrationHealthResponse(BaseModel):
     slug: str
+    overall_health_status: str
     providers: list[IntegrationHealthItem] = Field(default_factory=list)
 
 
@@ -38,9 +41,32 @@ async def get_integration_health(
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    recorder = IntegrationHealthRecorder(session, is_sqlite=settings.is_sqlite)
-    providers = await recorder.list_for_site(site.id)
+    aggregator = HealthAggregator(session, is_sqlite=settings.is_sqlite)
+    records = await aggregator.list_for_site(site.id)
+    legacy_rows = await aggregator.recorder.list_for_site(site.id)
+    legacy_by_provider = {row["provider"]: row for row in legacy_rows}
+    provider_statuses: list[HealthStatus] = []
+    items: list[IntegrationHealthItem] = []
+    for record in records:
+        provider_statuses.append(record.status)
+        legacy = legacy_by_provider.get(record.provider, {})
+        items.append(
+            IntegrationHealthItem(
+                provider=record.provider,
+                status=str(legacy.get("status", "unknown")),
+                health_status=record.status.value,
+                last_success_at=legacy.get("last_success_at"),
+                last_attempt_at=legacy.get("last_attempt_at"),
+                latency_ms=legacy.get("latency_ms"),
+                consecutive_failures=int(legacy.get("consecutive_failures", 0) or 0),
+                stale_seconds=legacy.get("stale_seconds"),
+                circuit_breaker_state=legacy.get("circuit_breaker_state"),
+                last_error_class=legacy.get("last_error_class"),
+            )
+        )
+    overall = aggregate_health_status(tuple(provider_statuses))
     return IntegrationHealthResponse(
         slug=slug,
-        providers=[IntegrationHealthItem(**item) for item in providers],
+        overall_health_status=overall.value,
+        providers=items,
     )

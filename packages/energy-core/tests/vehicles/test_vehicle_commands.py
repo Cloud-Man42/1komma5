@@ -154,7 +154,7 @@ async def test_command_service_set_target_soc_sends_payload():
     session.get = AsyncMock(return_value=vehicle)
     session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=cap)))
 
-    with patch("energy_core.vehicles.commands.service.MercedesProvider") as provider_cls:
+    with patch("energy_core.vehicles.commands.service.build_mercedes_provider") as provider_cls:
         provider = AsyncMock()
         provider._rest.get_command_capabilities = AsyncMock(  # noqa: SLF001
             return_value={"commands": ["CHARGING_CONFIGURE"]}

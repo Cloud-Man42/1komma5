@@ -112,7 +112,7 @@ class ArcticSpaPollingService:
                 elapsed = max(0.0, (now - config.last_status_at).total_seconds())
             site_house_w = None
             if live_overview:
-                from energy_core.heartbeat.live_overview import parse_live_overview
+                from energy_core.integrations.heartbeat.live_overview import parse_live_overview
 
                 parsed_overview = parse_live_overview(live_overview)
                 site_house_w = parsed_overview.get("home_consumption_w")

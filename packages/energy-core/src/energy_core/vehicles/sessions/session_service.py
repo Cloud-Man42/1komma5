@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import MeterSnapshot, session_energy_from_meter
+from energy_core.contracts.devices.meter import MeterSnapshot, session_energy_from_meter
 from energy_core.db.ev_interval_repo import EvChargingIntervalRepository
 from energy_core.db.ev_session_repo import EvChargingSessionRepository
 from energy_core.db.models import EvChargerModel, SiteModel, VehicleModel, VehicleStateLatestModel
@@ -16,10 +16,11 @@ from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecor
 from energy_core.ev_accounting.models import EnergyAttribution
 from energy_core.ev_accounting.reconciliation import SessionReconciliationService
 from energy_core.ev_accounting.session_totals import session_totals_from_intervals
+from energy_core.platform.events.publish import publish_charging_session_started, publish_charging_session_stopped
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
 from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
 from energy_core.vehicles.connection_signals import resolve_effective_connection
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.sessions.constants import (
     CALCULATION_VERSION,
     DEFAULT_SAVINGS_BASELINE,
@@ -197,6 +198,13 @@ class VehicleChargeSessionService:
             runtime.last_plugged_in = is_plugged
             runtime.last_charging = is_charging
             runtime.last_soc = soc
+            publish_charging_session_started(
+                session_kind="vehicle",
+                site_id=site.id,
+                session_id=record.id,
+                vehicle_id=vehicle.id,
+                connected_at=now.isoformat(),
+            )
             return record.id
 
         if active is not None:
@@ -222,6 +230,8 @@ class VehicleChargeSessionService:
                     context=context,
                     latest=latest,
                     station_resolution=station_resolution,
+                    site_id=site.id,
+                    vehicle_id=vehicle.id,
                 )
             elif _vehicle_data_stale(latest) and (is_charging or was_plugged):
                 await repo.update_csi_fields(active.id, vehicle_data_quality="STALE")
@@ -333,13 +343,32 @@ class VehicleChargeSessionService:
                 record.id,
                 identification_confidence,
             )
+            publish_charging_session_started(
+                session_kind="vehicle",
+                site_id=site.id,
+                session_id=record.id,
+                vehicle_id=vehicle.id,
+                charger_id=charger.id,
+                connected_at=now.isoformat(),
+            )
             return record.id
 
         if not is_plugged and active is not None:
             if stale and charger_active:
                 await repo.update_csi_fields(active.id, vehicle_data_quality="STALE", **csi_fields)
             else:
-                await self._complete_session(db, repo, active, meter, runtime, end_soc=soc, csi_fields=csi_fields)
+                await self._complete_session(
+                    db,
+                    repo,
+                    active,
+                    meter,
+                    runtime,
+                    end_soc=soc,
+                    csi_fields=csi_fields,
+                    site_id=site.id,
+                    vehicle_id=vehicle.id,
+                    charger_id=charger.id,
+                )
             runtime.last_plugged_in = is_plugged
             runtime.last_charging = is_charging
             return active.id
@@ -378,6 +407,8 @@ class VehicleChargeSessionService:
         *,
         end_soc: float | None,
         context,
+        site_id: int,
+        vehicle_id: int,
         latest: VehicleStateLatestModel | None = None,
         station_resolution=None,
     ) -> None:
@@ -409,6 +440,14 @@ class VehicleChargeSessionService:
         )
         runtime.last_plugged_in = False
         runtime.last_charging = False
+        publish_charging_session_stopped(
+            session_kind="vehicle",
+            site_id=site_id,
+            session_id=active.id,
+            vehicle_id=vehicle_id,
+            disconnected_at=datetime.now(UTC).isoformat(),
+            away=True,
+        )
 
     async def _complete_session(
         self,
@@ -419,6 +458,9 @@ class VehicleChargeSessionService:
         runtime: VehicleSessionRuntimeState,
         *,
         end_soc: float | None,
+        site_id: int,
+        vehicle_id: int,
+        charger_id: int | None,
         csi_fields: dict | None = None,
     ) -> None:
         if active.ev_charging_session_id is not None:
@@ -509,3 +551,11 @@ class VehicleChargeSessionService:
         )
         runtime.last_meter_kwh = meter.cumulative_kwh
         runtime.last_sample_at = meter.recorded_at
+        publish_charging_session_stopped(
+            session_kind="vehicle",
+            site_id=site_id,
+            session_id=active.id,
+            vehicle_id=vehicle_id,
+            charger_id=charger_id,
+            disconnected_at=meter.recorded_at.isoformat(),
+        )

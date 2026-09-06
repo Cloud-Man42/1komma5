@@ -30,6 +30,7 @@ async def test_spa_status_and_config(client):
 
     health = await ac.get("/api/sites/akarp/spa/health")
     assert health.status_code == 200
+    assert health.json()["health_status"] in {"healthy", "degraded", "unavailable", "disabled"}
 
     readiness = await ac.get("/api/system/integrations/spa-readiness")
     assert readiness.status_code == 200

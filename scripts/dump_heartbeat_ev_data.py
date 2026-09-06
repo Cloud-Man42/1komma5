@@ -7,7 +7,7 @@ from pathlib import Path
 from energy_core.config import Settings
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.heartbeat.discovery.redaction import redact_json
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 SYSTEM_ID = sys.argv[1] if len(sys.argv) > 1 else "ec892788-0a43-46a4-bd25-b4bbc22ab6e3"
 SAVE_FIXTURES = "--save-fixtures" in sys.argv

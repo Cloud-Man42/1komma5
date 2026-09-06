@@ -8,14 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db_session
-from app.schemas import (
-    ChargeFinderDiagnosticsResponse,
-    ChargeFinderRawLookupResponse,
-    ChargeFinderStatusResponse,
-    ChargeFinderTestLookupRequest,
-    ChargeFinderTestLookupResponse,
-)
+
+from app.schemas.chargefinder import ChargeFinderDiagnosticsResponse, ChargeFinderRawLookupResponse, ChargeFinderStatusResponse, ChargeFinderTestLookupRequest, ChargeFinderTestLookupResponse
 from energy_core.config import get_settings
+from energy_core.contracts.health import from_chargefinder_status
 from energy_core.db.chargefinder_integration_status_repo import ChargeFinderIntegrationStatusRepository
 from energy_core.db.vehicle_repo import VehicleRepository
 from energy_core.integrations.charging_stations.chargefinder.provider import (
@@ -45,6 +41,7 @@ async def chargefinder_status(
     metrics = get_chargefinder_metrics().snapshot()
     return ChargeFinderStatusResponse(
         health_status=health.status.value,
+        unified_health_status=from_chargefinder_status(health.status.value).value,
         enabled=health.enabled,
         mode=health.mode,
         search_radius_m=settings.chargefinder_search_radius_m,
@@ -81,6 +78,7 @@ async def chargefinder_diagnostics(
     metrics = get_chargefinder_metrics().snapshot()
     return ChargeFinderDiagnosticsResponse(
         health_status=health.status.value,
+        unified_health_status=from_chargefinder_status(health.status.value).value,
         enabled=health.enabled,
         mode=health.mode,
         last_success_at=health.last_success_at,

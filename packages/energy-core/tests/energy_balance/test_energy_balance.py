@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.energy.state import EnergyState
 from energy_core.energy_balance.correlation import correlate_telemetry
 from energy_core.energy_balance.engine import EnergyBalanceEngine

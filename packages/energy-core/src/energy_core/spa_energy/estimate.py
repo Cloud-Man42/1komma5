@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from energy_core.consumer_accounting.types import DataQuality
-from energy_core.integrations.arctic_spa.config import SpaPowerProfiles
+from energy_core.integrations.arctic_spa.profiles import SpaPowerProfiles
 
 
 @dataclass(frozen=True, slots=True)

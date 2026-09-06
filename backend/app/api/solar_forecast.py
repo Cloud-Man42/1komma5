@@ -1,63 +1,42 @@
 """Solar forecast API routes."""
 
-
-
 from __future__ import annotations
-
-
 
 from datetime import UTC, datetime, timedelta
 
-
-
 from app.deps import get_app_settings, get_db_session
-
-from app.schemas import (
-
+from app.schemas.solar import (
     SolarAccuracyResponse,
-
     SolarDiagnosticsResponse,
-
     SolarEnergyBudgetResponse,
-
     SolarForecastObservationResponse,
-
     SolarForecastPointResponse,
-
     SolarForecastResponse,
-
     SolarSiteConfigResponse,
-
     SolarSiteConfigUpdate,
-
     SolarWeatherHourResponse,
-
     SolarWeatherResponse,
-
 )
-
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
-
 from energy_core.db.solar_forecast_repo import (
-
     SolarForecastModelProfileRepository,
-
     SolarForecastObservationRepository,
-
     SolarForecastRepository,
-
     SolarSiteConfigRepository,
-
 )
 
 from energy_core.solar_forecast.budget import ConsumptionForecastProvider, SolarEnergyBudgetService
 
 from energy_core.solar_forecast.calibration import metrics_insufficient
 
-from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
-
+from energy_core.platform.forecasting import (
+    build_solar_forecast_coordinator,
+    build_solar_geometry_service,
+    resolve_forecast_with_refresh,
+)
 from energy_core.solar_forecast.api_read import load_solar_forecast_snapshot, resolve_forecast_for_read
 from energy_core.solar_forecast.api_response import payload_to_solar_forecast_response
+from energy_core.solar_forecast.api_snapshot_builder import refresh_solar_forecast_intraday_metrics
 
 from energy_core.solar_forecast.rollup_queries import (
     actual_solar_kwh_today,
@@ -79,7 +58,6 @@ from energy_core.solar_forecast.weather_conditions import (
 
 from energy_core.cache.service import get_cache_service, solar_forecast_cache_key
 from energy_core.config import Settings
-from energy_core.solar_intelligence.geometry import SolarGeometryService
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -98,7 +76,7 @@ router = APIRouter(tags=["solar-forecast"])
 
 async def _ensure_solar_observations_evaluated(session: AsyncSession, site, settings) -> None:
 
-    coordinator = SolarForecastCoordinator(settings)
+    coordinator = build_solar_forecast_coordinator(settings)
 
     await coordinator.evaluate_site_observations(session, site, now=datetime.now(UTC))
 
@@ -174,82 +152,14 @@ async def _resolve_forecast(session: AsyncSession, site, settings):
 
         )
 
-
-
-    forecast_repo = SolarForecastRepository(session)
-
-    now = datetime.now(UTC)
-
-    stale_after = timedelta(minutes=settings.solar_forecast_refresh_minutes)
-
-    forecast = await forecast_repo.get_latest(site.id)
-
-    def _is_stale(f) -> bool:
-        if f is None:
-            return True
-        generated = f.generated_at
-        if generated.tzinfo is None:
-            generated = generated.replace(tzinfo=UTC)
-        return now - generated > stale_after
-
-
-
-    if record.solar_intelligence_enabled:
-
-        if _is_stale(forecast) and settings.solar_forecast_sync_refresh_on_read:
-
-            from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
-
-            intel = SolarIntelligenceCoordinator(settings)
-
-            if await intel.refresh_site(session, site, now=now):
-
-                await session.flush()
-
-                forecast = await forecast_repo.get_latest(site.id)
-
-        if forecast is not None:
-
-            return forecast
-
-    elif forecast is not None:
-
+    forecast = await resolve_forecast_with_refresh(session, site, settings)
+    if forecast is not None:
         return forecast
-
-
-
-    if not settings.solar_forecast_sync_refresh_on_read:
-
-        return forecast
-
-
-
-    coordinator = SolarForecastCoordinator(settings)
-
-    refreshed = await coordinator.refresh_site_now(session, site)
-
-    if refreshed:
-
-        await session.flush()
-
-        forecast = await forecast_repo.get_latest(site.id)
-
-        if forecast is not None:
-
-            return forecast
-
-
 
     raise HTTPException(
-
         status_code=503,
-
         detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
-
     )
-
-
-
 
 
 async def _forecast_response(session, site, forecast, settings) -> SolarForecastResponse:
@@ -585,7 +495,7 @@ async def update_solar_config(
 
 
 
-    coordinator = SolarForecastCoordinator(settings)
+    coordinator = build_solar_forecast_coordinator(settings)
 
     await coordinator.refresh_site_now(session, site)
 
@@ -628,29 +538,27 @@ async def get_solar_forecast(
 
     if cached is not None:
         await cache.set(cache_key, cached, ttl_seconds=l1_warm_ttl)
-        if isinstance(cached, dict):
-            return JSONResponse(content=cached)
-        return SolarForecastResponse.model_validate(cached)
+        payload = dict(cached) if isinstance(cached, dict) else cached.model_dump(mode="json")
+    else:
+        async def factory() -> dict:
+            snapshot = await load_solar_forecast_snapshot(session, site.id, settings)
+            if snapshot is not None:
+                return snapshot
 
-    async def factory() -> dict:
-        snapshot = await load_solar_forecast_snapshot(session, site.id, settings)
-        if snapshot is not None:
-            return snapshot
+            forecast = await _resolve_forecast(session, site, settings)
+            if forecast is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
+                )
+            response = await _forecast_response(session, site, forecast, settings)
+            return response.model_dump(mode="json")
 
-        forecast = await _resolve_forecast(session, site, settings)
-        if forecast is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Prognosen kunde inte genereras just nu. Försök igen om en minut.",
-            )
-        response = await _forecast_response(session, site, forecast, settings)
-        return response.model_dump(mode="json")
+        payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
+        await cache.set(cache_key, payload, ttl_seconds=l1_warm_ttl)
 
-    payload = await cache.get_or_set(cache_key, factory, ttl_seconds=ttl_seconds)
-    await cache.set(cache_key, payload, ttl_seconds=l1_warm_ttl)
-    if isinstance(payload, dict):
-        return JSONResponse(content=payload)
-    return SolarForecastResponse.model_validate(payload)
+    payload = await refresh_solar_forecast_intraday_metrics(session, site, payload, settings)
+    return JSONResponse(content=payload)
 
 
 
@@ -961,7 +869,7 @@ async def get_solar_weather(
         )
 
     now = datetime.now(UTC)
-    coordinator = SolarForecastCoordinator(settings)
+    coordinator = build_solar_forecast_coordinator(settings)
     resolved = await coordinator.resolve_weather(session, site, now=now)
     if resolved is None:
         raise HTTPException(
@@ -984,7 +892,7 @@ async def get_solar_weather(
             hour = point.timestamp.replace(minute=0, second=0, microsecond=0)
             forecast_by_hour.setdefault(hour, point.corrected_power_w)
 
-    geometry = SolarGeometryService(
+    geometry = build_solar_geometry_service(
         latitude=config.latitude,
         longitude=config.longitude,
         timezone=site.timezone,

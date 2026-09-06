@@ -7,9 +7,9 @@ from datetime import UTC, datetime, timedelta
 
 from energy_core.db.spa_control_repo import SpaControlConfigRecord
 from energy_core.flexible_load.types import LoadPlan, PlanWindow
-from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
-from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
-from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
+from energy_core.contracts.spa.control import ISpaControlService
+from energy_core.contracts.spa.errors import SpaControlError
+from energy_core.integrations.arctic_spa.status import SpaStatus
 
 
 from energy_core.spa_energy.filter_policy import is_spa_filter_self_managed
@@ -52,8 +52,8 @@ class SpaCleaningActuator:
     async def run_cycle(
         self,
         *,
-        control_service: ArcticSpaControlService,
-        status: ArcticSpaStatus | None,
+        control_service: ISpaControlService,
+        status: SpaStatus | None,
         plan: LoadPlan | None,
         now: datetime,
         manual_override: bool = False,
@@ -133,7 +133,7 @@ class SpaCleaningActuator:
 
     async def apply_preheat(
         self,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         *,
         status: ArcticSpaStatus | None,
         surplus_w: float,
@@ -166,7 +166,7 @@ class SpaCleaningActuator:
                 command_sent=True,
                 dry_run=False,
             )
-        except ArcticSpaApiError:
+        except SpaControlError:
             self._runtime.integration_degraded = True
             self._runtime.integration_degraded_message_sv = DEGRADED_MESSAGE_SV
             return SpaActuatorDecision("none", "preheat_failed", "forvarmning_fel", dry_run=False)
@@ -179,7 +179,7 @@ class SpaCleaningActuator:
 
     async def _start_cleaning(
         self,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         *,
         now: datetime,
         reason: str,
@@ -211,7 +211,7 @@ class SpaCleaningActuator:
             self._runtime.last_reason = reason
             self._runtime.last_reason_sv = reason_sv
             return SpaActuatorDecision("start", reason, reason_sv, command_sent=True, dry_run=False)
-        except ArcticSpaApiError:
+        except SpaControlError:
             self._runtime.integration_degraded = True
             self._runtime.integration_degraded_message_sv = DEGRADED_MESSAGE_SV
             self._runtime.state = SpaActuatorState.DEGRADED
@@ -219,8 +219,8 @@ class SpaCleaningActuator:
 
     async def _handle_active_cleaning(
         self,
-        control_service: ArcticSpaControlService,
-        status: ArcticSpaStatus | None,
+        control_service: ISpaControlService,
+        status: SpaStatus | None,
         now: datetime,
         dry_run: bool,
         window: PlanWindow | None = None,
@@ -248,7 +248,7 @@ class SpaCleaningActuator:
                 self._runtime.cleaning_started_at = None
                 self._runtime.cleaning_stop_at = None
                 return SpaActuatorDecision("stop", "window_end", "fonster_slut", command_sent=True, dry_run=False)
-            except ArcticSpaApiError:
+            except SpaControlError:
                 self._runtime.integration_degraded = True
                 self._runtime.integration_degraded_message_sv = DEGRADED_MESSAGE_SV
                 return SpaActuatorDecision("hold", "stop_failed", "stopp_fel", dry_run=False)

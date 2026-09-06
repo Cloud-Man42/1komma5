@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.virtual_evse.device_profile import VirtualEvseDeviceProfile
 from energy_core.virtual_evse.reporter import meter_to_virtual_evse_state
 from energy_core.virtual_evse.semp_payloads import build_device_status

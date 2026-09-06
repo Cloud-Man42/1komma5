@@ -79,7 +79,7 @@ async def test_ev_charger_update_404(client):
 async def test_ev_charger_sync_requires_heartbeat(client, monkeypatch):
     ac, session_factory, _ = client
     monkeypatch.setattr(
-        "energy_core.heartbeat_client_factory.create_heartbeat_client",
+        "energy_core.integrations.heartbeat.client_factory.create_heartbeat_client",
         AsyncMock(return_value=None),
     )
     async with session_factory() as session:
@@ -102,7 +102,7 @@ async def test_ev_charger_sync_success(client, monkeypatch):
         list_wallboxes=AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
-        "energy_core.heartbeat_client_factory.create_heartbeat_client",
+        "energy_core.integrations.heartbeat.client_factory.create_heartbeat_client",
         AsyncMock(return_value=mock_client),
     )
     async with session_factory() as session:

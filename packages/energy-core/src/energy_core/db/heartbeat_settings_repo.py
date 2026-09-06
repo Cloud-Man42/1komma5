@@ -9,15 +9,15 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import HeartbeatSettingsModel, SiteModel
-from energy_core.heartbeat_auth import HeartbeatAuthError, refresh_bearer_token, token_needs_refresh
-from energy_core.secrets import CredentialCipher
-from energy_core.heartbeat_connection import (
+from energy_core.integrations.heartbeat.auth import HeartbeatAuthError, refresh_bearer_token, token_needs_refresh
+from energy_core.integrations.heartbeat.connection import (
     CLOUD_HOST,
     CLOUD_PORT,
     DEFAULT_API_PATH,
     HeartbeatConnectionType,
     build_heartbeat_api_url,
 )
+from energy_core.secrets import CredentialCipher
 
 logger = logging.getLogger(__name__)
 

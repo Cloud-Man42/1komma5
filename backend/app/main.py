@@ -10,7 +10,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.api import admin_audit, apple_devices, chargefinder, chargers_catalog, dashboard, display, energy_control, energy_orchestration, ev_chargers, ev_sessions, forecast_learning, heartbeat_audit, heartbeat_bridge, horizon_optimizer, integration_health, price_engine, prices, readings, semp, sites, snapshot, solar_forecast, solar_intelligence, spa, system, vehicles, widget
 from app.deps import set_session_factory
 from app.widget_service import configure_snapshot_cache
-from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
+from energy_core.integrations.chargeamps.config import assert_chargeamps_production_safe
 from energy_core.config import Settings, get_settings
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.performance.middleware import PerformanceMiddleware

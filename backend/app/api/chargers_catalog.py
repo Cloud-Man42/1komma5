@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from app.schemas import (
-    ChargerCatalogModelResponse,
-    ChargerIntegrationMethodResponse,
-    ChargerManufacturerResponse,
-    ChargerModelDetailResponse,
-)
+
+from app.schemas.chargers_catalog import ChargerCatalogModelResponse, ChargerIntegrationMethodResponse, ChargerManufacturerResponse, ChargerModelDetailResponse
 from energy_core.chargers.framework.catalog import (
     feature_matrix_rows,
     get_manufacturer,

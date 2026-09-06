@@ -5,14 +5,8 @@ from __future__ import annotations
 from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.deps import get_db_session, get_site_repository
-from app.schemas import (
-    EnergyControlActionResponse,
-    EnergyControlPreviewRequest,
-    EnergyControlRecentResponse,
-    EnergyControlResultResponse,
-    EnergyControlSettingsUpdateRequest,
-    EnergyControlStatusResponse,
-)
+
+from app.schemas.energy_control import EnergyControlActionResponse, EnergyControlPreviewRequest, EnergyControlRecentResponse, EnergyControlResultResponse, EnergyControlSettingsUpdateRequest, EnergyControlStatusResponse
 from energy_core.db.repositories import SiteRepository
 from energy_core.energy_control.service import EnergyControlService
 from energy_core.energy_control.types import ControlTarget, OptimizationAction

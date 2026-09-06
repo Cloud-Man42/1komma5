@@ -15,6 +15,7 @@ async def test_chargefinder_status(client):
     body = response.json()
     assert body["mode"] == "WEB"
     assert "health_status" in body
+    assert body["unified_health_status"] in {"healthy", "degraded", "unavailable", "disabled"}
 
 
 @pytest.mark.asyncio

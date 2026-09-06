@@ -8,10 +8,102 @@ from typing import Any
 from energy_core.config import Settings
 from energy_core.db.repositories import EnergyReadingRepository
 from energy_core.db.solar_forecast_repo import SolarForecastModelProfileRepository
+from energy_core.solar_forecast.api_response import _parse_dt
 from energy_core.solar_forecast.day_metrics import compute_solar_day_metrics, compute_tomorrow_kwh
 from energy_core.solar_forecast.rollup_queries import actual_solar_kwh_today, count_production_days_observed
-from energy_core.solar_forecast.types import ModelState, confidence_label_from_score
+from energy_core.solar_forecast.types import (
+    ModelState,
+    SolarForecast,
+    SolarForecastPoint,
+    confidence_label_from_score,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def forecast_from_api_payload(payload: dict[str, Any]) -> SolarForecast:
+    """Reconstruct a forecast object from a cached or persisted API payload."""
+    points = tuple(
+        SolarForecastPoint(
+            timestamp=_parse_dt(point["timestamp"]),
+            baseline_power_w=float(point.get("baseline_power_w") or 0),
+            corrected_power_w=float(point.get("corrected_power_w") or 0),
+            expected_energy_kwh=float(point.get("expected_energy_kwh") or 0),
+            lower_bound_power_w=float(point.get("lower_bound_power_w") or 0),
+            upper_bound_power_w=float(point.get("upper_bound_power_w") or 0),
+            confidence=float(point.get("confidence") or 0),
+            correction_factor=float(point.get("correction_factor") or 1.0),
+        )
+        for point in payload.get("points") or []
+    )
+    peak_time = payload.get("peak_time")
+    return SolarForecast(
+        site_id=int(payload["site_id"]),
+        generated_at=_parse_dt(payload["generated_at"]),
+        model_version=str(payload.get("model_version") or ""),
+        quality=str(payload.get("quality") or "MEDIUM"),  # type: ignore[arg-type]
+        weather_source=str(payload.get("weather_source") or "cache"),  # type: ignore[arg-type]
+        expected_today_kwh=float(payload.get("expected_today_kwh") or 0),
+        remaining_today_kwh=float(payload.get("remaining_today_kwh") or 0),
+        expected_tomorrow_kwh=payload.get("expected_tomorrow_kwh"),
+        peak_power_w=float(payload.get("peak_power_w") or 0),
+        peak_time=_parse_dt(peak_time) if peak_time else None,
+        confidence=float(payload.get("confidence") or 0),
+        lower_today_kwh=float(payload.get("lower_today_kwh") or 0),
+        upper_today_kwh=float(payload.get("upper_today_kwh") or 0),
+        weather_summary=str(payload.get("weather_summary") or ""),
+        points=points,
+        raw_forecast_today_kwh=float(payload.get("raw_forecast_today_kwh") or 0),
+        raw_forecast_tomorrow_kwh=payload.get("raw_forecast_tomorrow_kwh"),
+        corrected_forecast_today_kwh=float(payload.get("corrected_forecast_today_kwh") or 0),
+        corrected_forecast_tomorrow_kwh=payload.get("corrected_forecast_tomorrow_kwh"),
+        correction_factor=float(payload.get("correction_factor") or 1.0),
+    )
+
+
+async def refresh_solar_forecast_intraday_metrics(
+    session: AsyncSession,
+    site,
+    payload: dict[str, Any],
+    settings: Settings,
+) -> dict[str, Any]:
+    """Recompute time-sensitive intraday fields before serving a cached snapshot."""
+    now = datetime.now(UTC)
+    forecast = forecast_from_api_payload(payload)
+    day_metrics = compute_solar_day_metrics(forecast, timezone=site.timezone, now=now)
+    expected_tomorrow_kwh = compute_tomorrow_kwh(forecast, timezone=site.timezone, now=now)
+
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    actual_today_kwh = await actual_solar_kwh_today(
+        reading_repo,
+        site.id,
+        timezone=site.timezone,
+        now=now,
+    )
+    remaining_vs_expected_kwh = round(
+        max(0.0, day_metrics.expected_today_kwh - actual_today_kwh),
+        3,
+    )
+
+    generated_at = _parse_dt(payload["generated_at"])
+    if generated_at.tzinfo is None:
+        generated_at = generated_at.replace(tzinfo=UTC)
+    age_seconds = max(0.0, (now - generated_at).total_seconds())
+
+    payload.update(
+        {
+            "expected_today_kwh": day_metrics.expected_today_kwh,
+            "remaining_today_kwh": day_metrics.remaining_today_kwh,
+            "expected_tomorrow_kwh": expected_tomorrow_kwh,
+            "peak_power_w": day_metrics.peak_power_w,
+            "peak_time": day_metrics.peak_time.isoformat() if day_metrics.peak_time else None,
+            "actual_today_kwh": actual_today_kwh,
+            "forecast_so_far_kwh": day_metrics.forecast_so_far_kwh,
+            "remaining_vs_expected_kwh": remaining_vs_expected_kwh,
+            "raw_forecast_so_far_kwh": day_metrics.raw_forecast_so_far_kwh,
+            "age_seconds": round(age_seconds, 1),
+        }
+    )
+    return payload
 
 
 async def build_solar_forecast_api_payload(

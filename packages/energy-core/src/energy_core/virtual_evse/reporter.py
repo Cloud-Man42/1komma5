@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.virtual_evse.device_profile import VirtualEvseDeviceProfile
 from energy_core.virtual_evse.state import VirtualEvseState, VirtualEvseStatus
 

@@ -22,11 +22,10 @@ import httpx
 
 from energy_core.domain import RawEnergyReading, SiteSnapshot
 
-from energy_core.heartbeat.readings import live_overview_to_raw_reading
+from energy_core.integrations.heartbeat.readings import live_overview_to_raw_reading
 
-from energy_core.heartbeat_client import HeartbeatClient, HeartbeatCredentials
-
-from energy_core.heartbeat_connection import HeartbeatConnectionType
+from energy_core.integrations.heartbeat.client import HeartbeatClient, HeartbeatCredentials
+from energy_core.integrations.heartbeat.connection import HeartbeatConnectionType
 
 
 

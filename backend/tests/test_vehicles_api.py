@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from cryptography.fernet import Fernet
-from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
+from energy_core.integrations.mercedes.auth import MercedesTokenBundle
 
 
 @pytest.mark.asyncio
@@ -32,6 +32,7 @@ async def test_vehicle_config_status_and_list(client, monkeypatch):
     status = await ac.get("/api/sites/akarp/vehicles/integration/status")
     assert status.status_code == 200
     assert status.json()["enabled"] is True
+    assert status.json()["health_status"] in {"healthy", "degraded", "unavailable", "disabled"}
     assert "secret" not in status.text
 
     vehicles = await ac.get("/api/sites/akarp/vehicles")
@@ -47,7 +48,9 @@ async def test_vehicle_config_status_and_list(client, monkeypatch):
         expires_at=9_999_999_999,
         device_guid="device-guid",
     )
-    with patch("app.api.vehicles.MercedesProvider.login", new=AsyncMock(return_value=bundle)):
+    mock_provider = AsyncMock()
+    mock_provider.login = AsyncMock(return_value=bundle)
+    with patch("app.api.vehicles.build_mercedes_provider", return_value=mock_provider):
         login = await ac.post("/api/sites/akarp/vehicles/integration/login")
     assert login.status_code == 200
     assert login.json()["success"] is True
@@ -104,7 +107,7 @@ async def test_vehicle_commands_require_enabled_flag(client, monkeypatch):
     )
     assert missing_vehicle.status_code == 403
 
-    with patch("energy_core.vehicles.commands.service.MercedesProvider") as provider_cls:
+    with patch("energy_core.vehicles.commands.service.build_mercedes_provider") as provider_cls:
         provider = AsyncMock()
         provider_cls.return_value = provider
         # Enable commands but vehicle still missing -> 404 after enable check passes
@@ -212,6 +215,7 @@ async def test_integration_diagnostics_and_reset(client):
     body = diagnostics.json()
     assert body["site_slug"] == "akarp"
     assert "health_status" in body
+    assert body["unified_health_status"] in {"healthy", "degraded", "unavailable", "disabled"}
     assert "integration_events" in body
 
     reset = await ac.post("/api/sites/akarp/vehicles/integration/actions/reset")

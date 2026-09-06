@@ -3,16 +3,37 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 
-from energy_core.chargers.charge_amps import build_chargeamps_controller
+from energy_core.integrations.chargeamps.controller import build_chargeamps_controller
+from energy_core.integrations.zaptec.factory import build_zaptec_adapter
 from energy_core.chargers.framework.adapters.charge_amps import ChargeAmpsFrameworkAdapter
 from energy_core.chargers.framework.adapters.unsupported import UnsupportedChargerAdapter
-from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, get_integration_method
+from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, ZAPTEC_REST, get_integration_method
 from energy_core.chargers.framework.models import ChargerAdapter, ChargerConfiguration
 from energy_core.chargers.halo_adapter import ChargeAmpsHaloAdapter, build_halo_adapter
 from energy_core.chargers.mock import MockChargeAmpsController
 from energy_core.db.models import EvChargerModel
 from energy_core.secrets import CredentialCipher
+
+AdapterBuilder = Callable[[ChargerConfiguration], ChargerAdapter]
+
+
+def _unsupported(config: ChargerConfiguration) -> ChargerAdapter:
+    return UnsupportedChargerAdapter(
+        manufacturer_id=config.manufacturer_id,
+        model_id=config.model_id,
+        integration_method=config.integration_method,
+    )
+
+
+def _ocpp_unsupported(config: ChargerConfiguration) -> ChargerAdapter:
+    return UnsupportedChargerAdapter(
+        manufacturer_id=config.manufacturer_id,
+        model_id=config.model_id,
+        integration_method=config.integration_method,
+    )
+
 
 
 class ChargerAdapterFactory:
@@ -27,27 +48,16 @@ class ChargerAdapterFactory:
     def create(config: ChargerConfiguration) -> ChargerAdapter:
         method = get_integration_method(config.integration_method)
         if method is None:
-            return UnsupportedChargerAdapter(
-                manufacturer_id=config.manufacturer_id,
-                model_id=config.model_id,
-                integration_method=config.integration_method,
-            )
-
-        if config.integration_method == CHARGE_AMPS_CLOUD:
-            return _build_charge_amps(config)
+            return _unsupported(config)
 
         if config.integration_method.startswith("OCPP"):
-            return UnsupportedChargerAdapter(
-                manufacturer_id=config.manufacturer_id,
-                model_id=config.model_id,
-                integration_method=config.integration_method,
-            )
+            return _ocpp_unsupported(config)
 
-        return UnsupportedChargerAdapter(
-            manufacturer_id=config.manufacturer_id,
-            model_id=config.model_id,
-            integration_method=config.integration_method,
-        )
+        builder = _INTEGRATION_BUILDERS.get(config.integration_method)
+        if builder is not None:
+            return builder(config)
+
+        return _unsupported(config)
 
 
 def configuration_from_model(charger: EvChargerModel) -> ChargerConfiguration:
@@ -113,7 +123,7 @@ def _build_charge_amps(config: ChargerConfiguration) -> ChargerAdapter:
         max_current_a=config.max_current_a,
         phases=config.phases,
     )
-    from energy_core.chargers.charge_amps import ChargeAmpsExternalController, MockChargeAmpsController
+    from energy_core.integrations.chargeamps.controller import ChargeAmpsExternalController, MockChargeAmpsController
 
     if isinstance(controller, ChargeAmpsExternalController) and controller._adapter is not None:
         inner = controller._adapter
@@ -127,6 +137,12 @@ def _build_charge_amps(config: ChargerConfiguration) -> ChargerAdapter:
         manufacturer_id=config.manufacturer_id,
         model_id=config.model_id,
     )
+
+
+_INTEGRATION_BUILDERS: dict[str, AdapterBuilder] = {
+    CHARGE_AMPS_CLOUD: _build_charge_amps,
+    ZAPTEC_REST: build_zaptec_adapter,
+}
 
 
 class _MockInnerAdapter(ChargeAmpsHaloAdapter):

@@ -16,13 +16,13 @@ from energy_core.vehicles.commands.errors import (
     VehicleCommandError,
     VehicleCommandsDisabledError,
 )
-from energy_core.vehicles.mercedes.commands.builder import (
+from energy_core.integrations.mercedes.commands import (
+    MercedesCommandFeatures,
     build_charging_action_command,
     build_set_target_soc_command,
     describe_client_message,
 )
-from energy_core.vehicles.mercedes.commands.features import MercedesCommandFeatures
-from energy_core.vehicles.mercedes.provider import MercedesProvider
+from energy_core.integrations.mercedes.factory import build_mercedes_provider
 
 logger = logging.getLogger(__name__)
 
@@ -117,11 +117,7 @@ class VehicleCommandService:
         token_bundle = self._provider_repo.load_token_bundle(row)
         if token_bundle is None:
             raise VehicleCommandError("Mercedes is not authenticated", code="not_authenticated")
-        provider = MercedesProvider(
-            region=row.region,
-            device_guid=row.device_guid or None,
-            token_bundle=token_bundle,
-        )
+        provider = build_mercedes_provider(row, token_bundle=token_bundle)
         payload = await provider._rest.get_command_capabilities(vin)  # noqa: SLF001
         return MercedesCommandFeatures.from_rest_payload(payload)
 
@@ -138,11 +134,7 @@ class VehicleCommandService:
         token_bundle = self._provider_repo.load_token_bundle(row)
         if token_bundle is None:
             raise VehicleCommandError("Mercedes is not authenticated", code="not_authenticated")
-        provider = MercedesProvider(
-            region=row.region,
-            device_guid=row.device_guid or None,
-            token_bundle=token_bundle,
-        )
+        provider = build_mercedes_provider(row, token_bundle=token_bundle)
         try:
             await provider.connect()
             return await provider.send_command_and_wait(payload, request_id=request_id)

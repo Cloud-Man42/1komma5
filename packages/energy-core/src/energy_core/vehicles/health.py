@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from energy_core.vehicles.abstractions.models import VehicleConnectionState
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 
 
 class IntegrationHealthStatus(StrEnum):

@@ -114,6 +114,7 @@ export function IntelligenceOverview({
                   readings={extra.readings}
                   forecast={extra.forecast}
                   timezone={dashboard.site.timezone}
+                  producedKwhToday={dashboard.today?.produced_kwh}
                 />
               )}
             </div>

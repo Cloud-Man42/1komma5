@@ -6,11 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db_session
-from app.schemas import (
-    EnergyOrchestrationLoadResponse,
-    EnergyOrchestrationPrioritiesUpdateRequest,
-    EnergyOrchestrationResponse,
-)
+
+from app.schemas.orchestration import EnergyOrchestrationLoadResponse, EnergyOrchestrationPrioritiesUpdateRequest, EnergyOrchestrationResponse
 from energy_core.db.consumer_repo import ConsumerRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.flexible_load_plan_repo import FlexibleLoadPlanRepository

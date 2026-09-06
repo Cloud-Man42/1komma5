@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from energy_core.vehicles.abstractions.models import TimedValue, ValueQuality
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 
 
 def build_timed_value(

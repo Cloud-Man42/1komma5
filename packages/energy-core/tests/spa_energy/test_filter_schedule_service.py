@@ -4,13 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
+from energy_core.integrations.arctic_spa.status import SpaStatus
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy
 from energy_core.spa_energy.filter_schedule_service import ArcticSpaFilterScheduleService
 
 
-def _status(*, frequency: float = 4, duration: float = 2) -> ArcticSpaStatus:
-    return ArcticSpaStatus(
+def _status(*, frequency: float = 4, duration: float = 2) -> SpaStatus:
+    return SpaStatus(
         connected=True,
         temperature_c=38.0,
         setpoint_c=38.0,

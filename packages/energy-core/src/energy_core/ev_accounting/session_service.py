@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter, MeterSnapshot, session_energy_from_meter
+from energy_core.contracts.devices.meter import MeterSnapshot, session_energy_from_meter
 from energy_core.db.ev_session_repo import EvChargingSessionRecord, EvChargingSessionRepository
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.ev_accounting.constants import CALCULATION_VERSION, DEFAULT_SAVINGS_BASELINE
 from energy_core.ev_accounting.models import ChargerSessionState
 from energy_core.ev_accounting.session_totals import session_totals_from_intervals
+from energy_core.platform.events.publish import publish_charging_session_started, publish_charging_session_stopped
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +87,18 @@ class EVSessionService:
             runtime.last_sample_at = meter.recorded_at
             runtime.last_vehicle_connected = is_connected
             logger.info("EV SESSION STARTED charger_id=%s session_id=%s", charger.id, record.id)
+            publish_charging_session_started(
+                session_kind="ev",
+                site_id=site.id,
+                session_id=record.id,
+                charger_id=charger.id,
+                started_at=meter.recorded_at.isoformat(),
+            )
             return record.id
 
         # Session stop
         if not is_connected and was_connected and active is not None:
-            await self._complete_session(db, repo, active, meter, runtime)
+            await self._complete_session(db, repo, active, meter, runtime, site_id=site.id)
             runtime.last_vehicle_connected = is_connected
             return active.id
 
@@ -104,6 +112,8 @@ class EVSessionService:
         active: EvChargingSessionRecord,
         meter: MeterSnapshot,
         runtime: ChargerSessionState,
+        *,
+        site_id: int,
     ) -> None:
         from energy_core.db.ev_interval_repo import EvChargingIntervalRepository
 
@@ -141,3 +151,10 @@ class EVSessionService:
         )
         runtime.last_meter_kwh = meter.cumulative_kwh
         runtime.last_sample_at = meter.recorded_at
+        publish_charging_session_stopped(
+            session_kind="ev",
+            site_id=site_id,
+            session_id=active.id,
+            charger_id=active.charger_id,
+            ended_at=meter.recorded_at.isoformat(),
+        )

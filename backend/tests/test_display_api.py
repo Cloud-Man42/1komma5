@@ -242,7 +242,7 @@ def test_grid_direction_is_swedish_and_has_an_idle_deadband():
 
 
 def test_filter_status_sv_translates_arctic_spa_values():
-    from energy_core.integrations.arctic_spa.operational_state import filter_status_sv
+    from energy_core.integrations.arctic_spa.operational import filter_status_sv
 
     assert filter_status_sv("Idle") == "Av"
     assert filter_status_sv("Filtering") == "Pågår"

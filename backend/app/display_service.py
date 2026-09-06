@@ -8,7 +8,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.api.dashboard import (
+from app.dashboard_compute import (
     STALE_SECONDS,
     _compute_ev,
     _compute_price,
@@ -261,11 +261,11 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
             return DisplaySpaSection(available=False, unavailable_reason="Spa-integration är avstängd")
 
         from energy_core.db.consumer_repo import ConsumerSampleRepository
-        from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
-        from energy_core.integrations.arctic_spa.operational_state import (
+        from energy_core.integrations.arctic_spa.operational import (
             filter_cycle_active,
             filter_status_sv,
         )
+        from energy_core.integrations.arctic_spa.status import SpaStatus
 
         sample_repo = ConsumerSampleRepository(session)
         latest = await sample_repo.get_latest(consumer.id)
@@ -275,7 +275,7 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
                 status_payload = json.loads(config.last_status_json)
             except json.JSONDecodeError:
                 status_payload = {}
-        parsed = ArcticSpaStatus.from_api(status_payload) if status_payload else None
+        parsed = SpaStatus.from_api(status_payload) if status_payload else None
 
         filter_status = parsed.filter_status if parsed else (latest.filter_status if latest else None)
         filter_sv = "Pågår" if filter_cycle_active(

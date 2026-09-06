@@ -21,10 +21,12 @@ describe("IntegrationHealthPanel", () => {
   it("renders provider rows", async () => {
     mockFetchIntegrationHealth.mockResolvedValue({
       slug: "akarp",
+      overall_health_status: "healthy",
       providers: [
         {
           provider: "heartbeat",
           status: "ok",
+          health_status: "healthy",
           last_success_at: "2026-09-03T12:00:00Z",
           last_attempt_at: "2026-09-03T12:00:00Z",
           latency_ms: 120,
@@ -44,10 +46,12 @@ describe("IntegrationHealthPanel", () => {
   it("shows alert when provider has repeated failures", async () => {
     mockFetchIntegrationHealth.mockResolvedValue({
       slug: "akarp",
+      overall_health_status: "healthy",
       providers: [
         {
           provider: "heartbeat",
           status: "ok",
+          health_status: "healthy",
           last_success_at: "2026-09-03T12:00:00Z",
           last_attempt_at: "2026-09-03T12:00:00Z",
           latency_ms: 120,
@@ -68,10 +72,12 @@ describe("IntegrationHealthPanel", () => {
   it("shows alert when provider has failures", async () => {
     mockFetchIntegrationHealth.mockResolvedValue({
       slug: "akarp",
+      overall_health_status: "unavailable",
       providers: [
         {
           provider: "heartbeat",
           status: "error",
+          health_status: "unavailable",
           last_success_at: null,
           last_attempt_at: "2026-09-03T12:00:00Z",
           latency_ms: null,

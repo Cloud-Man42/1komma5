@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import session_energy_from_meter
+from energy_core.contracts.devices.meter import session_energy_from_meter
 from energy_core.db.ev_interval_repo import EvChargingIntervalRecord, EvChargingIntervalRepository
 from energy_core.db.ev_session_repo import EvChargingSessionRepository
 from energy_core.db.models import EvChargingIntervalModel, EvChargingSessionModel

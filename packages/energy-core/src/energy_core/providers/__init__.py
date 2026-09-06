@@ -1,7 +1,7 @@
 from energy_core.config import HeartbeatProviderKind, Settings
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.models import SiteModel
-from energy_core.heartbeat_connection import HeartbeatConnectionType
+from energy_core.integrations.heartbeat.connection import HeartbeatConnectionType
 from energy_core.providers.base import HeartbeatProvider
 from energy_core.providers.mock import MockHeartbeatProvider
 from energy_core.providers.onekommafive import (

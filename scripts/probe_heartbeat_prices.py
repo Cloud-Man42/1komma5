@@ -7,7 +7,7 @@ import asyncio
 from energy_core.config import get_settings
 from energy_core.db.repositories import SiteRepository
 from energy_core.db.session import create_engine, create_session_factory
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 
 async def main() -> None:

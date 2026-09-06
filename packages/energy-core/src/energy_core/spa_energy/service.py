@@ -21,10 +21,13 @@ from energy_core.flexible_load.house_load import HouseLoadForecastProvider
 from energy_core.flexible_load.optimizer import FlexibleLoadOptimizer
 from energy_core.flexible_load.orchestrator import OrchestratedLoadSpec
 from energy_core.flexible_load.types import EnergySource, FlexibleLoad, LoadPlan, LoadStrategy
-from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration, SpaPowerProfiles
-from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
+from energy_core.integrations.arctic_spa.factory import (
+    ArcticSpaConfiguration,
+    build_arctic_spa_control_service,
+)
+from energy_core.integrations.arctic_spa.profiles import SpaPowerProfiles
+from energy_core.integrations.arctic_spa.status import SpaStatus
 from energy_core.secrets import CredentialCipher
-from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
 from energy_core.spa_energy.actuator import SpaActuatorDecision, SpaCleaningActuator
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy, is_spa_filter_self_managed
 from energy_core.spa_energy.filter_schedule_service import ArcticSpaFilterScheduleService
@@ -383,7 +386,7 @@ class SmartSpaEnergyService:
         decision = await watchdog.run(
             control=control,
             runtime=runtime,
-            control_service=ArcticSpaControlService(cfg),
+            control_service=build_arctic_spa_control_service(cfg),
             now=now,
             dry_run=dry_run,
         )
@@ -429,7 +432,7 @@ class SmartSpaEnergyService:
             db_cost_enabled=device_config.cost_calculation_enabled,
             db_profiles_json=device_config.power_profiles_json,
         )
-        control_service = ArcticSpaControlService(cfg)
+        control_service = build_arctic_spa_control_service(cfg)
         status = self._parse_status(device_config.last_status_json)
         policy = SpaFilterPolicy.from_control(control)
         dry_run = control.dry_run or control.shadow_mode
@@ -564,7 +567,7 @@ class SmartSpaEnergyService:
             ),
         )
 
-    def _parse_status(self, raw: str) -> ArcticSpaStatus | None:
+    def _parse_status(self, raw: str) -> SpaStatus | None:
         if not raw:
             return None
         try:
@@ -573,7 +576,7 @@ class SmartSpaEnergyService:
             return None
         if not isinstance(payload, dict):
             return None
-        return ArcticSpaStatus.from_api(payload)
+        return SpaStatus.from_api(payload)
 
     def _source_share(self, window, source: EnergySource) -> float:
         if window.expected_energy_source == source:

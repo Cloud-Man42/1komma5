@@ -24,12 +24,21 @@ const baseAdvice = {
 };
 
 describe("BatteryOpportunityCard", () => {
-  it("renders advice headline and monitor-only badge", () => {
+  it("renders idash layout with headline, metrics and monitor badge", () => {
     render(<BatteryOpportunityCard advice={baseAdvice} />);
-    expect(screen.getByText("Batterirådgivare")).toBeInTheDocument();
+    expect(screen.getByTestId("battery-opportunity-card")).toHaveClass("idash-advisor-card");
+    expect(screen.getByText("BATTERIRÅDGIVARE")).toBeInTheDocument();
     expect(screen.getByText("Spara i batteriet")).toBeInTheDocument();
     expect(screen.getByText(/Endast övervakning/i)).toBeInTheDocument();
-    expect(screen.getByText(/55%/)).toBeInTheDocument();
+    expect(screen.getByText("55 %")).toBeInTheDocument();
+    expect(screen.getByText("80 %")).toBeInTheDocument();
+    expect(screen.getByText(/Spara överskott inför kvällstoppen/i)).toBeInTheDocument();
+  });
+
+  it("renders peak timing when available", () => {
+    render(<BatteryOpportunityCard advice={baseAdvice} />);
+    expect(screen.getByText("Nästa pristopp")).toBeInTheDocument();
+    expect(screen.getByText("Förväntat köp då")).toBeInTheDocument();
   });
 
   it("renders unavailable state", () => {

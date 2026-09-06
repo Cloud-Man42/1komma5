@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from energy_core.db.models import VehicleStateLatestModel
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 
 POWER_CHARGING_THRESHOLD_KW = 0.3
 

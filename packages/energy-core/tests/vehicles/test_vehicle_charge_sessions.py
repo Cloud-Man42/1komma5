@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.db.models import VehicleStateLatestModel
 from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
 from energy_core.vehicles.sessions.constants import SOC_TO_KWH_FACTOR, estimate_battery_delta_kwh

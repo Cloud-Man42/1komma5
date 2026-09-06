@@ -53,7 +53,7 @@ def mock_open_meteo_forecast():
 @pytest.fixture(autouse=True)
 def clear_dashboard_cache():
     """Every test gets a fresh database, so a cached section from an earlier test is stale."""
-    from app.api.dashboard import _CACHE
+    from app.dashboard_compute import _CACHE
     from app.widget_service import clear_snapshot_cache
     from energy_core.cache.service import reset_cache_service
 

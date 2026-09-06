@@ -1,10 +1,7 @@
 """Tests for meter adapter and session energy."""
 
-from energy_core.chargers.meter_adapter import (
-    integrate_power_kwh,
-    session_energy_from_meter,
-    _power_from_phases,
-)
+from energy_core.contracts.devices.meter import integrate_power_kwh, session_energy_from_meter
+from energy_core.integrations.chargeamps.meter_adapter import _power_from_phases
 
 
 def test_session_energy_from_meter_delta():

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.energy.state import EnergyState
 from energy_core.sungrow.types import SungrowTelemetrySnapshot
 from energy_core.virtual_evse.state import VirtualEvseState

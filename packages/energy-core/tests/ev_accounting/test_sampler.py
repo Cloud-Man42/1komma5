@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.config import Settings
 from energy_core.db.ev_session_repo import EvChargingSessionRepository
 from energy_core.db.models import Base, EvChargerModel, EvChargingSessionModel, SiteModel

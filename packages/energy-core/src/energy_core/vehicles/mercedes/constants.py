@@ -41,7 +41,10 @@ OAUTH_REDIRECT_URI = "rismycar://login-callback"
 OAUTH_SCOPE = "email profile ciam-uid phone openid offline_access"
 
 TOKEN_REFRESH_SKEW_SECONDS = 60
-STALE_TELEMETRY_SECONDS = 300
+
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS as _CANONICAL_STALE_TELEMETRY_SECONDS
+
+STALE_TELEMETRY_SECONDS = _CANONICAL_STALE_TELEMETRY_SECONDS
 
 ATTRIBUTE_SOC = "soc"
 ATTRIBUTE_MAX_SOC = "max_soc"

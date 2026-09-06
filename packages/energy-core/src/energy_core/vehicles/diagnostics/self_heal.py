@@ -13,7 +13,7 @@ from energy_core.vehicles.diagnostics.events import (
     SelfHealAction,
     SelfHealResult,
 )
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 
 
 def _age_seconds(timestamp: datetime | None, *, now: datetime) -> float | None:

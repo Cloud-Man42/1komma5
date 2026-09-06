@@ -102,6 +102,19 @@ def _full_charge_amps() -> ChargerCapabilities:
     )
 
 
+def _partial_zaptec() -> ChargerCapabilities:
+    return _caps(
+        status="PARTIAL",
+        current=True,
+        start_stop=True,
+        power=True,
+        energy=True,
+        cloud=True,
+        smart=True,
+        max_a=32.0,
+    )
+
+
 def _monitoring_only() -> ChargerCapabilities:
     return _caps(status="MONITORING_ONLY")
 
@@ -135,12 +148,13 @@ INTEGRATION_METHODS: dict[str, ChargerIntegrationMethodDefinition] = {
         connection_type="CLOUD",
         recommended=True,
         priority=1,
-        implementation_status="UNSUPPORTED",
+        implementation_status="PARTIAL",
         cloud_dependent=True,
         documentation_url="https://docs.zaptec.com/",
         credential_fields=(
-            CredentialFieldDefinition("account_id", "Zaptec-konto / installation ID"),
-            CredentialFieldDefinition("api_key", "API-nyckel / token", "password"),
+            CredentialFieldDefinition("username", "Zaptec-användare"),
+            CredentialFieldDefinition("password", "Lösenord", "password"),
+            CredentialFieldDefinition("installation_id", "Installation ID"),
             CredentialFieldDefinition("charger_id", "Charger ID"),
         ),
     ),
@@ -462,10 +476,10 @@ MANUFACTURERS: tuple[ChargerManufacturerDefinition, ...] = (
         id="zaptec",
         name="Zaptec",
         models=(
-            _not_implemented_model("zaptec", "go", "Go", methods=(ZAPTEC_REST, OCPP_16J)),
-            _not_implemented_model("zaptec", "go-2", "Go 2", methods=(ZAPTEC_REST, OCPP_16J)),
-            _not_implemented_model("zaptec", "pro", "Pro", methods=(ZAPTEC_REST, OCPP_16J)),
-            _not_implemented_model("zaptec", "pro-mid", "Pro MID", methods=(ZAPTEC_REST, OCPP_16J)),
+            _model("zaptec", "go", "Go", methods=(ZAPTEC_REST, OCPP_16J), status="PARTIAL", caps=_partial_zaptec()),
+            _model("zaptec", "go-2", "Go 2", methods=(ZAPTEC_REST, OCPP_16J), status="PARTIAL", caps=_partial_zaptec()),
+            _model("zaptec", "pro", "Pro", methods=(ZAPTEC_REST, OCPP_16J), status="PARTIAL", caps=_partial_zaptec()),
+            _model("zaptec", "pro-mid", "Pro MID", methods=(ZAPTEC_REST, OCPP_16J), status="PARTIAL", caps=_partial_zaptec()),
         ),
     ),
     ChargerManufacturerDefinition(

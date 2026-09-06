@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time
 from enum import StrEnum
 
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 
 
 class VehicleActivityMode(StrEnum):

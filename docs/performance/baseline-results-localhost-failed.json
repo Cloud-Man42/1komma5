@@ -1,0 +1,86 @@
+﻿[
+    {
+        "Route":  "/api/sites/akarp/snapshot",
+        "Users":  1,
+        "Ok":  0,
+        "AvgMs":  4389.1,
+        "P95Ms":  4389.1
+    },
+    {
+        "Route":  "/api/sites/akarp/snapshot",
+        "Users":  5,
+        "Ok":  0,
+        "AvgMs":  4901.7,
+        "P95Ms":  5372.1
+    },
+    {
+        "Route":  "/api/sites/akarp/snapshot",
+        "Users":  10,
+        "Ok":  0,
+        "AvgMs":  4652,
+        "P95Ms":  5739
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  1,
+        "Ok":  0,
+        "AvgMs":  4286.8,
+        "P95Ms":  4286.8
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  5,
+        "Ok":  0,
+        "AvgMs":  4344.8,
+        "P95Ms":  4396.5
+    },
+    {
+        "Route":  "/api/sites/akarp/dashboard",
+        "Users":  10,
+        "Ok":  0,
+        "AvgMs":  4275.8,
+        "P95Ms":  4325.1
+    },
+    {
+        "Route":  "/api/sites/akarp/readings?bucket=5\u0026hours=24",
+        "Users":  1,
+        "Ok":  0,
+        "AvgMs":  4328.3,
+        "P95Ms":  4328.3
+    },
+    {
+        "Route":  "/api/sites/akarp/readings?bucket=5\u0026hours=24",
+        "Users":  5,
+        "Ok":  0,
+        "AvgMs":  4418.5,
+        "P95Ms":  4490.7
+    },
+    {
+        "Route":  "/api/sites/akarp/readings?bucket=5\u0026hours=24",
+        "Users":  10,
+        "Ok":  0,
+        "AvgMs":  4461.4,
+        "P95Ms":  4594.3
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  1,
+        "Ok":  0,
+        "AvgMs":  4367,
+        "P95Ms":  4367
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  5,
+        "Ok":  0,
+        "AvgMs":  4419,
+        "P95Ms":  4524.2
+    },
+    {
+        "Route":  "/api/sites/akarp/solar/forecast",
+        "Users":  10,
+        "Ok":  0,
+        "AvgMs":  4419.5,
+        "P95Ms":  4594.5
+    }
+]

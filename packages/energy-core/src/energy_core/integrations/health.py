@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from energy_core.db.models import IntegrationHealthModel
+from energy_core.platform.events.publish import publish_integration_health_changed
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -77,6 +78,13 @@ class IntegrationHealthRecorder:
         )
 
     async def _upsert(self, site_id: int, provider: str, values: dict[str, Any]) -> None:
+        existing = await self._session.scalar(
+            select(IntegrationHealthModel).where(
+                IntegrationHealthModel.site_id == site_id,
+                IntegrationHealthModel.provider == provider,
+            )
+        )
+        previous_status = existing.status if existing else None
         payload = {"site_id": site_id, "provider": provider, **values}
         insert = sqlite_insert if self._is_sqlite else pg_insert
         stmt = insert(IntegrationHealthModel).values(**payload)
@@ -85,6 +93,14 @@ class IntegrationHealthRecorder:
             set_={key: getattr(stmt.excluded, key) for key in values},
         )
         await self._session.execute(stmt)
+        new_status = values.get("status")
+        if new_status is not None and new_status != previous_status:
+            publish_integration_health_changed(
+                site_id=site_id,
+                provider=provider,
+                status=new_status,
+                previous_status=previous_status,
+            )
 
     async def list_for_site(self, site_id: int) -> list[dict[str, Any]]:
         rows = (

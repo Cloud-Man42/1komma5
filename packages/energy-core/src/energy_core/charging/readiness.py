@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
+from energy_core.integrations.chargeamps.config import build_chargeamps_connection_info
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.secrets import CredentialCipher
 

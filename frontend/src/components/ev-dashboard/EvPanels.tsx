@@ -68,6 +68,8 @@ export function EvHeaderChips({
   reasoning: EnergyReasoning | null;
 }) {
   const smartOn = charger.charging_mode !== "PAUSED";
+  const soc = reasoning?.vehicle_soc_pct;
+  const targetSoc = reasoning?.vehicle_target_soc_pct;
   return (
     <div className="evdash-header-chips" data-testid="ev-header-chips">
       <div>
@@ -80,18 +82,97 @@ export function EvHeaderChips({
         <strong className={smartOn ? "evdash-text-good" : ""}>{smartOn ? "På" : "Av"}</strong>
         <span>{bridge?.active_policy ? "Aktiv policy" : "—"}</span>
       </div>
+      {reasoning?.vehicle_linked && soc != null ? (
+        <div>
+          <p className="evdash-chip-label">BIL SOC</p>
+          <strong>{Math.round(soc)}%</strong>
+          {targetSoc != null ? <span>Mål {Math.round(targetSoc)}%</span> : null}
+        </div>
+      ) : null}
       <div>
         <p className="evdash-chip-label">TILLGÄNGLIG STRÖM</p>
         <strong>{formatEvCurrent(charger.max_current_a)}</strong>
         <span>Max {formatEvCurrent(charger.max_current_a)}</span>
       </div>
-      {reasoning?.vehicle_target_soc_pct != null ? (
+      {targetSoc != null && soc == null ? (
         <div>
           <p className="evdash-chip-label">MÅL-SOC</p>
-          <strong>{Math.round(reasoning.vehicle_target_soc_pct)}%</strong>
+          <strong>{Math.round(targetSoc)}%</strong>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function smartChargingStateLabel(state: string | null | undefined): string {
+  switch (state) {
+    case "charging":
+      return "Laddar";
+    case "waiting":
+      return "Väntar";
+    case "paused":
+      return "Pausad";
+    case "override":
+      return "Manuell override";
+    default:
+      return state ?? "—";
+  }
+}
+
+export function EvMercedesHaloStrip({
+  reasoning,
+  bridge,
+}: {
+  reasoning: EnergyReasoning | null;
+  bridge: EvBridgeStatus | null;
+}) {
+  if (!reasoning?.vehicle_linked && !bridge?.bridge_enabled) {
+    return null;
+  }
+
+  const haloStatus =
+    reasoning?.display_status_sv ??
+    bridge?.display_status_sv ??
+    smartChargingStateLabel(reasoning?.smart_charging_state ?? bridge?.smart_charging_state);
+  const vehicleConnected = reasoning?.vehicle_connected ?? bridge?.vehicle_connected;
+  const haloConnected = reasoning?.halo_connected ?? bridge?.halo_connected;
+  const appliedCurrent = reasoning?.applied_current_a ?? bridge?.applied_current_a;
+
+  return (
+    <section className="evdash-mercedes-halo-strip" data-testid="ev-mercedes-halo-strip">
+      {reasoning?.vehicle_linked ? (
+        <article className="evdash-strip-card">
+          <p className="evdash-chip-label">MERCEDES</p>
+          <strong>{reasoning.vehicle_display_name ?? "Länkad bil"}</strong>
+          <ul className="evdash-strip-meta">
+            {reasoning.vehicle_soc_pct != null ? (
+              <li>
+                SOC {Math.round(reasoning.vehicle_soc_pct)}%
+                {reasoning.vehicle_target_soc_pct != null
+                  ? ` → ${Math.round(reasoning.vehicle_target_soc_pct)}%`
+                  : ""}
+              </li>
+            ) : null}
+            {reasoning.vehicle_departure_time ? (
+              <li>Avfärd {reasoning.vehicle_departure_time}</li>
+            ) : null}
+            {reasoning.vehicle_required_energy_kwh != null ? (
+              <li>Behöver ~{reasoning.vehicle_required_energy_kwh.toFixed(1)} kWh</li>
+            ) : null}
+          </ul>
+        </article>
+      ) : null}
+      <article className="evdash-strip-card">
+        <p className="evdash-chip-label">CHARGE AMPS HALO</p>
+        <strong>{haloStatus}</strong>
+        <ul className="evdash-strip-meta">
+          <li>{haloConnected ? "Halo online" : "Halo offline"}</li>
+          <li>{vehicleConnected ? "Bil ansluten" : "Ingen bil ansluten"}</li>
+          {appliedCurrent != null ? <li>Ström {formatEvCurrent(appliedCurrent)}</li> : null}
+          {reasoning?.decision_reason_sv ? <li>{reasoning.decision_reason_sv}</li> : null}
+        </ul>
+      </article>
+    </section>
   );
 }
 

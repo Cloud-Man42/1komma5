@@ -7,7 +7,7 @@ from typing import Any
 
 from energy_core.energy.builder import build_energy_state
 from energy_core.energy.state import EnergyState
-from energy_core.heartbeat_client import HeartbeatClient
+from energy_core.integrations.heartbeat.client import HeartbeatClient
 
 
 class HeartbeatEnergyProvider:

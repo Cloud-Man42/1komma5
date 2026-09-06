@@ -1,17 +1,9 @@
 from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.deps import get_db_session, get_reading_repository
-from app.schemas import (
-    HistoricalEnergyMonth,
-    HistoricalEnergyYearResponse,
-    HistoricalEnergyYearUpdate,
-    ReadingResponse,
-    SiteCreateRequest,
-    SiteEnergyConfigResponse,
-    SiteEnergyConfigUpdateRequest,
-    SiteResponse,
-    SiteUpdateRequest,
-)
+
+from app.schemas.readings import HistoricalEnergyMonth, HistoricalEnergyYearResponse, HistoricalEnergyYearUpdate
+from app.schemas.sites import ReadingResponse, SiteCreateRequest, SiteEnergyConfigResponse, SiteEnergyConfigUpdateRequest, SiteResponse, SiteUpdateRequest
 from energy_core.db.energy_balance_repo import SiteEnergyConfigRepository
 from energy_core.db.repositories import (
     EnergyReadingRepository,

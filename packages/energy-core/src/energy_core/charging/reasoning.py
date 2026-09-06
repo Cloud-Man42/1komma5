@@ -431,7 +431,7 @@ async def load_energy_reasoning_for_charger(
     from energy_core.config import get_settings
     from energy_core.db.energy_balance_repo import EnergyBalanceRepository
     from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
-    from energy_core.heartbeat_client_factory import create_heartbeat_client
+    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
     from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
     from energy_core.charging.solar_plan import charging_config_from_models
 

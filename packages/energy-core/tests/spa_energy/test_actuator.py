@@ -6,7 +6,7 @@ import pytest
 
 from energy_core.db.spa_control_repo import SpaControlConfigRecord
 from energy_core.flexible_load.types import LoadPlan, LoadStrategy, PlanWindow
-from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
+from energy_core.integrations.arctic_spa.status import SpaStatus
 from energy_core.spa_energy.actuator import SpaCleaningActuator
 from energy_core.spa_energy.runtime import SpaActuatorRuntime, SpaActuatorState
 
@@ -98,7 +98,7 @@ async def test_actuator_skips_auto_commands_for_fixed_schedule():
     fake = FakeControlService()
     decision = await actuator.run_cycle(
         control_service=fake,  # type: ignore[arg-type]
-        status=ArcticSpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
+        status=SpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
         plan=plan,
         now=now,
     )
@@ -147,7 +147,7 @@ async def test_manual_override_in_dry_run():
     fake = FakeControlService()
     decision = await actuator.run_cycle(
         control_service=fake,  # type: ignore[arg-type]
-        status=ArcticSpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
+        status=SpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
         plan=None,
         now=now,
         manual_override=True,
@@ -170,7 +170,7 @@ async def test_manual_override_bypasses_shadow_mode():
     fake = FakeControlService()
     decision = await actuator.run_cycle(
         control_service=fake,  # type: ignore[arg-type]
-        status=ArcticSpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
+        status=SpaStatus.from_api({"connected": True, "filter_status": "Idle"}),
         plan=None,
         now=now,
         manual_override=True,

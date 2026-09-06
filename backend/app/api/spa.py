@@ -10,32 +10,10 @@ from zoneinfo import ZoneInfo
 from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.deps import get_db_session
-from app.schemas import (
-    SpaConfigResponse,
-    SpaConfigUpdateRequest,
-    SpaConnectionTestResponse,
-    SpaControlConfigResponse,
-    SpaControlConfigUpdateRequest,
-    SpaEconomicsResponse,
-    SpaEnergyBreakdownResponse,
-    SpaEnergyBreakdownRow,
-    SpaEnergyEventResponse,
-    SpaEnergyPeriodResponse,
-    SpaEventsResponse,
-    SpaHealthResponse,
-    SpaHistoryPoint,
-    SpaHistoryResponse,
-    SpaPlanBlockResponse,
-    SpaCleaningWindowResponse,
-    SpaPlanResponse,
-    SpaRunCleaningResponse,
-    SpaShadowDayResponse,
-    SpaShadowResponse,
-    SpaStatusResponse,
-    SpaTimelineEntry,
-    SpaTimelineResponse,
-)
+
+from app.schemas.spa import SpaCleaningWindowResponse, SpaConfigResponse, SpaConfigUpdateRequest, SpaConnectionTestResponse, SpaControlConfigResponse, SpaControlConfigUpdateRequest, SpaEconomicsResponse, SpaEnergyBreakdownResponse, SpaEnergyBreakdownRow, SpaEnergyEventResponse, SpaEnergyPeriodResponse, SpaEventsResponse, SpaHealthResponse, SpaHistoryPoint, SpaHistoryResponse, SpaPlanBlockResponse, SpaPlanResponse, SpaRunCleaningResponse, SpaShadowDayResponse, SpaShadowResponse, SpaStatusResponse, SpaTimelineEntry, SpaTimelineResponse
 from energy_core.config import get_settings
+from energy_core.contracts.health import from_spa_health
 from energy_core.consumer_accounting.aggregator import (
     group_intervals_by_local_period,
     period_bounds,
@@ -69,8 +47,11 @@ from energy_core.spa_energy.filter_cycle_tracker import (
 )
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy
 from energy_core.spa_energy.service import SmartSpaEnergyService
-from energy_core.integrations.arctic_spa.config import ArcticSpaConfiguration, mask_api_key
-from energy_core.integrations.arctic_spa.service import ArcticSpaService
+from energy_core.integrations.arctic_spa.factory import (
+    ArcticSpaConfiguration,
+    build_arctic_spa_service,
+    mask_api_key,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -286,13 +267,13 @@ async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_sessi
             status_payload = json.loads(config.last_status_json)
         except json.JSONDecodeError:
             status_payload = {}
-    from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
-    from energy_core.integrations.arctic_spa.operational_state import (
+    from energy_core.integrations.arctic_spa.operational import (
         filter_cycle_active,
         heater_drawing_power,
     )
+    from energy_core.integrations.arctic_spa.status import SpaStatus
 
-    parsed = ArcticSpaStatus.from_api(status_payload) if status_payload else None
+    parsed = SpaStatus.from_api(status_payload) if status_payload else None
     breakdown: dict[str, float] = {}
     if latest and latest.component_breakdown_json:
         try:
@@ -538,8 +519,15 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
         if not last_error or last_error == "Request failed after retries:":
             last_error = None
     actuator_runtime = await SpaActuatorStateRepository(session).get_or_create(consumer.id)
+    unified = from_spa_health(
+        integration_enabled=config.integration_enabled,
+        api_status=api_status,
+        spa_status=spa_status,
+        integration_degraded=actuator_runtime.integration_degraded,
+    )
     return SpaHealthResponse(
         consumer_id=consumer.id,
+        health_status=unified.value,
         api_status=api_status,
         spa_status=spa_status,
         polling_status="ACTIVE" if poll and poll.polling_active else "IDLE",
@@ -631,7 +619,7 @@ async def test_spa_connection(
         db_cost_enabled=config.cost_calculation_enabled,
         db_profiles_json=config.power_profiles_json,
     )
-    result = await ArcticSpaService(cfg).test_connection()
+    result = await build_arctic_spa_service(cfg).test_connection()
     await audit_admin_mutation(
         request,
         session,

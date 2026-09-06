@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -41,9 +41,10 @@ async def test_solar_forecast_serves_snapshot_without_refresh(client, monkeypatc
     ac, _, _ = client
     await enable_solar_config(ac, "akarp")
 
+    generated_at = datetime.now(UTC) - timedelta(hours=2)
     snapshot_payload = {
         "site_id": 1,
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": generated_at.isoformat(),
         "model_version": "solar-forecast-v2",
         "quality": "good",
         "weather_source": "cache",
@@ -82,7 +83,8 @@ async def test_solar_forecast_serves_snapshot_without_refresh(client, monkeypatc
     body = res.json()
     assert body["expected_today_kwh"] == 12.5
     assert body["freshness"] == "FRESH"
-    assert body["age_seconds"] == 120.0
+    assert body["age_seconds"] >= 7000.0
+    assert body["actual_today_kwh"] == 0.0
     refresh_mock.assert_not_called()
 
 
@@ -123,7 +125,7 @@ async def test_solar_forecast_stale_snapshot_still_returns_200(client):
 
 
 def test_payload_to_response_maps_freshness_fields():
-    from app.schemas import SolarForecastPointResponse, SolarForecastResponse
+    from app.schemas.solar import SolarForecastPointResponse, SolarForecastResponse
 
     payload = {
         "site_id": 1,

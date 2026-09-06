@@ -104,3 +104,10 @@ Write-Host "Config view: ${scheme}://${Server}/config"
 if ($Server -match '^[0-9.]+$') {
   Write-Host "Tip: set CADDY_DOMAIN=emic.inacloud.se in .env on the server for HTTPS via Let's Encrypt."
 }
+
+Write-Host ""
+Write-Host "Running post-deploy prod health check..."
+$healthScript = Join-Path $PSScriptRoot "verify-prod-health.ps1"
+if (-not (Test-Path $healthScript)) { throw "Health script not found: $healthScript" }
+& $healthScript -BaseUrl "${scheme}://${Server}"
+if ($LASTEXITCODE -ne 0) { throw "Post-deploy health check failed" }

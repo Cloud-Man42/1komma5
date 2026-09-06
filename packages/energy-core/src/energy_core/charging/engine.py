@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from energy_core.chargers.framework.factory import ChargerAdapterFactory
 from energy_core.chargers.framework.legacy_bridge import LegacyControlBridge
 from energy_core.chargers.framework.meter_factory import MeterReaderFactory
-from energy_core.chargers.meter_adapter import MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.charging.anti_flapping import AntiFlappingConfig, AntiFlappingState
 from energy_core.charging.command_controller import ChargingCommandController
 from energy_core.charging.config import ChargingConfig
@@ -23,6 +23,7 @@ from energy_core.charging.import_prices import enrich_energy_import_prices
 from energy_core.charging.models import BridgeStatus, ChargingDecision
 from energy_core.charging.optimizer import EvChargingOptimizer
 from energy_core.charging.override import override_active
+from energy_core.platform.events.publish import publish_charger_status_changed
 from energy_core.charging.policy import PRICE_MODES, normalized_mode
 from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
 from energy_core.charging.signal_filter import EnergySignalFilter
@@ -35,7 +36,7 @@ from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
 from energy_core.energy.state import EnergyState
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
 
 logger = logging.getLogger(__name__)
@@ -273,7 +274,15 @@ class SmartChargingEngine:
             )
             runtime.smart_runtime.externally_limited = externally_limited
 
+            previous_smart_state = charger.smart_charging_state
             charger.smart_charging_state = runtime.smart_runtime.state.value
+            if charger.smart_charging_state != previous_smart_state:
+                publish_charger_status_changed(
+                    site_id=site.id,
+                    charger_id=charger.id,
+                    previous_state=previous_smart_state,
+                    new_state=charger.smart_charging_state,
+                )
             charger.last_requested_current_a = runtime.smart_runtime.requested_current_a
             charger.last_configured_current_a = configured_current
             charger.last_actual_charging_current_a = actual_current

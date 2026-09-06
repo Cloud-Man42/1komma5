@@ -2,7 +2,7 @@
 import asyncio
 import os
 
-from energy_core.chargers.charge_amps import build_chargeamps_controller
+from energy_core.integrations.chargeamps.controller import build_chargeamps_controller
 
 
 async def main() -> None:

@@ -54,12 +54,21 @@ const basePlan = {
 };
 
 describe("HorizonOptimizerCard", () => {
-  it("renders headline, load plan and monitor-only badge", () => {
+  it("renders idash layout with load cards and monitor badge", () => {
     render(<HorizonOptimizerCard plan={basePlan} />);
-    expect(screen.getByText("Horizon Optimizer")).toBeInTheDocument();
+    expect(screen.getByTestId("horizon-optimizer-card")).toHaveClass("idash-horizon-card");
+    expect(screen.getByText("HORIZON OPTIMIZER")).toBeInTheDocument();
     expect(screen.getByText("Koordinerad 48h-plan för 1 laster")).toBeInTheDocument();
     expect(screen.getByText("Garage EV")).toBeInTheDocument();
+    expect(screen.getByText("Fordon")).toBeInTheDocument();
+    expect(screen.getByText(/Billigt fönster/i)).toBeInTheDocument();
     expect(screen.getByText(/Endast övervakning/i)).toBeInTheDocument();
+    expect(screen.getByText(/Total planerad besparing/i)).toBeInTheDocument();
+  });
+
+  it("renders battery sub-panel", () => {
+    render(<HorizonOptimizerCard plan={basePlan} />);
+    expect(screen.getByText("BATTERI I PLANEN")).toBeInTheDocument();
     expect(screen.getByText("Spara i batteriet")).toBeInTheDocument();
   });
 

@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from energy_core.db.repositories import DailyRollup, EnergyReadingRepository, HourlyRollup
+from energy_core.energy.integration import integrate_site_energy
 from energy_core.solar_forecast.daily_evaluation import actual_kwh_for_day, local_day_bounds
 from energy_core.solar_forecast.historical import (
     ActualBucket,
@@ -60,18 +61,21 @@ async def actual_solar_kwh_today(
     tz = ZoneInfo(timezone)
     local_today = now.astimezone(tz).date()
 
-    daily = await repo.get_daily_rollup(site_id, local_today)
-    if daily is not None:
-        return round(daily.solar_kwh, 3)
-
     day_start = datetime.combine(local_today, time.min, tzinfo=tz).astimezone(UTC)
+
+    readings = await repo.list_readings(site_id, from_time=day_start, to_time=now, limit=5000)
+    if len(readings) >= 2:
+        return round(integrate_site_energy(readings).solar_kwh, 3)
+
     hourly = await repo.list_hourly_rollups(site_id, from_time=day_start, to_time=now)
     if hourly:
         return round(sum(row.solar_kwh for row in hourly), 3)
 
-    readings = await repo.list_readings(site_id, from_time=day_start, to_time=now, limit=5000)
-    raw = [(r.recorded_at, r.solar_production_w, r.consumption_w) for r in readings]
-    return actual_solar_kwh_today_from_readings(raw, timezone=timezone, now=now)
+    daily = await repo.get_daily_rollup(site_id, local_today)
+    if daily is not None:
+        return round(daily.solar_kwh, 3)
+
+    return 0.0
 
 
 async def count_production_days_observed(
