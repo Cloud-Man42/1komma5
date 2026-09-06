@@ -9,8 +9,6 @@ from energy_core.chargers.framework.catalog import (
     list_manufacturers,
     list_models,
 )
-from energy_core.chargers.framework.factory import ChargerAdapterFactory
-from energy_core.chargers.framework.meter_factory import MeterReaderFactory
 from energy_core.chargers.framework.models import (
     ChargerAdapter,
     ChargerCapabilities,
@@ -61,3 +59,15 @@ __all__ = [
     "list_manufacturers",
     "list_models",
 ]
+
+
+def __getattr__(name: str):
+    if name == "ChargerAdapterFactory":
+        from energy_core.chargers.framework.factory import ChargerAdapterFactory
+
+        return ChargerAdapterFactory
+    if name == "MeterReaderFactory":
+        from energy_core.chargers.framework.meter_factory import MeterReaderFactory
+
+        return MeterReaderFactory
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

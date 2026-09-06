@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter, MeterSnapshot
+from energy_core.contracts.devices.meter import MeterSnapshot
+from energy_core.integrations.chargeamps.meter_factory import meter_reader_for_charger
 from energy_core.config import Settings, get_settings
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository, SiteEnergyConfigRepository
 from energy_core.db.models import EvChargerModel, SiteModel
@@ -16,9 +17,7 @@ from energy_core.energy.builder import build_energy_state
 from energy_core.energy.state import EnergyState
 from energy_core.energy_balance.correlation import correlate_telemetry
 from energy_core.energy_balance.engine import EnergyBalanceEngine
-from energy_core.secrets import CredentialCipher
-from energy_core.sungrow.heartbeat_provider import map_heartbeat_to_sungrow
-from energy_core.sungrow.types import SungrowTelemetrySnapshot
+from energy_core.integrations.heartbeat.telemetry import SungrowTelemetrySnapshot, map_heartbeat_to_sungrow
 from energy_core.virtual_evse.device_profile import VirtualEvseDeviceProfile
 from energy_core.virtual_evse.reporter import meter_to_virtual_evse_state
 from energy_core.virtual_evse.state import VirtualEvseState
@@ -121,13 +120,10 @@ class EnergyBalanceCoordinator:
         if not charger.chargeamp_charger_id:
             return None
         try:
-            adapter = ChargeAmpsMeterAdapter.build(
-                charger.chargeamp_charger_id,
-                api_key=CredentialCipher().decrypt(charger.chargeamps_api_key),
-                phases=charger.phases,
-                nominal_voltage_v=charger.nominal_voltage_v,
-            )
-            return await adapter.get_snapshot()
+            reader = meter_reader_for_charger(charger)
+            if reader is None:
+                return None
+            return await reader.get_snapshot()
         except Exception:
             logger.debug("Halo meter unavailable for charger %s", charger.id, exc_info=True)
             return None

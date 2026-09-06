@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   ComposedChart,
@@ -13,10 +13,10 @@ import {
   YAxis,
 } from "recharts";
 import type { Reading, SolarForecast } from "@/lib/api";
-import { isAggregated } from "@/lib/api";
 import {
   buildProductionChartData,
   chartYMax,
+  computeProductionIntradayMetrics,
   formatChartClock,
   hasForecastSeries,
 } from "./productionChartData";
@@ -29,21 +29,20 @@ export function ProductionForecastPanel({
   readings,
   forecast,
   timezone = "Europe/Stockholm",
+  producedKwhToday,
 }: {
   readings: Reading[];
   forecast: SolarForecast | null;
   timezone?: string;
+  producedKwhToday?: number | null;
 }) {
-  const nowIso = useMemo(() => {
-    if (forecast?.generated_at) {
-      return forecast.generated_at;
-    }
-    if (readings.length > 0) {
-      const last = readings[readings.length - 1];
-      return isAggregated(last) ? last.bucket_start : last.recorded_at;
-    }
-    return new Date().toISOString();
-  }, [forecast?.generated_at, readings]);
+  const [nowIso, setNowIso] = useState(() => new Date().toISOString());
+
+  useEffect(() => {
+    setNowIso(new Date().toISOString());
+    const interval = setInterval(() => setNowIso(new Date().toISOString()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const nowLabel = formatChartClock(nowIso, timezone);
 
@@ -55,14 +54,17 @@ export function ProductionForecastPanel({
   const yMax = useMemo(() => chartYMax(chartData), [chartData]);
   const showForecast = hasForecastSeries(chartData);
 
-  const deviationKwh =
-    forecast && forecast.forecast_so_far_kwh > 0
-      ? forecast.actual_today_kwh - forecast.forecast_so_far_kwh
-      : null;
-  const deviationPct =
-    deviationKwh != null && forecast && forecast.forecast_so_far_kwh > 0
-      ? (deviationKwh / forecast.forecast_so_far_kwh) * 100
-      : null;
+  const { actualTodayKwh, forecastSoFarKwh, deviationKwh, deviationPct } = useMemo(
+    () =>
+      computeProductionIntradayMetrics({
+        readings,
+        forecast,
+        timezone,
+        now: nowIso,
+        producedKwhToday,
+      }),
+    [readings, forecast, timezone, nowIso, producedKwhToday],
+  );
 
   return (
     <section className="idash-panel idash-production-panel">
@@ -139,11 +141,11 @@ export function ProductionForecastPanel({
           </div>
           <div>
             <dt>Producerat hittills</dt>
-            <dd>{forecast ? kwh(forecast.actual_today_kwh) : "—"}</dd>
+            <dd>{actualTodayKwh != null ? kwh(actualTodayKwh) : "—"}</dd>
           </div>
           <div>
             <dt>Förväntat vid denna tid</dt>
-            <dd>{forecast ? kwh(forecast.forecast_so_far_kwh) : "—"}</dd>
+            <dd>{forecastSoFarKwh != null ? kwh(forecastSoFarKwh) : "—"}</dd>
           </div>
           <div>
             <dt>Avvikelse</dt>

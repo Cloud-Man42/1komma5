@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.admin_auth import require_admin_token
 from app.deps import get_db_session
-from app.schemas import AdminAuditEntryResponse, AdminAuditLogResponse
+from app.schemas.energy_control import AdminAuditEntryResponse, AdminAuditLogResponse
 from energy_core.admin_audit.repo import AdminAuditRepository
 from energy_core.admin_audit.service import parse_summary_json
 from fastapi import APIRouter, Depends, Query

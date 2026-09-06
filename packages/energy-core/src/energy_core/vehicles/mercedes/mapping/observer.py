@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+from energy_core.vehicles.abstractions.attribute_observation import AttributeObservation
 
 _SENSITIVE_NAME_PARTS = (
     "vin",
@@ -30,14 +31,6 @@ _COORDINATE_NAMES = frozenset(
         "gpslong",
     }
 )
-
-
-@dataclass(frozen=True, slots=True)
-class AttributeObservation:
-    attribute_name: str
-    source: str
-    value_type: str
-    masked_sample: str
 
 
 class MercedesAttributeRecorder:

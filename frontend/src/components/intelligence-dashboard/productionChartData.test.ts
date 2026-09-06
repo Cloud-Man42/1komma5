@@ -3,6 +3,8 @@ import type { Reading, SolarForecast } from "@/lib/api";
 import {
   buildProductionChartData,
   chartYMax,
+  computeForecastSoFarKwh,
+  computeProductionIntradayMetrics,
   hasForecastSeries,
 } from "./productionChartData";
 
@@ -294,5 +296,105 @@ describe("buildProductionChartData", () => {
     ];
     expect(hasForecastSeries(rows)).toBe(true);
     expect(chartYMax(rows)).toBeGreaterThan(2);
+  });
+});
+
+describe("production intraday metrics", () => {
+  it("computes forecast-so-far from elapsed forecast points", () => {
+    const forecast: SolarForecast = {
+      site_id: 1,
+      generated_at: NOW,
+      model_version: "v2",
+      quality: "MEDIUM",
+      weather_source: "live",
+      expected_today_kwh: 20,
+      remaining_today_kwh: 10,
+      expected_tomorrow_kwh: 20,
+      peak_power_w: 3000,
+      peak_time: null,
+      confidence: 0.6,
+      lower_today_kwh: 10,
+      upper_today_kwh: 30,
+      weather_summary: "Klart",
+      actual_today_kwh: 5,
+      forecast_so_far_kwh: 999,
+      remaining_vs_expected_kwh: 15,
+      points: [
+        forecastPoint("2026-08-27T06:30:00Z", 2000),
+        forecastPoint("2026-08-27T06:45:00Z", 2500),
+        forecastPoint("2026-08-27T07:00:00Z", 3000),
+      ],
+    };
+
+    expect(computeForecastSoFarKwh(forecast, TZ, "2026-08-27T06:50:00Z")).toBe(1.1);
+  });
+
+  it("computes actual today from bucketed readings instead of stale API fields", () => {
+    const metrics = computeProductionIntradayMetrics({
+      readings: [
+        reading("2026-08-27T06:30:00Z", 1800),
+        reading("2026-08-27T06:35:00Z", 2200),
+      ],
+      forecast: {
+        site_id: 1,
+        generated_at: NOW,
+        model_version: "v2",
+        quality: "MEDIUM",
+        weather_source: "live",
+        expected_today_kwh: 20,
+        remaining_today_kwh: 10,
+        expected_tomorrow_kwh: 20,
+        peak_power_w: 3000,
+        peak_time: null,
+        confidence: 0.6,
+        lower_today_kwh: 10,
+        upper_today_kwh: 30,
+        weather_summary: "Klart",
+        actual_today_kwh: 2.5,
+        forecast_so_far_kwh: 5.9,
+        remaining_vs_expected_kwh: 15,
+        points: [
+          forecastPoint("2026-08-27T06:30:00Z", 2000),
+          forecastPoint("2026-08-27T06:45:00Z", 2500),
+        ],
+      },
+      timezone: TZ,
+      now: "2026-08-27T06:40:00Z",
+    });
+
+    expect(metrics.actualTodayKwh).toBe(0.3);
+    expect(metrics.forecastSoFarKwh).toBe(0.5);
+    expect(metrics.deviationKwh).toBeCloseTo(-0.2, 1);
+  });
+
+  it("prefers dashboard today total over stale forecast/readings", () => {
+    const metrics = computeProductionIntradayMetrics({
+      readings: [reading("2026-08-27T06:32:00Z", 1800)],
+      forecast: {
+        site_id: 1,
+        generated_at: NOW,
+        model_version: "v2",
+        quality: "MEDIUM",
+        weather_source: "live",
+        expected_today_kwh: 20,
+        remaining_today_kwh: 10,
+        expected_tomorrow_kwh: 20,
+        peak_power_w: 3000,
+        peak_time: null,
+        confidence: 0.6,
+        lower_today_kwh: 10,
+        upper_today_kwh: 30,
+        weather_summary: "Klart",
+        actual_today_kwh: 2.5,
+        forecast_so_far_kwh: 5.9,
+        remaining_vs_expected_kwh: 15,
+        points: [forecastPoint("2026-08-27T06:30:00Z", 2000)],
+      },
+      timezone: TZ,
+      now: "2026-08-27T06:50:00Z",
+      producedKwhToday: 8.4,
+    });
+
+    expect(metrics.actualTodayKwh).toBe(8.4);
   });
 });

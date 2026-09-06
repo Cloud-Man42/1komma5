@@ -8,42 +8,21 @@ from datetime import UTC, datetime
 from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.deps import get_db_session
-from app.schemas import (
-    VehicleCapabilitiesResponse,
-    VehicleChargeSessionListResponse,
-    VehicleChargeSessionPatchRequest,
-    VehicleChargeSessionResponse,
-    VehicleChargingStatsResponse,
-    StationCandidateResponse,
-    VehicleCommandResponse,
-    VehicleDetailResponse,
-    VehicleIntegrationConfigResponse,
-    VehicleIntegrationConfigUpdateRequest,
-    VehicleIntegrationLoginResponse,
-    VehicleIntegrationStatusResponse,
-    VehicleRawAttributesResponse,
-    VehicleAttributeObservationResponse,
-    VehicleIntegrationDiagnosticsResponse,
-    VehicleIntegrationEventResponse,
-    VehicleApiEventResponse,
-    VehicleIntegrationActionResponse,
-    VehicleSetTargetSocRequest,
-    VehicleUpdateRequest,
-    VehicleHaloCorrelationResponse,
-    VehicleListItemResponse,
-    VehicleListResponse,
-    VehicleSyncResponse,
-    VehicleValueResponse,
-    EvEnergySourcesResponse,
-)
+
+from app.schemas.ev import EvEnergySourcesResponse
+from app.schemas.vehicles import StationCandidateResponse, VehicleApiEventResponse, VehicleAttributeObservationResponse, VehicleCapabilitiesResponse, VehicleChargeSessionListResponse, VehicleChargeSessionPatchRequest, VehicleChargeSessionResponse, VehicleChargingStatsResponse, VehicleCommandResponse, VehicleDetailResponse, VehicleHaloCorrelationResponse, VehicleIntegrationActionResponse, VehicleIntegrationConfigResponse, VehicleIntegrationConfigUpdateRequest, VehicleIntegrationDiagnosticsResponse, VehicleIntegrationEventResponse, VehicleIntegrationLoginResponse, VehicleIntegrationStatusResponse, VehicleListItemResponse, VehicleListResponse, VehicleRawAttributesResponse, VehicleSetTargetSocRequest, VehicleSyncResponse, VehicleUpdateRequest, VehicleValueResponse
 from energy_core.config import get_settings
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleConnectionState
-from energy_core.vehicles.mercedes.auth.errors import MercedesAuthError, MercedesTwoFactorUnsupported
-from energy_core.vehicles.mercedes.auth.login import MercedesLoginFlow
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
+from energy_core.integrations.mercedes.auth import (
+    MercedesAuthError,
+    MercedesTwoFactorUnsupported,
+    MercedesTokenBundle,
+)
+from energy_core.integrations.mercedes.factory import build_mercedes_provider
 from energy_core.vehicles.connection_signals import resolve_effective_connection
-from energy_core.vehicles.mercedes.provider import MercedesProvider
+from energy_core.contracts.health import from_vehicle_integration_status, from_vehicle_summary_health
 from energy_core.vehicles.health import MercedesIntegrationHealthService
 from energy_core.vehicles.sessions.repair import repair_completed_sessions
 from energy_core.vehicles.vin import mask_vin
@@ -454,6 +433,7 @@ async def get_integration_status(
         http_429_count=record.http_429_count,
         decode_failure_count=record.decode_failure_count,
         health=health,
+        health_status=from_vehicle_summary_health(health).value,
     )
 
 
@@ -539,9 +519,9 @@ async def login_integration(
             status_code=422,
             detail="Stored Mercedes credentials could not be decrypted. Re-save your password in Config.",
         ) from exc
-    provider = MercedesProvider(region=row.region, device_guid=row.device_guid or None)
+    provider = build_mercedes_provider(row)
 
-    async def persist(bundle):
+    async def persist(bundle: MercedesTokenBundle) -> None:
         await repo.persist_token_bundle(row, bundle)
 
     provider._token_store._persist = persist  # noqa: SLF001
@@ -654,6 +634,7 @@ async def get_integration_diagnostics(
     return VehicleIntegrationDiagnosticsResponse(
         site_slug=slug,
         health_status=health.status.value,
+        unified_health_status=from_vehicle_integration_status(health.status.value).value,
         connection_state=record.connection_state,
         last_success_at=health.last_success_at,
         last_failure_at=health.last_failure_at,

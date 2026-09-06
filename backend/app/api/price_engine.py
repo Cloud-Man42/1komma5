@@ -5,16 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.deps import get_db_session, get_site_repository
-from app.schemas import (
-    BatteryOpportunityResponse,
-    EnergyStrategyCurrentResponse,
-    EvRecommendationResponse,
-    PriceEngineCurrentResponse,
-    PriceEngineDayResponse,
-    PriceEngineRangeResponse,
-    PriceEngineStatusResponse,
-    PricePeriodResponse,
-)
+
+from app.schemas.intelligence_advisor import BatteryOpportunityResponse
+from app.schemas.pricing import EnergyStrategyCurrentResponse, EvRecommendationResponse, PriceEngineCurrentResponse, PriceEngineDayResponse, PriceEngineRangeResponse, PriceEngineStatusResponse, PricePeriodResponse
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel
 from energy_core.db.price_period_repo import PriceEngineStateRepository

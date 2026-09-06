@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.schemas import EnergyBalanceResponse
+from app.schemas.ev import EnergyBalanceResponse
 from energy_core.db.energy_balance_repo import StoredEnergyBalanceSnapshot
 
 

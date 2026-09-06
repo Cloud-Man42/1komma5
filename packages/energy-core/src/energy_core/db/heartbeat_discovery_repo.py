@@ -20,7 +20,7 @@ from energy_core.db.models import (
     VirtualChargerDecisionModel,
     VirtualChargerReplayRunModel,
 )
-from energy_core.heartbeat.discovery.models import (
+from energy_core.integrations.heartbeat.discovery import (
     HeartbeatApiObservation,
     HeartbeatBridgeSettingsRecord,
     HeartbeatEvDiscoveryResult,

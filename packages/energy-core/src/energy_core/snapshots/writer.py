@@ -204,7 +204,9 @@ class SnapshotWriter:
         self._settings = settings
         self._builder = SiteSnapshotBuilder(settings)
 
-    async def write_all_sites(self, session: AsyncSession, sites) -> int:
+    async def write_sites(self, session: AsyncSession, sites) -> int:
+        if not sites:
+            return 0
         repo = SiteLiveSnapshotRepository(session, is_sqlite=self._settings.is_sqlite)
         solar_repo = SolarForecastApiSnapshotRepository(session, is_sqlite=self._settings.is_sqlite)
         forecast_repo = SolarForecastRepository(session)
@@ -244,3 +246,6 @@ class SnapshotWriter:
                     )
             count += 1
         return count
+
+    async def write_all_sites(self, session: AsyncSession, sites) -> int:
+        return await self.write_sites(session, sites)

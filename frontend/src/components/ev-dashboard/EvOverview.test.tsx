@@ -181,6 +181,70 @@ beforeEach(() => {
 });
 
 describe("EvOverview", () => {
+  it("shows Mercedes and Halo linked status strip", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const strip = await screen.findByTestId("ev-mercedes-halo-strip");
+    expect(within(strip).getByText(/Mercedes EQE 500/i)).toBeTruthy();
+    expect(within(strip).getByText(/SOC 55%/)).toBeTruthy();
+    expect(within(strip).getByText(/Väntar på bil/i)).toBeTruthy();
+    expect(within(strip).getByText(/Halo online/i)).toBeTruthy();
+  });
+
+  it("shows vehicle SOC in header chips when linked", async () => {
+    render(<EvOverview siteSlug="akarp" />);
+    const chips = await screen.findByTestId("ev-header-chips");
+    expect(within(chips).getByText(/BIL SOC/i)).toBeTruthy();
+    expect(within(chips).getByText(/55%/)).toBeTruthy();
+  });
+
+  it("hides Mercedes card when vehicle is not linked", async () => {
+    mockFetchEnergyReasoning.mockResolvedValueOnce({
+      charger_id: 1,
+      bridge_enabled: true,
+      charging_active: false,
+      charging_mode: "SMART_CHARGE",
+      heartbeat_charging_mode: null,
+      ev_charge_from_grid_recommended: true,
+      ev_target_power_w: null,
+      pv_power_w: 500,
+      grid_import_w: 0,
+      grid_export_w: 1000,
+      home_consumption_w: 1500,
+      battery_soc_pct: 58,
+      ev_actual_power_w: 0,
+      current_price_eur_kwh: 0.18,
+      price_average_eur_kwh: 0.1,
+      price_tier: "red",
+      price_would_charge: false,
+      price_reason: "dyrt",
+      smart_charging_state: "waiting",
+      decision_reason_sv: "Väntar på bil.",
+      display_status_sv: "Väntar på bil",
+      requested_current_a: 16,
+      applied_current_a: 16,
+      vehicle_connected: false,
+      halo_connected: true,
+      solar_plan_available: true,
+      solar_plan_reason: null,
+      solar_first: false,
+      active_optimizations: [],
+      energy_flow_line: null,
+      energy_balance_status: "ok",
+      reasoning_steps: [],
+      vehicle_linked: false,
+      vehicle_display_name: null,
+      vehicle_soc_pct: null,
+      vehicle_target_soc_pct: null,
+      vehicle_required_energy_kwh: null,
+      vehicle_departure_time: null,
+      vehicle_energy_quality: null,
+    });
+    render(<EvOverview siteSlug="akarp" />);
+    const strip = await screen.findByTestId("ev-mercedes-halo-strip");
+    expect(within(strip).queryByText(/Mercedes/i)).toBeNull();
+    expect(within(strip).getByText(/CHARGE AMPS HALO/i)).toBeTruthy();
+  });
+
   it("renders laddbox dashboard with key panels", async () => {
     render(<EvOverview siteSlug="akarp" />);
     expect(await screen.findByTestId("ev-overview")).toBeTruthy();
@@ -214,6 +278,9 @@ describe("EvOverview", () => {
     render(<EvOverview siteSlug="akarp" />);
     const panel = await screen.findByTestId("ev-manual-control");
     fireEvent.click(within(panel).getByLabelText(/Använd deadline klar senast/i));
+    await waitFor(() => {
+      expect(within(panel).getByText(/Deadline är avaktiverad/i)).toBeTruthy();
+    });
     fireEvent.click(within(panel).getByRole("button", { name: /Spara avresa & deadline/i }));
     await waitFor(() => {
       expect(mockControlEvCharger).toHaveBeenCalledWith("akarp", 1, expect.objectContaining({

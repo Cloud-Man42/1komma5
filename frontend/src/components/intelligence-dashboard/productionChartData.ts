@@ -5,6 +5,7 @@ import {
   localDateKey,
   localDayBoundsMs,
   readingTimestamp,
+  roundKwh,
   roundKw,
 } from "@/lib/chartTime";
 
@@ -159,4 +160,114 @@ export function hasOverlappingSeries(rows: ProductionChartRow[]): boolean {
   return rows.some(
     (row) => row.actualKw != null && row.forecastKw != null && row.actualKw > 0 && row.forecastKw > 0,
   );
+}
+
+export function computeForecastSoFarKwh(
+  forecast: SolarForecast | null,
+  timezone: string,
+  now: string,
+): number | null {
+  if (!forecast?.points?.length) return null;
+  const todayKey = localDateKey(now, timezone);
+  const nowMs = new Date(now).getTime();
+  const todayPoints = forecast.points.filter(
+    (point) =>
+      localDateKey(point.timestamp, timezone) === todayKey &&
+      new Date(point.timestamp).getTime() <= nowMs,
+  );
+  if (todayPoints.length === 0) return null;
+  return roundKwh(todayPoints.reduce((sum, point) => sum + (point.expected_energy_kwh ?? 0), 0));
+}
+
+const MAX_READING_INTERVAL_MS = 5 * 60 * 1000;
+
+function todayReadingPoints(
+  readings: Reading[],
+  timezone: string,
+  now: string,
+): Array<{ ts: number; watts: number }> {
+  const todayKey = localDateKey(now, timezone);
+  const nowMs = new Date(now).getTime();
+  const { startMs } = localDayBoundsMs(now, timezone);
+
+  return readings
+    .map((reading) => ({
+      ts: new Date(readingTimestamp(reading)).getTime(),
+      watts: reading.solar_production_w ?? 0,
+    }))
+    .filter(
+      (point) =>
+        point.ts >= startMs &&
+        point.ts <= nowMs &&
+        localDateKey(new Date(point.ts).toISOString(), timezone) === todayKey,
+    )
+    .sort((a, b) => a.ts - b.ts);
+}
+
+export function computeActualTodayKwh(
+  readings: Reading[],
+  timezone: string,
+  now: string,
+): number | null {
+  const points = todayReadingPoints(readings, timezone, now);
+  if (points.length < 2) return null;
+
+  const nowMs = new Date(now).getTime();
+  let totalKwh = 0;
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const durationMs = points[i + 1].ts - points[i].ts;
+    if (durationMs <= 0 || durationMs > MAX_READING_INTERVAL_MS) continue;
+    totalKwh += (points[i].watts * durationMs) / (3600 * 1000) / 1000;
+  }
+
+  const last = points[points.length - 1];
+  const tailMs = nowMs - last.ts;
+  if (tailMs > 0 && tailMs <= MAX_READING_INTERVAL_MS) {
+    totalKwh += (last.watts * tailMs) / (3600 * 1000) / 1000;
+  }
+
+  return roundKwh(totalKwh);
+}
+
+export interface ProductionIntradayMetrics {
+  actualTodayKwh: number | null;
+  forecastSoFarKwh: number | null;
+  deviationKwh: number | null;
+  deviationPct: number | null;
+}
+
+export function computeProductionIntradayMetrics({
+  readings,
+  forecast,
+  timezone,
+  now,
+  producedKwhToday,
+}: {
+  readings: Reading[];
+  forecast: SolarForecast | null;
+  timezone: string;
+  now: string;
+  producedKwhToday?: number | null;
+}): ProductionIntradayMetrics {
+  const actualFromReadings = computeActualTodayKwh(readings, timezone, now);
+  const actualTodayKwh =
+    producedKwhToday ??
+    actualFromReadings ??
+    (forecast?.actual_today_kwh != null ? forecast.actual_today_kwh : null);
+
+  const forecastFromPoints = computeForecastSoFarKwh(forecast, timezone, now);
+  const forecastSoFarKwh =
+    forecastFromPoints ?? (forecast?.forecast_so_far_kwh != null ? forecast.forecast_so_far_kwh : null);
+
+  const deviationKwh =
+    actualTodayKwh != null && forecastSoFarKwh != null && forecastSoFarKwh > 0
+      ? actualTodayKwh - forecastSoFarKwh
+      : null;
+  const deviationPct =
+    deviationKwh != null && forecastSoFarKwh != null && forecastSoFarKwh > 0
+      ? (deviationKwh / forecastSoFarKwh) * 100
+      : null;
+
+  return { actualTodayKwh, forecastSoFarKwh, deviationKwh, deviationPct };
 }

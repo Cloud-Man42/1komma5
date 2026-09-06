@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from energy_core.chargers.framework.adapters.charge_amps import ChargeAmpsFrameworkAdapter
-from energy_core.chargers.framework.adapters.unsupported import UnsupportedChargerAdapter
+from energy_core.integrations.zaptec.adapter import ZaptecRestAdapter
 from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD
 from energy_core.chargers.framework.factory import ChargerAdapterFactory, configuration_from_model
 
@@ -61,7 +61,7 @@ def test_factory_returns_charge_amps_adapter_for_halo():
     assert isinstance(adapter, ChargeAmpsFrameworkAdapter)
 
 
-def test_factory_returns_unsupported_for_zaptec():
+def test_factory_returns_zaptec_adapter_for_zaptec_rest():
     charger = SimpleNamespace(
         id=1,
         site_id=2,
@@ -75,7 +75,7 @@ def test_factory_returns_unsupported_for_zaptec():
         chargeamp_charger_id=None,
         external_charger_id="installation-1",
         chargeamps_api_key="",
-        connection_settings=None,
+        connection_settings='{"account_id":"install-1"}',
         bridge_enabled=False,
         min_current_a=6.0,
         max_current_a=16.0,
@@ -83,4 +83,4 @@ def test_factory_returns_unsupported_for_zaptec():
         nominal_voltage_v=230.0,
     )
     adapter = ChargerAdapterFactory.from_charger_model(charger)
-    assert isinstance(adapter, UnsupportedChargerAdapter)
+    assert isinstance(adapter, ZaptecRestAdapter)

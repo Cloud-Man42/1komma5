@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import MeterSnapshot, integrate_power_kwh
+from energy_core.contracts.devices.meter import MeterSnapshot, integrate_power_kwh
 from energy_core.db.battery_ledger_repo import BatteryEnergyLedgerRepository
 from energy_core.db.models import EvChargerModel, SiteModel, VehicleModel
 from energy_core.db.repositories import MarketPriceRepository

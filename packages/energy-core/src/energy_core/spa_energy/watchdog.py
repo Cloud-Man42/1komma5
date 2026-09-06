@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from energy_core.db.spa_control_repo import SpaControlConfigRecord
-from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
-from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
+from energy_core.contracts.spa.control import ISpaControlService
+from energy_core.contracts.spa.errors import SpaControlError
 from energy_core.spa_energy.filter_policy import is_spa_filter_self_managed
 from energy_core.spa_energy.runtime import DEGRADED_MESSAGE_SV, SpaActuatorRuntime, SpaActuatorState
 
@@ -32,7 +32,7 @@ class SpaPlannerWatchdog:
         *,
         control: SpaControlConfigRecord,
         runtime: SpaActuatorRuntime,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         now: datetime,
         dry_run: bool,
     ) -> WatchdogDecision:
@@ -67,7 +67,7 @@ class SpaPlannerWatchdog:
                 "vakt_sakerhetsgolv",
                 command_sent=True,
             )
-        except ArcticSpaApiError:
+        except SpaControlError:
             runtime.integration_degraded = True
             runtime.integration_degraded_message_sv = DEGRADED_MESSAGE_SV
             runtime.state = SpaActuatorState.DEGRADED

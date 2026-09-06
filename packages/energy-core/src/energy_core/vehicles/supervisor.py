@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from energy_core.config import Settings
 from energy_core.db.attribute_observation_repo import VehicleAttributeObservationRepository
@@ -16,9 +16,8 @@ from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleReposi
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint, is_away_charging
 from energy_core.vehicles.connection_signals import _trusted_power_kw, resolve_effective_connection
-from energy_core.secrets import SecretBox, SecretBoxError
+from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import VehicleConnectionState, VehicleState
-from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
 from energy_core.vehicles.polling import AdaptivePollingPlanner
 from energy_core.vehicles.diagnostics.events import (
     IntegrationEventDraft,
@@ -27,9 +26,13 @@ from energy_core.vehicles.diagnostics.events import (
     SelfHealAction,
 )
 from energy_core.vehicles.diagnostics.self_heal import evaluate_vehicle_self_heal
-from energy_core.vehicles.mercedes.provider import MercedesProvider
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
-from energy_core.vehicles.mock.provider import MockVehicleProvider, MockVehicleScenario
+from energy_core.integrations.mercedes.factory import is_mercedes_provider
+from energy_core.integrations.tesla.factory import is_tesla_provider
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
+from energy_core.vehicles.provider_factory import (
+    build_supervisor_provider,
+    is_mock_vehicle_provider,
+)
 
 REST_REFRESH_SECONDS = 300
 REST_SKIP_SOC_FRESH_SECONDS = 120
@@ -209,41 +212,19 @@ class VehicleIntegrationSupervisor:
             await asyncio.sleep(15)
 
     async def _build_provider(self, row, provider_repo: VehicleProviderRepository):
-        if self._settings.app_env.value == "test":
-            return MockVehicleProvider(scenario=MockVehicleScenario.CONNECTED_IDLE)
-        try:
-            token_bundle = provider_repo.load_token_bundle(row)
-        except SecretBoxError:
-            token_bundle = None
-        device_guid = row.device_guid or str(uuid.uuid4())
-        provider = MercedesProvider(region=row.region, device_guid=device_guid, token_bundle=token_bundle)
-
-        async def persist(bundle: MercedesTokenBundle) -> None:
-            async with self._session_factory() as session:
-                repo = VehicleProviderRepository(session, secret_box=self._secret_box)
-                db_row = await repo.get_for_site(row.site_id)
-                if db_row is not None:
-                    await repo.persist_token_bundle(db_row, bundle)
-                    await repo.update_runtime_status(db_row, last_token_refresh_at=datetime.now(UTC))
-                    await session.commit()
-
-        async def reload() -> MercedesTokenBundle | None:
-            async with self._session_factory() as session:
-                repo = VehicleProviderRepository(session, secret_box=self._secret_box)
-                db_row = await repo.get_for_site(row.site_id)
-                if db_row is None:
-                    return None
-                return await repo.load_token_bundle_for_update(db_row)
-
-        provider._token_store._persist = persist  # noqa: SLF001
-        provider._token_store._reload = reload  # noqa: SLF001
-        return provider
+        return await build_supervisor_provider(
+            row,
+            provider_repo,
+            session_factory=self._session_factory,
+            secret_box=self._secret_box,
+            settings=self._settings,
+        )
 
     async def _run_site(self, runtime: _SiteRuntime, connection_id: int) -> None:
         site_id = runtime.site_id
         try:
             provider = runtime.provider
-            if isinstance(provider, MercedesProvider):
+            if is_mercedes_provider(provider):
                 username = ""
                 password = ""
                 async with self._session_factory() as session:
@@ -259,8 +240,8 @@ class VehicleIntegrationSupervisor:
                 if provider._token_store._token is None:  # noqa: SLF001
                     await provider.login(username, password)
                 states = await provider.discover()
-                await self._persist_vehicle_states(runtime.site_id, states, provider=provider if isinstance(provider, MercedesProvider) else None)
-                if isinstance(provider, MercedesProvider) and provider._token_store._token is not None:  # noqa: SLF001
+                await self._persist_vehicle_states(runtime.site_id, states, provider=provider if is_mercedes_provider(provider) else None)
+                if is_mercedes_provider(provider) and provider._token_store._token is not None:  # noqa: SLF001
                     async with self._session_factory() as session:
                         repo = VehicleProviderRepository(session, secret_box=self._secret_box)
                         row = await repo.get_for_site(runtime.site_id)
@@ -269,12 +250,12 @@ class VehicleIntegrationSupervisor:
                             if bundle.session_id and bundle.session_id != (row.session_id or ""):
                                 await repo.persist_token_bundle(row, bundle)
                                 await session.commit()
-            elif isinstance(provider, MockVehicleProvider):
+            elif is_mock_vehicle_provider(provider) or is_tesla_provider(provider):
                 await provider.connect()
 
             refresh_task = None
             watch_task = None
-            if isinstance(provider, MercedesProvider):
+            if is_mercedes_provider(provider):
                 refresh_task = asyncio.create_task(self._periodic_rest_refresh(runtime, provider))
                 watch_task = asyncio.create_task(self._connection_watch(runtime, provider))
 
@@ -315,7 +296,7 @@ class VehicleIntegrationSupervisor:
             if runtime is not None:
                 runtime.task = None
 
-    async def _connection_watch(self, runtime: _SiteRuntime, provider: MercedesProvider) -> None:
+    async def _connection_watch(self, runtime: _SiteRuntime, provider: Any) -> None:
         manager = provider.connection_manager
 
         async def connect() -> None:
@@ -338,7 +319,7 @@ class VehicleIntegrationSupervisor:
                 circuit_breaker_state=status.connection_state.value,
             )
 
-    async def _persist_connection_status(self, site_id: int, provider: MercedesProvider) -> None:
+    async def _persist_connection_status(self, site_id: int, provider: Any) -> None:
         status = provider.connection_manager.status
         async with self._session_factory() as session:
             repo = VehicleProviderRepository(session, secret_box=self._secret_box)
@@ -362,7 +343,7 @@ class VehicleIntegrationSupervisor:
         site_id: int,
         states: tuple[VehicleState, ...],
         *,
-        provider: MercedesProvider | MockVehicleProvider | None = None,
+        provider: Any | None = None,
     ) -> None:
         if not states:
             return
@@ -395,7 +376,7 @@ class VehicleIntegrationSupervisor:
                         vehicle_id=db_vehicle.id,
                         events=diagnostics.events,
                     )
-                if isinstance(provider, MercedesProvider):
+                if is_mercedes_provider(provider):
                     observations = provider.mapper.attribute_recorder.drain()
                     if observations:
                         await VehicleAttributeObservationRepository(
@@ -413,16 +394,16 @@ class VehicleIntegrationSupervisor:
                     reset_consecutive_failures=True,
                     last_latency_ms=(
                         getattr(provider.rest_client.api_client, "last_latency_ms", None)
-                        if isinstance(provider, MercedesProvider)
+                        if is_mercedes_provider(provider)
                         else None
                     ),
                 )
             await session.commit()
-        if isinstance(provider, MercedesProvider):
+        if is_mercedes_provider(provider):
             latency_ms = getattr(provider.rest_client.api_client, "last_latency_ms", None)
             await self._record_mercedes_health(site_id, success=True, latency_ms=latency_ms)
 
-    async def _periodic_rest_refresh(self, runtime: _SiteRuntime, provider: MercedesProvider) -> None:
+    async def _periodic_rest_refresh(self, runtime: _SiteRuntime, provider: Any) -> None:
         planner = AdaptivePollingPlanner()
         while True:
             latest_state = next(iter(provider._vehicles.values()), None)  # noqa: SLF001
@@ -518,7 +499,7 @@ class VehicleIntegrationSupervisor:
                 states = await provider.sync_from_rest()
                 if states:
                     await self._persist_vehicle_states(runtime.site_id, states, provider=provider)
-                if force_ws_reconnect and isinstance(provider, MercedesProvider):
+                if force_ws_reconnect and is_mercedes_provider(provider):
                     provider.connection_manager.reset_circuit()
                     logger.info(
                         "Mercedes websocket reconnect requested for site %s (stale SoC/range at source)",

@@ -6,23 +6,15 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
-from app.schemas import (
-    HeartbeatBridgeSettingsResponse,
-    HeartbeatBridgeSettingsUpdateRequest,
-    HeartbeatBridgeStatusResponse,
-    HeartbeatDiscoveryRunDetailResponse,
-    HeartbeatDiscoveryRunResponse,
-    HeartbeatDiscoveryRunResultResponse,
-    HeartbeatEvMappingResponse,
-    HeartbeatEvMappingUpdateRequest,
-    HeartbeatReplayResponse,
-    HeartbeatWriteTestResponse,
-)
+
+from app.schemas.heartbeat_bridge import HeartbeatBridgeSettingsResponse, HeartbeatBridgeSettingsUpdateRequest, HeartbeatBridgeStatusResponse, HeartbeatDiscoveryRunDetailResponse, HeartbeatDiscoveryRunResponse, HeartbeatDiscoveryRunResultResponse, HeartbeatEvMappingResponse, HeartbeatEvMappingUpdateRequest, HeartbeatReplayResponse, HeartbeatWriteTestResponse
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
-from energy_core.heartbeat.bridge.replay import VirtualChargerReplayService
-from energy_core.heartbeat.bridge.service import HeartbeatEvBridgeService
-from energy_core.heartbeat.write_test.service import HeartbeatWriteTestService
+from energy_core.integrations.heartbeat.bridge import (
+    HeartbeatEvBridgeService,
+    HeartbeatWriteTestService,
+    VirtualChargerReplayService,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -59,7 +59,102 @@ def test_actual_kwh_from_daily():
 
 
 @pytest.mark.asyncio
-async def test_actual_solar_kwh_today_prefers_daily_rollup(sqlite_session):
+async def test_actual_solar_kwh_today_prefers_readings_over_hourly(sqlite_session):
+    session, settings = sqlite_session
+    site_repo = SiteRepository(session)
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    site = await site_repo.upsert_site("akarp", "Åkarp", "UTC")
+    now = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
+    from energy_core.db.models import EnergyHourlyModel, EnergyReadingModel
+
+    session.add(
+        EnergyHourlyModel(
+            site_id=site.id,
+            hour=datetime(2026, 9, 5, 10, 0, tzinfo=UTC),
+            solar_kwh=1.2,
+            consumption_kwh=0.5,
+            import_kwh=0.0,
+            export_kwh=0.7,
+        )
+    )
+    session.add_all(
+        [
+            EnergyReadingModel(
+                site_id=site.id,
+                recorded_at=datetime(2026, 9, 5, 10, 0, tzinfo=UTC),
+                solar_production_w=3000.0,
+                consumption_w=1000.0,
+                grid_import_w=0.0,
+                grid_export_w=2000.0,
+                battery_soc_pct=50.0,
+                battery_power_w=0.0,
+            ),
+            EnergyReadingModel(
+                site_id=site.id,
+                recorded_at=datetime(2026, 9, 5, 10, 5, tzinfo=UTC),
+                solar_production_w=3000.0,
+                consumption_w=1000.0,
+                grid_import_w=0.0,
+                grid_export_w=2000.0,
+                battery_soc_pct=50.0,
+                battery_power_w=0.0,
+            ),
+        ]
+    )
+    await session.commit()
+
+    actual = await actual_solar_kwh_today(
+        reading_repo,
+        site.id,
+        timezone="UTC",
+        now=now,
+    )
+    assert actual == 0.25
+
+
+@pytest.mark.asyncio
+async def test_actual_solar_kwh_today_prefers_hourly_over_daily_for_today(sqlite_session):
+    session, settings = sqlite_session
+    site_repo = SiteRepository(session)
+    reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)
+    site = await site_repo.upsert_site("akarp", "Åkarp", "Europe/Stockholm")
+    now = datetime.now(UTC)
+    hour = now.replace(minute=0, second=0, microsecond=0)
+    from energy_core.db.models import EnergyDailyModel, EnergyHourlyModel
+
+    session.add(
+        EnergyDailyModel(
+            site_id=site.id,
+            day=now.date(),
+            solar_kwh=6.7,
+            consumption_kwh=4.0,
+            import_kwh=0.0,
+            export_kwh=2.7,
+        )
+    )
+    session.add(
+        EnergyHourlyModel(
+            site_id=site.id,
+            hour=hour,
+            solar_kwh=1.2,
+            consumption_kwh=0.5,
+            import_kwh=0.0,
+            export_kwh=0.7,
+        )
+    )
+    await session.commit()
+
+    actual = await actual_solar_kwh_today(
+        reading_repo,
+        site.id,
+        timezone="UTC",
+        now=now,
+    )
+    assert actual == 1.2
+
+
+@pytest.mark.asyncio
+async def test_actual_solar_kwh_today_falls_back_to_daily_when_no_finer_data(sqlite_session):
     session, settings = sqlite_session
     site_repo = SiteRepository(session)
     reading_repo = EnergyReadingRepository(session, is_sqlite=settings.is_sqlite)

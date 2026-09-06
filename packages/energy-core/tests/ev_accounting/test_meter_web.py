@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from energy_core.chargers.charge_amps_web import ChargeAmpsWebController
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
+from energy_core.integrations.chargeamps.web_controller import ChargeAmpsWebController
+from energy_core.integrations.chargeamps.meter_adapter import ChargeAmpsMeterAdapter
 
 
 @pytest.mark.asyncio

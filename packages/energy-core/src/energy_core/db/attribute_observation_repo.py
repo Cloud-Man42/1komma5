@@ -11,7 +11,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.models import VehicleAttributeObservationModel
-from energy_core.vehicles.mercedes.mapping.observer import AttributeObservation
+from energy_core.vehicles.abstractions.attribute_observation import AttributeObservation
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,6 +11,7 @@ async def test_integration_health_empty_for_new_site(client):
     body = res.json()
     assert body["slug"] == "akarp"
     assert isinstance(body["providers"], list)
+    assert body["overall_health_status"] in {"healthy", "degraded", "unavailable", "disabled"}
 
 
 @pytest.mark.asyncio
@@ -39,3 +40,5 @@ async def test_integration_health_returns_provider_rows(client):
     assert len(body["providers"]) == 1
     assert body["providers"][0]["provider"] == "heartbeat"
     assert body["providers"][0]["status"] == "ok"
+    assert body["providers"][0]["health_status"] == "healthy"
+    assert body["overall_health_status"] == "healthy"

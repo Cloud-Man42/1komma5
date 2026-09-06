@@ -6,12 +6,17 @@ import { integrationProviderLabelSv } from "@/lib/integrationHealthLabels";
 
 function statusLabel(status: string): string {
   switch (status) {
+    case "healthy":
     case "ok":
       return "OK";
+    case "degraded":
+    case "stale":
+      return "Degraderad";
+    case "unavailable":
     case "error":
       return "Fel";
-    case "stale":
-      return "Inaktuell";
+    case "disabled":
+      return "Av";
     default:
       return status;
   }
@@ -49,7 +54,7 @@ export function IntegrationHealthPanel({ siteSlug }: { siteSlug: string }) {
 
   const alertCount =
     data?.providers.filter(
-      (row) => row.status !== "ok" || row.consecutive_failures >= 3,
+      (row) => row.health_status !== "healthy" || row.consecutive_failures >= 3,
     ).length ?? 0;
 
   return (
@@ -90,7 +95,7 @@ export function IntegrationHealthPanel({ siteSlug }: { siteSlug: string }) {
                 {data.providers.map((row) => (
                   <tr key={row.provider} data-testid={`integration-health-row-${row.provider}`}>
                     <td>{integrationProviderLabelSv(row.provider)}</td>
-                    <td>{statusLabel(row.status)}</td>
+                    <td>{statusLabel(row.health_status)}</td>
                     <td>{row.latency_ms != null ? `${Math.round(row.latency_ms)} ms` : "—"}</td>
                     <td>{row.consecutive_failures}</td>
                     <td>{formatStaleSeconds(row.stale_seconds)}</td>

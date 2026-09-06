@@ -17,7 +17,7 @@ from energy_core.db.models import SiteModel
 from energy_core.db.repositories import MarketPriceRepository
 from energy_core.ev_accounting.battery_ledger import BatteryEnergyLedgerService
 from energy_core.ev_accounting.models import BatteryLedgerState, SiteEnergySample
-from energy_core.integrations.arctic_spa.models import ArcticSpaStatus
+from energy_core.integrations.arctic_spa.status import SpaStatus
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ class ConsumerSampler:
         )
 
     @staticmethod
-    def parse_last_status(raw: str) -> ArcticSpaStatus | None:
+    def parse_last_status(raw: str) -> SpaStatus | None:
         if not raw:
             return None
         try:
@@ -143,4 +143,4 @@ class ConsumerSampler:
             return None
         if not isinstance(payload, dict):
             return None
-        return ArcticSpaStatus.from_api(payload)
+        return SpaStatus.from_api(payload)

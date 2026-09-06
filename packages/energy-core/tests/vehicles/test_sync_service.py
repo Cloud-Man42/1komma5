@@ -87,7 +87,7 @@ async def test_sync_site_persists_fresh_mercedes_state(sync_session):
         )
         await session.commit()
 
-    with patch("energy_core.vehicles.sync_service.MercedesProvider") as provider_cls:
+    with patch("energy_core.vehicles.sync_service.build_mercedes_provider") as provider_cls:
         provider = AsyncMock()
         provider.sync_from_rest = AsyncMock(return_value=synced)
         provider.close = AsyncMock()

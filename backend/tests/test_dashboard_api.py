@@ -94,7 +94,7 @@ async def test_dashboard_uses_redis_cache_on_second_request(client):
 @pytest.mark.asyncio
 async def test_dashboard_starts_with_an_empty_section_cache(client):
     """The cache is module-level; a leftover entry would answer for another test's database."""
-    from app.api.dashboard import _CACHE
+    from app.dashboard_compute import _CACHE
 
     ac, _, _ = client
     assert _CACHE == {}

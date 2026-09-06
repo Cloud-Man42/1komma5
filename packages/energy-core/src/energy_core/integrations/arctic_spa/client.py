@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from energy_core.contracts.spa.errors import SpaControlError
 from energy_core.integrations.arctic_spa.config import mask_api_key
 from energy_core.integrations.arctic_spa.models import ArcticSpaStatus, celsius_to_fahrenheit_int
 
@@ -18,10 +19,8 @@ MAX_RETRIES = 3
 RETRYABLE_STATUS = frozenset({429, 503})
 
 
-class ArcticSpaApiError(Exception):
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+class ArcticSpaApiError(SpaControlError):
+    pass
 
 
 class ArcticSpaClient:

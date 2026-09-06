@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from energy_core.integrations.arctic_spa.client import ArcticSpaApiError
-from energy_core.integrations.arctic_spa.control_service import ArcticSpaControlService
+from energy_core.contracts.spa.control import ISpaControlService
+from energy_core.contracts.spa.errors import SpaControlError
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class FilterScheduleUpdateResult:
 class ArcticSpaFilterScheduleService:
     """Ensure spa internal schedule stays at 4×2 h; never write zero values."""
 
-    async def read_snapshot(self, control_service: ArcticSpaControlService) -> FilterScheduleSnapshot:
+    async def read_snapshot(self, control_service: ISpaControlService) -> FilterScheduleSnapshot:
         status = await control_service.get_status()
         frequency = max(1, int(round(float(status.filter_frequency or 1))))
         duration = max(1, int(round(float(status.filter_duration or 2))))
@@ -46,7 +46,7 @@ class ArcticSpaFilterScheduleService:
 
     async def apply_policy(
         self,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         policy: SpaFilterPolicy,
         *,
         dry_run: bool,
@@ -68,7 +68,7 @@ class ArcticSpaFilterScheduleService:
 
         try:
             previous = await self.read_snapshot(control_service)
-        except ArcticSpaApiError as exc:
+        except SpaControlError as exc:
             return FilterScheduleUpdateResult(
                 success=False,
                 verified=False,
@@ -129,7 +129,7 @@ class ArcticSpaFilterScheduleService:
                 degraded=True,
                 restored_baseline=restored,
             )
-        except ArcticSpaApiError as exc:
+        except SpaControlError as exc:
             restored = await self._restore_baseline(
                 control_service,
                 last_known_safe_json,
@@ -148,7 +148,7 @@ class ArcticSpaFilterScheduleService:
 
     async def restore_safe_baseline(
         self,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         last_known_safe_json: str | None,
         *,
         policy: SpaFilterPolicy,
@@ -169,7 +169,7 @@ class ArcticSpaFilterScheduleService:
         restored = await self._restore_baseline(control_service, last_known_safe_json, fallback=fallback)
         try:
             applied = await self.read_snapshot(control_service)
-        except ArcticSpaApiError:
+        except SpaControlError:
             applied = None
         return FilterScheduleUpdateResult(
             success=restored,
@@ -183,7 +183,7 @@ class ArcticSpaFilterScheduleService:
 
     async def _restore_baseline(
         self,
-        control_service: ArcticSpaControlService,
+        control_service: ISpaControlService,
         last_known_safe_json: str | None,
         *,
         fallback: FilterScheduleSnapshot,
@@ -200,7 +200,7 @@ class ArcticSpaFilterScheduleService:
             )
             logger.warning("Restored spa filter baseline frequency=%s duration=%s", freq, dur)
             return True
-        except ArcticSpaApiError:
+        except SpaControlError:
             return False
 
     @staticmethod

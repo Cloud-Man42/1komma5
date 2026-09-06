@@ -5,18 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.deps import get_app_settings, get_db_session
-from app.schemas import (
-    DmiForecastPointResponse,
-    DmiForecastResponse,
-    SolarHourlyForecastResponse,
-    SolarHourlyPointResponse,
-    SolarIntelligenceForecastResponse,
-    SolarModelMetricsResponse,
-    SolarModelResponse,
-    SolarPerformanceResponse,
-    SolarProviderStatusResponse,
-    SolarRadiationResponse,
-)
+
+from app.schemas.solar import DmiForecastPointResponse, DmiForecastResponse, SolarHourlyForecastResponse, SolarHourlyPointResponse, SolarIntelligenceForecastResponse, SolarModelMetricsResponse, SolarModelResponse, SolarPerformanceResponse, SolarProviderStatusResponse, SolarRadiationResponse
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
 from energy_core.db.solar_forecast_repo import (
     SolarForecastModelProfileRepository,
@@ -32,7 +22,6 @@ from energy_core.db.solar_intelligence_repo import (
     SolarProviderHealthRepository,
 )
 from energy_core.solar_forecast.calibration import metrics_insufficient
-from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
 from energy_core.solar_forecast.rollup_queries import actual_solar_kwh_today
 from energy_core.solar_forecast.performance import (
     build_performance_summary,
@@ -40,8 +29,11 @@ from energy_core.solar_forecast.performance import (
     performance_days_from_observations,
     raw_forecast_so_far,
 )
-from energy_core.solar_intelligence.provider_factory import resolve_country_code
-from energy_core.solar_intelligence.service import SolarIntelligenceCoordinator
+from energy_core.platform.forecasting import (
+    build_solar_forecast_coordinator,
+    build_solar_intelligence_coordinator,
+    resolve_country_code,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,7 +99,7 @@ async def get_performance(
     site = await _get_site(session, slug)
     await _require_solar_enabled(session, site)
 
-    coordinator = SolarForecastCoordinator(settings)
+    coordinator = build_solar_forecast_coordinator(settings)
     await coordinator.evaluate_site_observations(session, site)
 
     perf_repo = SolarPerformanceDailyRepository(session)
@@ -219,7 +211,7 @@ async def get_dmi_forecast(
 
     now = datetime.now(UTC)
     to_ts = now + timedelta(hours=settings.solar_forecast_horizon_hours)
-    coord = SolarIntelligenceCoordinator(settings)
+    coord = build_solar_intelligence_coordinator(settings)
     rows = await coord.fetch_dmi_forecast(
         latitude=domain.latitude,
         longitude=domain.longitude,
@@ -329,7 +321,7 @@ async def trigger_backfill(
 ):
     site = await _get_site(session, slug)
     await _require_intelligence(session, site)
-    coord = SolarIntelligenceCoordinator(settings)
+    coord = build_solar_intelligence_coordinator(settings)
     count = await coord.run_backfill(session, site, days=60)
     await session.commit()
     return {"site_slug": slug, "samples_upserted": count}
@@ -343,7 +335,7 @@ async def trigger_train(
 ):
     site = await _get_site(session, slug)
     await _require_intelligence(session, site)
-    coord = SolarIntelligenceCoordinator(settings)
+    coord = build_solar_intelligence_coordinator(settings)
     ok = await coord.train_model(session, site)
     await session.commit()
     return {"site_slug": slug, "trained": ok}
@@ -359,7 +351,7 @@ async def get_intelligence_forecast(
     await _require_intelligence(session, site)
     hourly = await SolarHourlyForecastRepository(session).list_for_site(site.id)
     if not hourly:
-        coord = SolarIntelligenceCoordinator(settings)
+        coord = build_solar_intelligence_coordinator(settings)
         await coord.refresh_site(session, site)
         await session.commit()
         hourly = await SolarHourlyForecastRepository(session).list_for_site(site.id)

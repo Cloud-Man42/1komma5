@@ -5,22 +5,9 @@ from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.api.energy_balance_helpers import snapshot_to_response
 from app.deps import get_db_session
-from app.schemas import (
-    EnergyBalanceHistoryResponse,
-    EnergyBalanceResponse,
-    EnergyReasoningResponse,
-    EvBridgeStatusResponse,
-    EvChargerConnectionTestRequest,
-    EvChargerControlRequest,
-    EvChargerCreateRequest,
-    EvChargerOverrideRequest,
-    EvChargerResponse,
-    EvChargerUpdateRequest,
-    EvChargingSavingsResponse,
-    ChargerConnectionTestResponse,
-    SolarChargingPlanResponse,
-    VirtualEvseStatusResponse,
-)
+
+from app.schemas.chargers_catalog import ChargerConnectionTestResponse
+from app.schemas.ev import EnergyBalanceHistoryResponse, EnergyBalanceResponse, EnergyReasoningResponse, EvBridgeStatusResponse, EvChargerConnectionTestRequest, EvChargerControlRequest, EvChargerCreateRequest, EvChargerOverrideRequest, EvChargerResponse, EvChargerUpdateRequest, EvChargingSavingsResponse, SolarChargingPlanResponse, VirtualEvseStatusResponse
 from energy_core.charging.engine import bridge_status_from_charger
 from energy_core.charging.reasoning import load_energy_reasoning_for_charger
 from energy_core.energy.state import EnergyState
@@ -41,7 +28,7 @@ from energy_core.chargers.framework.catalog import CHARGE_AMPS_CLOUD, get_model
 from energy_core.db.energy_balance_repo import EnergyBalanceRepository, SiteEnergyConfigRepository
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
-from energy_core.heartbeat_client import CHARGING_MODES
+from energy_core.integrations.heartbeat.client import CHARGING_MODES
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -513,7 +500,7 @@ async def sync_ev_chargers_from_heartbeat(
     session: AsyncSession = Depends(get_db_session),
     _: None = Depends(require_admin_token),
 ) -> list[EvChargerResponse]:
-    from energy_core.heartbeat_client_factory import create_heartbeat_client
+    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)

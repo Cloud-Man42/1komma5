@@ -21,10 +21,13 @@ from energy_core.db.models import (
 )
 from energy_core.secrets import SecretBox
 from energy_core.vehicles.abstractions.models import DataQuality, VehicleCapabilities, VehicleConnectionState, VehicleState
-from energy_core.vehicles.mercedes.auth.token_store import MercedesTokenBundle
-from energy_core.vehicles.mercedes.constants import STALE_TELEMETRY_SECONDS
-from energy_core.vehicles.mercedes.soc_estimation import apply_range_based_soc_correction
-from energy_core.vehicles.mercedes.telemetry_plausibility import has_plausible_vehicle_telemetry
+from energy_core.integrations.mercedes.auth import MercedesTokenBundle
+from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
+from energy_core.integrations.mercedes.telemetry_helpers import (
+    apply_range_based_soc_correction,
+    has_plausible_vehicle_telemetry,
+)
+from energy_core.platform.events.publish import publish_vehicle_state_changed
 from energy_core.vehicles.diagnostics.events import (
     IntegrationEventDraft,
     IntegrationEventSeverity,
@@ -449,6 +452,8 @@ class VehicleRepository:
     async def persist_state(self, vehicle_id: int, state: VehicleState) -> PersistStateDiagnostics:
         now = datetime.now(UTC)
         latest = await self.get_latest_state(vehicle_id)
+        prior_plugged = latest.is_plugged_in if latest else None
+        prior_charging = latest.is_charging if latest else None
         prior_soc = latest.state_of_charge_percent if latest else None
         prior_range = latest.electric_range_km if latest else None
         incoming_had_soc = state.state_of_charge_percent is not None
@@ -611,6 +616,24 @@ class VehicleRepository:
                 )
             )
         await self._session.flush()
+        if (
+            latest is not None
+            and not telemetry_only_update
+            and (
+                prior_plugged != values.get("is_plugged_in")
+                or prior_charging != values.get("is_charging")
+            )
+        ):
+            vehicle = await self.get(vehicle_id)
+            if vehicle is not None:
+                publish_vehicle_state_changed(
+                    vehicle_id=vehicle_id,
+                    site_id=vehicle.site_id,
+                    is_plugged_in=values.get("is_plugged_in"),
+                    is_charging=values.get("is_charging"),
+                    previous_plugged_in=prior_plugged,
+                    previous_charging=prior_charging,
+                )
         return PersistStateDiagnostics(events=tuple(events))
 
     def _should_write_history(self, previous: VehicleStateLatestModel | None, values: dict) -> bool:

@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
+from energy_core.contracts.devices.meter import MeterSnapshot, session_energy_from_meter
+from energy_core.integrations.chargeamps.meter_factory import meter_reader_for_charger
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import SiteModel
 from energy_core.db.repositories import MarketPriceRepository
 from energy_core.ev_accounting.models import SiteEnergySample
 from energy_core.ev_accounting.sampler import EVSessionSampler
 from energy_core.ev_accounting.session_service import EVSessionService
-from energy_core.heartbeat.live_overview import parse_live_overview
-from energy_core.secrets import CredentialCipher
+from energy_core.integrations.heartbeat.live_overview import parse_live_overview
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +104,10 @@ class EVAccountingCoordinator:
         live_overview: dict | None,
         is_sqlite: bool,
     ) -> int:
-        cipher = CredentialCipher()
-        api_key = cipher.decrypt(charger.chargeamps_api_key) or os.getenv("CHARGEAMPS_API_KEY", "")
-        meter_adapter = ChargeAmpsMeterAdapter.build(
-            charger.chargeamp_charger_id,
-            api_key=api_key,
-            phases=charger.phases,
-            nominal_voltage_v=charger.nominal_voltage_v,
-        )
-        meter = await meter_adapter.get_snapshot()
+        meter_reader = meter_reader_for_charger(charger)
+        if meter_reader is None:
+            return 0
+        meter = await meter_reader.get_snapshot()
 
         energy_sample = self._energy_sample_from_overview(live_overview, site, db, is_sqlite)
         await self._session_service.process_charger(db, charger=charger, site=site, meter=meter)

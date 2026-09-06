@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 from app.deps import get_db_session, get_site_repository
-from app.schemas import (
-    HeartbeatAuditDailyResponse,
-    HeartbeatAuditMonthlyResponse,
-    HeartbeatAuditPeriodSnapshotResponse,
-    HeartbeatAuditRollupResponse,
-)
+
+from app.schemas.heartbeat_audit import HeartbeatAuditDailyResponse, HeartbeatAuditMonthlyResponse, HeartbeatAuditPeriodSnapshotResponse, HeartbeatAuditRollupResponse
 from energy_core.db.repositories import SiteRepository
 from energy_core.heartbeat_audit.service import HeartbeatAuditService
 from energy_core.price_engine.engine import EmicPriceEngine

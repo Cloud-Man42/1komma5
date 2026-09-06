@@ -11,8 +11,8 @@ from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.db.models import SiteModel
 from energy_core.energy_control.types import ControlOutcome, ControlResult, ControlTarget, OptimizationAction
 from energy_core.energy_optimizer.types import EnergyAction
-from energy_core.heartbeat.write_test.client import HeartbeatWriteClient
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.bridge import HeartbeatWriteClient
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 _BATTERY_ACTIONS = frozenset(
     {

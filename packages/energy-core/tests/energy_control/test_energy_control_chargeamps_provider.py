@@ -131,10 +131,10 @@ async def test_chargeamps_provider_applies_use_now(session: AsyncMock) -> None:
         patch.object(provider._chargers, "list_for_site", AsyncMock(return_value=[charger])),
         patch.object(provider._chargers, "update", update_mock),
         patch(
-            "energy_core.energy_control.chargeamps_provider.ChargingCommandController.apply",
+            "energy_core.integrations.chargeamps.control_provider.ChargingCommandController.apply",
             AsyncMock(return_value=apply_result),
         ),
-        patch("energy_core.energy_control.chargeamps_provider.ChargerAdapterFactory.from_charger_model"),
+        patch("energy_core.integrations.chargeamps.control_provider.ChargerAdapterFactory.from_charger_model"),
     ):
         result = await provider.apply_action(
             site_id=1,
@@ -168,10 +168,10 @@ async def test_chargeamps_provider_apply_failure_returns_failed(session: AsyncMo
         patch.object(provider._chargers, "list_for_site", AsyncMock(return_value=[charger])),
         patch.object(provider._chargers, "update", AsyncMock(return_value=charger)),
         patch(
-            "energy_core.energy_control.chargeamps_provider.ChargingCommandController.apply",
+            "energy_core.integrations.chargeamps.control_provider.ChargingCommandController.apply",
             AsyncMock(return_value=apply_result),
         ),
-        patch("energy_core.energy_control.chargeamps_provider.ChargerAdapterFactory.from_charger_model"),
+        patch("energy_core.integrations.chargeamps.control_provider.ChargerAdapterFactory.from_charger_model"),
     ):
         result = await provider.apply_action(
             site_id=1,

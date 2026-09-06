@@ -22,10 +22,12 @@ describe("IntegrationHealthStrip", () => {
   it("shows ok summary", async () => {
     vi.mocked(fetchIntegrationHealth).mockResolvedValue({
       slug: "akarp",
+      overall_health_status: "healthy",
       providers: [
         {
           provider: "heartbeat",
           status: "ok",
+          health_status: "healthy",
           consecutive_failures: 0,
           last_success_at: null,
           last_attempt_at: null,
@@ -43,10 +45,12 @@ describe("IntegrationHealthStrip", () => {
   it("shows alert count", async () => {
     vi.mocked(fetchIntegrationHealth).mockResolvedValue({
       slug: "akarp",
+      overall_health_status: "degraded",
       providers: [
         {
           provider: "heartbeat",
           status: "stale",
+          health_status: "degraded",
           consecutive_failures: 0,
           last_success_at: null,
           last_attempt_at: null,

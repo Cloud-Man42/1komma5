@@ -4,18 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.admin_audit_helpers import audit_admin_mutation
 from app.admin_auth import require_admin_token
 from app.deps import get_app_settings, get_db_session
-from app.schemas import (
-    ChargeAmpsConfigResponse,
-    ChargingReadinessResponse,
-    ChargerReadinessIssueResponse,
-    HeartbeatConfigResponse,
-    HeartbeatConfigUpdateRequest,
-    SiteHeartbeatMappingResponse,
-    SpaReadinessResponse,
-    TimescalePolicyStatusResponse,
-    VehicleReadinessResponse,
-)
-from energy_core.chargers.chargeamps_config import build_chargeamps_connection_info
+
+from app.schemas.heartbeat import ChargeAmpsConfigResponse, ChargerReadinessIssueResponse, ChargingReadinessResponse, HeartbeatConfigResponse, HeartbeatConfigUpdateRequest, SiteHeartbeatMappingResponse, TimescalePolicyStatusResponse
+from app.schemas.spa import SpaReadinessResponse
+from app.schemas.vehicles import VehicleReadinessResponse
+from energy_core.integrations.chargeamps.config import build_chargeamps_connection_info
 from energy_core.charging.readiness import evaluate_charging_readiness
 from energy_core.config import get_settings
 from energy_core.config import Settings
@@ -23,9 +16,9 @@ from energy_core.db.consumer_repo import ConsumerRepository
 from energy_core.db.vehicle_repo import VehicleProviderRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
-from energy_core.heartbeat_auth import HeartbeatAuthError
-from energy_core.heartbeat_config import build_heartbeat_connection_info
-from energy_core.heartbeat_connection import HeartbeatConnectionType
+from energy_core.integrations.heartbeat.auth import HeartbeatAuthError
+from energy_core.integrations.heartbeat.config import build_heartbeat_connection_info
+from energy_core.integrations.heartbeat.connection import HeartbeatConnectionType
 
 router = APIRouter(tags=["system"])
 

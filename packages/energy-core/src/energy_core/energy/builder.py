@@ -6,9 +6,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from energy_core.energy.state import EnergyState
-from energy_core.heartbeat.field_discovery import discover_relevant_fields
-from energy_core.heartbeat.live_overview import extract_ev_target_power_w, parse_live_overview
-from energy_core.heartbeat.market_prices import parse_market_prices
+from energy_core.integrations.heartbeat.live_overview import extract_ev_target_power_w, parse_live_overview
+from energy_core.integrations.heartbeat.parsing import discover_relevant_fields, parse_market_prices
 
 
 def _parse_ev(ev: dict[str, Any] | None) -> dict[str, Any]:

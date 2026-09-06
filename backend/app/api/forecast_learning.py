@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 from app.deps import get_db_session, get_site_repository
-from app.schemas import (
-    ForecastLearningRecentResponse,
-    ForecastLearningSummaryResponse,
-    ForecastMetricSummaryResponse,
-    ForecastSnapshotResponse,
-)
+
+from app.schemas.forecast_learning import ForecastLearningRecentResponse, ForecastLearningSummaryResponse, ForecastMetricSummaryResponse, ForecastSnapshotResponse
 from energy_core.db.repositories import SiteRepository
 from energy_core.forecast_learning.service import ForecastLearningService
 from energy_core.forecast_learning.types import ForecastKind

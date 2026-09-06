@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from energy_core.chargers.chargeamps_config import (
+from energy_core.integrations.chargeamps.config import (
     assert_chargeamps_production_safe,
     build_chargeamps_connection_info,
 )

@@ -4,7 +4,7 @@ import sys
 
 from energy_core.config import Settings
 from energy_core.db.session import create_engine, create_session_factory
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 SYSTEM_ID = "ec892788-0a43-46a4-bd25-b4bbc22ab6e3"
 

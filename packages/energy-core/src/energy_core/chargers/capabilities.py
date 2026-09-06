@@ -1,16 +1,7 @@
-"""Charger capability model."""
+"""Charger capability model (canonical framework re-export)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from energy_core.chargers.framework.models import ChargerCapabilities
 
-
-@dataclass(frozen=True, slots=True)
-class ChargerCapabilities:
-    min_current_a: float
-    max_current_a: float
-    phases: int | None
-    supports_current_control: bool
-    supports_remote_start_stop: bool
-    supports_power_reading: bool
-    supports_dynamic_phases: bool
+__all__ = ["ChargerCapabilities"]

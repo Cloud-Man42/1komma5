@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.chargers.meter_adapter import ChargeAmpsMeterAdapter
+from energy_core.integrations.chargeamps.meter_factory import meter_reader_for_charger
 from energy_core.db.chargefinder_integration_status_repo import ChargeFinderIntegrationStatusRepository
 from energy_core.db.charging_location_repo import ChargingLocationRepository
 from energy_core.db.charging_station_lookup_cache_repo import ChargingStationLookupCacheRepository
@@ -16,11 +15,10 @@ from energy_core.db.charging_station_repo import ChargingStationRepository
 from energy_core.db.models import SiteModel
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
 from energy_core.ev_accounting.models import SiteEnergySample
-from energy_core.heartbeat.live_overview import parse_live_overview
+from energy_core.integrations.heartbeat.live_overview import parse_live_overview
 from energy_core.integrations.charging_stations.chargefinder.provider import ChargeFinderChargingStationProvider
 from energy_core.integrations.charging_stations.chargefinder_metrics import get_chargefinder_metrics
 from energy_core.integrations.charging_stations.models import StationResolutionStatus
-from energy_core.secrets import CredentialCipher
 from energy_core.vehicles.charging_intelligence.knowledge_base import ChargingLocationKnowledgeBase
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint
 from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
@@ -227,14 +225,26 @@ class VehicleChargeSessionCoordinator:
         return 1
 
     async def _meter_snapshot(self, charger):
-        api_key = CredentialCipher().decrypt(charger.chargeamps_api_key) or os.getenv("CHARGEAMPS_API_KEY", "")
-        meter_adapter = ChargeAmpsMeterAdapter.build(
-            charger.chargeamp_charger_id,
-            api_key=api_key,
-            phases=charger.phases,
-            nominal_voltage_v=charger.nominal_voltage_v,
-        )
-        return await meter_adapter.get_snapshot()
+        reader = meter_reader_for_charger(charger)
+        if reader is None:
+            from energy_core.contracts.devices.meter import MeterSnapshot
+            from datetime import UTC, datetime
+
+            return MeterSnapshot(
+                recorded_at=datetime.now(UTC),
+                cumulative_kwh=None,
+                power_w=None,
+                configured_current_a=None,
+                actual_charging_current_a=None,
+                is_charging=False,
+                vehicle_connected=False,
+                ocpp_status="",
+                phase_current_l1_a=None,
+                phase_current_l2_a=None,
+                phase_current_l3_a=None,
+                energy_source="unavailable",
+            )
+        return await reader.get_snapshot()
 
     def _energy_sample_from_overview(self, live_overview: dict | None, site: SiteModel) -> SiteEnergySample:
         duration_hours = 60.0 / 3600.0

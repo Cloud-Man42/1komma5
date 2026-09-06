@@ -3,18 +3,9 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.deps import get_app_settings, get_db_session, get_reading_repository, get_site_repository
-from app.schemas import (
-    AggregatedReadingResponse,
-    FinancialStatResponse,
-    FinancialStatsResponse,
-    ForecastValuesResponse,
-    HistoryResponse,
-    MonthlyForecastResponse,
-    PeakReadingResponse,
-    PeaksResponse,
-    ReadingResponse,
-    YearForecastResponse,
-)
+
+from app.schemas.readings import AggregatedReadingResponse, FinancialStatResponse, FinancialStatsResponse, ForecastValuesResponse, HistoryResponse, MonthlyForecastResponse, PeakReadingResponse, PeaksResponse, YearForecastResponse
+from app.schemas.sites import ReadingResponse
 from energy_core.db.repositories import (
     EnergyReadingRepository,
     HistoricalEnergyRepository,

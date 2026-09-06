@@ -2049,6 +2049,7 @@ export interface SpaHistory {
 
 export interface SpaHealth {
   consumer_id: number;
+  health_status: string;
   api_status: string;
   spa_status: string;
   polling_status: string;
@@ -2568,6 +2569,7 @@ export interface StationCandidate {
 
 export interface ChargeFinderStatusResponse {
   health_status: string;
+  unified_health_status: string;
   enabled: boolean;
   mode: string;
   search_radius_m: number;
@@ -2702,6 +2704,7 @@ export interface VehicleIntegrationEvent {
 export interface VehicleIntegrationDiagnosticsResponse {
   site_slug: string;
   health_status: string;
+  unified_health_status: string;
   connection_state: string;
   last_success_at?: string | null;
   last_failure_at?: string | null;
@@ -2972,6 +2975,7 @@ export interface PerformanceCenterMetrics {
 export interface IntegrationHealthProvider {
   provider: string;
   status: string;
+  health_status: string;
   last_success_at: string | null;
   last_attempt_at: string | null;
   latency_ms: number | null;
@@ -2983,6 +2987,7 @@ export interface IntegrationHealthProvider {
 
 export interface IntegrationHealthResponse {
   slug: string;
+  overall_health_status: string;
   providers: IntegrationHealthProvider[];
 }
 

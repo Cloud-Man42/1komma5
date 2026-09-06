@@ -458,6 +458,289 @@
   margin-bottom: 0.85rem;
 }
 
+/* ── Battery advisor card ── */
+.idash-advisor-card {
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(12, 10, 28, 0.98));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.idash-advisor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.idash-advisor-header h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #c4b5fd;
+}
+
+.idash-advisor-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.idash-advisor-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  white-space: nowrap;
+}
+
+.idash-advisor-action {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  min-height: 44px;
+}
+
+.idash-advisor-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: #a78bfa;
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.65);
+}
+
+.idash-advisor-action strong {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: #ede9fe;
+}
+
+.idash-advisor-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.idash-advisor-metrics div {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.idash-advisor-metrics span {
+  display: block;
+  font-size: 0.62rem;
+  color: #64748b;
+}
+
+.idash-advisor-metrics strong {
+  font-size: 0.92rem;
+  color: #e2e8f0;
+}
+
+.idash-advisor-peak {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.idash-advisor-peak div {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.idash-advisor-peak span {
+  display: block;
+  font-size: 0.62rem;
+  color: #64748b;
+}
+
+.idash-advisor-peak strong {
+  font-size: 0.92rem;
+  color: #e2e8f0;
+}
+
+.idash-advisor-reason,
+.idash-advisor-empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.idash-advisor-empty {
+  padding: 0.75rem 0;
+  text-align: center;
+}
+
+/* ── Horizon optimizer card ── */
+.idash-horizon-card {
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(8, 18, 32, 0.98));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.idash-horizon-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.idash-horizon-header h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  color: #7dd3fc;
+}
+
+.idash-horizon-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.idash-horizon-summary {
+  margin-bottom: 0.85rem;
+}
+
+.idash-horizon-summary strong {
+  display: block;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: #e0f2fe;
+  margin-bottom: 0.35rem;
+}
+
+.idash-horizon-summary p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.idash-horizon-savings {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: #bae6fd;
+}
+
+.idash-horizon-savings strong {
+  display: inline;
+  font-size: inherit;
+  color: #7dd3fc;
+}
+
+.idash-horizon-load-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.idash-horizon-load-card {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.idash-horizon-load-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.idash-horizon-load-head strong {
+  font-size: 0.88rem;
+  color: #e2e8f0;
+}
+
+.idash-horizon-load-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.idash-horizon-load-window {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+}
+
+.idash-horizon-load-detail {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.idash-horizon-load-detail strong {
+  color: #94a3b8;
+}
+
+.idash-horizon-battery {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.18);
+}
+
+.idash-horizon-battery-label {
+  margin: 0 0 0.25rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: #a78bfa;
+}
+
+.idash-horizon-battery strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #ede9fe;
+  margin-bottom: 0.2rem;
+}
+
+.idash-horizon-battery p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.idash-horizon-empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.45;
+  text-align: center;
+  padding: 0.75rem 0;
+}
+
 .idash-sidebar-nav {
   display: flex;
   flex-direction: column;

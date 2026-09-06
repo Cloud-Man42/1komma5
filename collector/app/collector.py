@@ -8,30 +8,31 @@ import signal
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from energy_core.chargers.chargeamps_config import assert_chargeamps_production_safe
+from energy_core.integrations.chargeamps.config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
 from energy_core.config import get_settings
+from energy_core.platform.events import get_event_bus, register_default_subscribers
+from energy_core.platform.events.site_refresh import drain_dirty_site_ids, mark_site_dirty
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.repositories import (
     EnergyReadingRepository,
     SiteRepository,
 )
+from energy_core.db.ev_charger_repo import EvChargerRepository
+from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.ev_accounting import EVAccountingCoordinator
 from energy_core.consumer_accounting import ConsumerAccountingCoordinator
-from energy_core.integrations.arctic_spa.polling import ArcticSpaPollingService
+from energy_core.integrations.arctic_spa.factory import build_arctic_spa_polling_service
 from energy_core.spa_energy.service import SmartSpaEnergyService
 from energy_core.energy_balance.coordinator import EnergyBalanceCoordinator
-from energy_core.heartbeat.bridge.decision_engine import VirtualChargerDecisionEngine
-from energy_core.heartbeat.bridge.constraints import BridgeConstraints
-from energy_core.db.ev_charger_repo import EvChargerRepository
-from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.bridge import BridgeConstraints, VirtualChargerDecisionEngine
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 from energy_core.domain import reading_is_actionable
 from energy_core.normalization import normalize_reading
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
-from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
+from energy_core.platform.forecasting import build_solar_forecast_coordinator
 from energy_core.aggregation.service import EnergyAggregationService
 from energy_core.snapshots.writer import SnapshotWriter
 from energy_core.vehicles.sessions.coordinator import VehicleChargeSessionCoordinator
@@ -52,9 +53,9 @@ class Collector:
         self._charging_engine = SmartChargingEngine()
         self._ev_accounting = EVAccountingCoordinator()
         self._consumer_accounting = ConsumerAccountingCoordinator()
-        self._spa_polling = ArcticSpaPollingService()
+        self._spa_polling = build_arctic_spa_polling_service()
         self._spa_energy = SmartSpaEnergyService(self._settings)
-        self._solar_forecast = SolarForecastCoordinator()
+        self._solar_forecast = build_solar_forecast_coordinator(self._settings)
         self._energy_balance = EnergyBalanceCoordinator()
         self._vehicle_supervisor = VehicleIntegrationSupervisor(self._session_factory, self._settings)
         self._vehicle_charge_sessions = VehicleChargeSessionCoordinator(self._settings)
@@ -64,6 +65,7 @@ class Collector:
         self._lane_tasks: list[asyncio.Task] = []
 
     async def setup(self) -> None:
+        register_default_subscribers(get_event_bus())
         assert_chargeamps_production_safe(app_env=self._settings.app_env.value)
         async with self._session_factory() as session:
             await seed_sites(session)
@@ -102,6 +104,7 @@ class Collector:
 
     async def run_fast_lane(self) -> None:
         reading_count = 0
+        reading_site_ids: set[int] = set()
         async with self._session_factory() as session:
             provider = await create_heartbeat_provider_from_db(session)
             heartbeat_readings = await provider.fetch_readings()
@@ -119,9 +122,12 @@ class Collector:
                     logger.warning("Unknown site slug %s, skipping", normalized.site_slug)
                     continue
                 await reading_repo.upsert_reading(site.id, normalized)
+                reading_site_ids.add(site.id)
+                mark_site_dirty(site.id)
                 reading_count += 1
             await session.commit()
 
+        bridge_count = 0
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
@@ -134,21 +140,25 @@ class Collector:
                     "energy_balance",
                     self._run_energy_balance(session, site_repo, live_overviews),
                 )
+                bridge_count = await self._run_lane(
+                    "fast",
+                    "smart_charging",
+                    self._charging_engine.run_cycle(session),
+                )
+                dirty_ids = drain_dirty_site_ids()
+                refresh_ids = dirty_ids | reading_site_ids
+                if refresh_ids:
+                    snapshot_sites = [site for site in sites if site.id in refresh_ids]
+                else:
+                    snapshot_sites = sites
                 await self._run_lane(
                     "fast",
                     "snapshot_write",
-                    self._snapshot_writer.write_all_sites(session, sites),
+                    self._snapshot_writer.write_sites(session, snapshot_sites),
                 )
                 await session.commit()
         except Exception:
             logger.exception("Collector fast lane failed")
-
-        bridge_count = 0
-        try:
-            async with self._session_factory() as session:
-                bridge_count = await self._charging_engine.run_cycle(session)
-        except Exception:
-            logger.exception("Smart charging cycle failed")
 
         logger.info("Fast lane: %d readings, smart charging processed %d chargers", reading_count, bridge_count)
 

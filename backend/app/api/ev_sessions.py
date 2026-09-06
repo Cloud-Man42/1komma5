@@ -5,12 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.deps import get_db_session
-from app.schemas import (
-    EvChargingIntervalResponse,
-    EvChargingSessionResponse,
-    EvChargingStatsResponse,
-    EvEnergySourcesResponse,
-)
+
+from app.schemas.ev import EvChargingIntervalResponse, EvChargingSessionResponse, EvChargingStatsResponse, EvEnergySourcesResponse
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.ev_interval_repo import EvChargingIntervalRepository
 from energy_core.db.ev_session_repo import EvChargingSessionRecord, EvChargingSessionRepository

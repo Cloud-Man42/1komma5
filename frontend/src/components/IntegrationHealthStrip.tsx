@@ -7,7 +7,7 @@ import { integrationProviderLabelSv } from "@/lib/integrationHealthLabels";
 
 function alertProviders(data: IntegrationHealthResponse): number {
   return data.providers.filter(
-    (row) => row.status !== "ok" || row.consecutive_failures >= 3,
+    (row) => row.health_status !== "healthy" || row.consecutive_failures >= 3,
   ).length;
 }
 
@@ -34,7 +34,7 @@ export function IntegrationHealthStrip({ siteSlug }: { siteSlug: string }) {
   }, [siteSlug]);
 
   const alerts = data ? alertProviders(data) : 0;
-  const worst = data?.providers.find((row) => row.status !== "ok" || row.consecutive_failures >= 3);
+  const worst = data?.providers.find((row) => row.health_status !== "healthy" || row.consecutive_failures >= 3);
 
   return (
     <div className="idash-health-strip" data-testid="integration-health-strip">
@@ -49,7 +49,7 @@ export function IntegrationHealthStrip({ siteSlug }: { siteSlug: string }) {
           ) : (
             <span className="idash-health-strip-warn" data-testid="integration-health-strip-alert">
               {alerts} integration(er) behöver uppmärksamhet
-              {worst ? ` — ${integrationProviderLabelSv(worst.provider)}: ${worst.status}` : ""}
+              {worst ? ` — ${integrationProviderLabelSv(worst.provider)}: ${worst.health_status}` : ""}
             </span>
           )}
           <Link href={`/sites/${siteSlug}/diagnostics`} className="idash-health-strip-link">

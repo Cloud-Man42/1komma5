@@ -2,29 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from energy_core.chargers.base import ChargerStatus
 from energy_core.chargers.capabilities import ChargerCapabilities
 from energy_core.chargers.client import DEFAULT_CONNECTOR_ID, ChargeAmpsClient
 from energy_core.chargers.errors import ChargerApiError
+from energy_core.contracts.charging.charger import ChargerAdapter
 from energy_core.chargers.vehicle_status import vehicle_connected_from_external_connector
 
 
-class ChargerAdapter(Protocol):
-    async def get_status(self) -> ChargerStatus: ...
-
-    async def start_charging(self) -> None: ...
-
-    async def stop_charging(self) -> None: ...
-
-    async def set_current(self, amps: float) -> None: ...
-
-    async def get_current(self) -> float: ...
-
-    async def get_power(self) -> float: ...
-
-    async def get_capabilities(self) -> ChargerCapabilities: ...
+__all__ = ["ChargerAdapter", "ChargeAmpsHaloAdapter", "build_halo_adapter"]
 
 
 class ChargeAmpsHaloAdapter:

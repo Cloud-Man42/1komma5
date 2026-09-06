@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from energy_core.db.models import SiteModel
 from energy_core.db.repositories import MarketPriceRepository, ReadingRecord
 from energy_core.ev_accounting.models import SiteEnergySample
-from energy_core.heartbeat.live_overview import parse_live_overview
+from energy_core.integrations.heartbeat.live_overview import parse_live_overview
 
 MAX_READING_AGE_SECONDS = 300.0
 

@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import logging
-import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository, _carries_telemetry
+from energy_core.integrations.mercedes.factory import build_mercedes_provider
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import VehicleState
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
-from energy_core.vehicles.mercedes.auth.errors import MercedesAuthError
-from energy_core.vehicles.mercedes.provider import MercedesProvider
+from energy_core.integrations.mercedes.auth import MercedesAuthError
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +51,7 @@ class VehicleSyncService:
         if token_bundle is None:
             raise VehicleSyncError("Mercedes is not authenticated", code="not_authenticated")
 
-        provider = MercedesProvider(
-            region=row.region,
-            device_guid=row.device_guid or str(uuid.uuid4()),
-            token_bundle=token_bundle,
-        )
+        provider = build_mercedes_provider(row, token_bundle=token_bundle)
         enabled_vehicles = await self._vehicle_repo.list_for_site(site_id)
         enabled_vins = tuple(
             (vehicle.vin or vehicle.external_id)
