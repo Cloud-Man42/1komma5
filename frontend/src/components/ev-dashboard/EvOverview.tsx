@@ -23,6 +23,7 @@ import type { EvStatsPeriod } from "./evDashboardHelpers";
 import { EV_SECTION_LABELS } from "./evSection";
 import { useEvDashboardData } from "./useEvDashboardData";
 import { useEvSection } from "./useEvSection";
+import { EvDiagnosticsPanel } from "./EvDiagnosticsPanel";
 
 const EvPowerPanel = dynamic(
   () => import("./EvPanels").then((mod) => ({ default: mod.EvPowerPanel })),
@@ -143,9 +144,12 @@ export function EvOverview({ siteSlug }: { siteSlug: string }) {
         );
       case "diagnostics":
         return (
-          <EvPlaceholderSection
-            title="DIAGNOSTIK"
-            text="Detaljerad bridge- och energibalansdiagnostik finns i konfigurationsvyn."
+          <EvDiagnosticsPanel
+            siteSlug={siteSlug}
+            chargerId={charger.id}
+            bridge={data.bridge}
+            reasoning={data.reasoning}
+            refreshSeconds={data.refreshSeconds}
           />
         );
       default:

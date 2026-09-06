@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from energy_core.config import Settings
-from energy_core.energy_control.chargeamps_provider import ChargeAmpsControlProvider
+from energy_core.integrations.chargeamps.control_provider import ChargeAmpsControlProvider
 from energy_core.energy_control.heartbeat_provider import HeartbeatControlProvider
 from energy_core.energy_control.provider_factory import resolve_control_provider
 

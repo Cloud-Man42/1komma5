@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
-
-def test_heartbeat_client_factory_facade():
-    from energy_core.heartbeat_client_factory import create_heartbeat_client as shim
-    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client as direct
-
-    assert shim is direct
+from pathlib import Path
 
 
-def test_heartbeat_legacy_shims_reexport_integration():
-    from energy_core import heartbeat_auth as auth_shim
-    from energy_core import heartbeat_client as client_shim
-    from energy_core import heartbeat_connection as connection_shim
+def test_heartbeat_integration_modules_are_canonical() -> None:
     from energy_core.integrations.heartbeat import auth, client, connection
+    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
-    assert auth_shim.fetch_bearer_token is auth.fetch_bearer_token
-    assert client_shim.HeartbeatClient is client.HeartbeatClient
-    assert connection_shim.CLOUD_HOST is connection.CLOUD_HOST
+    assert callable(auth.fetch_bearer_token)
+    assert client.HeartbeatClient is not None
+    assert connection.CLOUD_HOST
+    assert callable(create_heartbeat_client)
+
+
+def test_legacy_heartbeat_shim_modules_removed() -> None:
+    repo = Path(__file__).resolve().parents[4]
+    legacy = [
+        "packages/energy-core/src/energy_core/heartbeat_auth.py",
+        "packages/energy-core/src/energy_core/heartbeat_config.py",
+        "packages/energy-core/src/energy_core/heartbeat_connection.py",
+        "packages/energy-core/src/energy_core/heartbeat_client_factory.py",
+        "packages/energy-core/src/energy_core/heartbeat_client.py",
+    ]
+    for rel in legacy:
+        assert not (repo / rel).exists(), rel
 
 
 def test_collector_imports_heartbeat_integration_not_vendor_package():

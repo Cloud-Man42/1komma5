@@ -12,7 +12,7 @@ from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.heartbeat.bridge.emic_context import enrich_discovery_with_emic_vehicles
 from energy_core.heartbeat.discovery.models import BridgeLifecycleState, HeartbeatEvDiscoveryResult
 from energy_core.heartbeat.discovery.service import HeartbeatEvDiscoveryService
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 
 class HeartbeatEvBridgeService:

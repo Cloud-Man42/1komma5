@@ -17,11 +17,16 @@ def test_meter_adapter_builds_from_integration_package():
     assert adapter.charger_id == "test-charger"
 
 
-def test_chargeamps_legacy_shims_reexport_integration():
-    from energy_core.chargers import charge_amps as legacy
-    from energy_core.chargers import charge_amps_web as legacy_web
-    from energy_core.integrations.chargeamps import controller as canonical
-    from energy_core.integrations.chargeamps import web_controller as canonical_web
+def test_chargeamps_legacy_shim_modules_removed() -> None:
+    from pathlib import Path
 
-    assert legacy.build_chargeamps_controller is canonical.build_chargeamps_controller
-    assert legacy_web.ChargeAmpsWebController is canonical_web.ChargeAmpsWebController
+    repo = Path(__file__).resolve().parents[4]
+    legacy = [
+        "packages/energy-core/src/energy_core/chargers/charge_amps.py",
+        "packages/energy-core/src/energy_core/chargers/charge_amps_web.py",
+        "packages/energy-core/src/energy_core/chargers/meter_adapter.py",
+        "packages/energy-core/src/energy_core/chargers/chargeamps_config.py",
+        "packages/energy-core/src/energy_core/energy_control/chargeamps_provider.py",
+    ]
+    for rel in legacy:
+        assert not (repo / rel).exists(), rel

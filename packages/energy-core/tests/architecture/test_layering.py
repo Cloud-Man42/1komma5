@@ -47,11 +47,6 @@ BASELINE_CHARGEAMPS_IMPORTS_OUTSIDE_VENDOR: frozenset[str] = frozenset()
 
 HEARTBEAT_LEGACY_SHIM_FILES: frozenset[str] = frozenset(
     {
-        "packages/energy-core/src/energy_core/heartbeat_auth.py",
-        "packages/energy-core/src/energy_core/heartbeat_config.py",
-        "packages/energy-core/src/energy_core/heartbeat_connection.py",
-        "packages/energy-core/src/energy_core/heartbeat_client_factory.py",
-        "packages/energy-core/src/energy_core/heartbeat_client.py",
         "packages/energy-core/src/energy_core/sungrow/heartbeat_provider.py",
     }
 )

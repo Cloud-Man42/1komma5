@@ -2,7 +2,7 @@
 
 import pytest
 
-from energy_core.chargers.charge_amps_web import _current_param
+from energy_core.integrations.chargeamps.web_controller import _current_param
 
 
 @pytest.mark.parametrize(

@@ -17,7 +17,7 @@ from energy_core.heartbeat.discovery.models import (
 from energy_core.heartbeat.discovery.observing_client import ObservingHeartbeatClient
 from energy_core.heartbeat.discovery.report import generate_discovery_report
 from energy_core.heartbeat.field_discovery import discover_relevant_fields
-from energy_core.heartbeat_client import HeartbeatClient, map_ev_live_state
+from energy_core.integrations.heartbeat.client import HeartbeatClient, map_ev_live_state
 
 KNOWN_MODES = frozenset({"SMART_CHARGE", "SOLAR_CHARGE", "QUICK_CHARGE", "PRICE_CHARGE", "PAUSED"})
 

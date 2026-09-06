@@ -18,6 +18,12 @@ const mockFetchEnergyReasoning = vi.fn();
 const mockFetchSiteDashboard = vi.fn();
 const mockFetchSiteEnergyConfig = vi.fn();
 const mockControlEvCharger = vi.fn();
+const mockFetchEnergyBalance = vi.fn();
+const mockUseEvSection = vi.fn(() => ({ section: "overview" as const }));
+
+vi.mock("./useEvSection", () => ({
+  useEvSection: () => mockUseEvSection(),
+}));
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -30,6 +36,7 @@ vi.mock("@/lib/api", async () => {
     fetchEvChargingStats: (...args: unknown[]) => mockFetchEvChargingStats(...args),
     fetchEvChargingSessions: (...args: unknown[]) => mockFetchEvChargingSessions(...args),
     fetchEnergyBalanceHistory: (...args: unknown[]) => mockFetchEnergyBalanceHistory(...args),
+    fetchEnergyBalance: (...args: unknown[]) => mockFetchEnergyBalance(...args),
     fetchEnergyReasoning: (...args: unknown[]) => mockFetchEnergyReasoning(...args),
     fetchSiteDashboard: (...args: unknown[]) => mockFetchSiteDashboard(...args),
     fetchSiteEnergyConfig: (...args: unknown[]) => mockFetchSiteEnergyConfig(...args),
@@ -44,6 +51,32 @@ vi.mock("@/lib/useDashboardRefresh", () => ({
 const charger = makeEvCharger({ power_w: 0, deadline_at: "2026-08-24T08:00:00Z" });
 
 beforeEach(() => {
+  mockUseEvSection.mockReturnValue({ section: "overview" });
+  mockFetchEnergyBalance.mockResolvedValue({
+    charger_id: 1,
+    recorded_at: new Date().toISOString(),
+    status: "OK",
+    flags: [],
+    inverter_display_name: "Sungrow",
+    sungrow_pv_power_w: 1000,
+    sungrow_load_power_w: 800,
+    sungrow_grid_import_w: 0,
+    sungrow_grid_export_w: 200,
+    sungrow_battery_charge_w: null,
+    sungrow_battery_discharge_w: null,
+    sungrow_battery_soc_pct: 60,
+    sungrow_fresh: true,
+    sungrow_telemetry_age_seconds: 5,
+    halo_power_w: 0,
+    virtual_evse_reported_power_w: 0,
+    heartbeat_observed_ev_power_w: 0,
+    heartbeat_home_consumption_w: 800,
+    non_ev_house_load_w: 800,
+    non_ev_house_load_reason: null,
+    residual_w: null,
+    alignment_delta_seconds: 1,
+    energy_flow_line: "Sol → hus",
+  });
   mockControlEvCharger.mockResolvedValue(charger);
   mockFetchEvChargers.mockResolvedValue([charger]);
   mockFetchEvBridgeStatus.mockResolvedValue({
@@ -315,6 +348,14 @@ describe("EvOverview", () => {
         target_soc_pct: 80,
       }));
     });
+  });
+
+  it("shows diagnostics panel in diagnostik section", async () => {
+    mockUseEvSection.mockReturnValue({ section: "diagnostics" });
+    render(<EvOverview siteSlug="akarp" />);
+    expect(await screen.findByTestId("ev-diagnostics-panel")).toBeTruthy();
+    expect(screen.getByText(/BRIDGE & ENERGIBALANS/i)).toBeTruthy();
+    expect(mockFetchEnergyBalance).toHaveBeenCalledWith("akarp", 1);
   });
 
   it("shows empty state without chargers", async () => {

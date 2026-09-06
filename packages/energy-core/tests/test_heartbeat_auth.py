@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from energy_core.heartbeat_auth import (
+from energy_core.integrations.heartbeat.auth import (
     HeartbeatAuthError,
     fetch_bearer_token,
     jwt_expires_at,

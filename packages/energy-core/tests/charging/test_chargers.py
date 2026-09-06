@@ -6,12 +6,12 @@ import httpx
 import pytest
 
 from energy_core.chargers.base import ChargerStatus
-from energy_core.chargers.charge_amps import (
+from energy_core.integrations.chargeamps.controller import (
     ChargeAmpsExternalController,
     ChargeAmpsHaloController,
     build_chargeamps_controller,
 )
-from energy_core.chargers.charge_amps_web import ChargeAmpsWebController, _valid_rfid_tag
+from energy_core.integrations.chargeamps.web_controller import ChargeAmpsWebController, _valid_rfid_tag
 from energy_core.chargers.mock import MockChargeAmpsController
 
 

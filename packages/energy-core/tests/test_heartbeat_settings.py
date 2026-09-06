@@ -2,8 +2,8 @@ import pytest
 from datetime import UTC, datetime
 
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRecord, HeartbeatSettingsRepository
-from energy_core.heartbeat_config import build_heartbeat_connection_info
-from energy_core.heartbeat_connection import (
+from energy_core.integrations.heartbeat.config import build_heartbeat_connection_info
+from energy_core.integrations.heartbeat.connection import (
     HeartbeatConnectionType,
     build_heartbeat_api_url,
     connection_type_label,

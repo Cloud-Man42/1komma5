@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from energy_core.heartbeat_client import HeartbeatClient
+from energy_core.integrations.heartbeat.client import HeartbeatClient
 
 
 class HeartbeatWriteClient:

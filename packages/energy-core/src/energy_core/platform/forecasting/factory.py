@@ -17,6 +17,16 @@ def build_solar_intelligence_coordinator(settings: Settings) -> SolarIntelligenc
     return SolarIntelligenceCoordinator(settings)
 
 
+def build_active_forecast_coordinator(
+    settings: Settings,
+    *,
+    solar_intelligence_enabled: bool,
+) -> SolarForecastCoordinator | SolarIntelligenceCoordinator:
+    if solar_intelligence_enabled:
+        return build_solar_intelligence_coordinator(settings)
+    return build_solar_forecast_coordinator(settings)
+
+
 def build_solar_geometry_service(
     *,
     latitude: float,
@@ -34,6 +44,7 @@ __all__ = [
     "SolarForecastCoordinator",
     "SolarGeometryService",
     "SolarIntelligenceCoordinator",
+    "build_active_forecast_coordinator",
     "build_solar_forecast_coordinator",
     "build_solar_geometry_service",
     "build_solar_intelligence_coordinator",

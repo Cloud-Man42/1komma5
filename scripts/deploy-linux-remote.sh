@@ -23,6 +23,29 @@ if [ ! -f .env ]; then
 fi
 
 grep -q '^WIDGET_STALE_SECONDS=' .env 2>/dev/null || echo WIDGET_STALE_SECONDS=120 >> .env
+
+# Ensure Caddy TLS domain and LAN fallback on existing deployments.
+if [ -n "$SERVER" ]; then
+  if echo "$SERVER" | grep -Eq '^[0-9.]+$'; then
+    if grep -q '^CADDY_LAN_HOST=' .env 2>/dev/null; then
+      sed -i "s/^CADDY_LAN_HOST=.*/CADDY_LAN_HOST=${SERVER}/" .env
+    else
+      echo "CADDY_LAN_HOST=${SERVER}" >> .env
+    fi
+    if grep -q '^CADDY_DOMAIN=' .env 2>/dev/null; then
+      sed -i 's/^CADDY_DOMAIN=.*/CADDY_DOMAIN=emic.inacloud.se/' .env
+    else
+      echo "CADDY_DOMAIN=emic.inacloud.se" >> .env
+    fi
+  else
+    if grep -q '^CADDY_DOMAIN=' .env 2>/dev/null; then
+      sed -i "s/^CADDY_DOMAIN=.*/CADDY_DOMAIN=${SERVER}/" .env
+    else
+      echo "CADDY_DOMAIN=${SERVER}" >> .env
+    fi
+  fi
+fi
+
 grep -q '^WIDGET_SNAPSHOT_CACHE_SECONDS=' .env 2>/dev/null || echo WIDGET_SNAPSHOT_CACHE_SECONDS=15 >> .env
 grep -q '^WIDGET_SAVINGS_CACHE_SECONDS=' .env 2>/dev/null || echo WIDGET_SAVINGS_CACHE_SECONDS=300 >> .env
 grep -q '^WIDGET_RATE_LIMIT_PER_MINUTE=' .env 2>/dev/null || echo WIDGET_RATE_LIMIT_PER_MINUTE=60 >> .env

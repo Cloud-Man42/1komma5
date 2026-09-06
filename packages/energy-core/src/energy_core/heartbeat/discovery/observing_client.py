@@ -16,7 +16,7 @@ from energy_core.heartbeat.discovery.schema_fingerprint import (
     schema_fingerprint,
     unknown_fields,
 )
-from energy_core.heartbeat_client import HeartbeatClient
+from energy_core.integrations.heartbeat.client import HeartbeatClient
 
 
 class ObservingHeartbeatClient:

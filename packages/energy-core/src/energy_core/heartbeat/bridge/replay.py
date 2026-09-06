@@ -11,7 +11,7 @@ from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.heartbeat.bridge.constraints import BridgeConstraints
 from energy_core.heartbeat.bridge.decision_engine import VirtualChargerDecisionEngine
-from energy_core.heartbeat_client_factory import create_heartbeat_client
+from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 
 
 class VirtualChargerReplayService:

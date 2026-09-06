@@ -7,11 +7,6 @@ from energy_core.contracts.devices.meter import (
     integrate_power_kwh,
     session_energy_from_meter,
 )
-from energy_core.chargers.meter_adapter import (
-    MeterSnapshot as ShimMeterSnapshot,
-    integrate_power_kwh as shim_integrate,
-    session_energy_from_meter as shim_session_energy,
-)
 
 
 def test_session_energy_from_meter_positive_delta() -> None:
@@ -31,7 +26,7 @@ def test_integrate_power_kwh() -> None:
     assert integrate_power_kwh(0.0, 1.0) == 0.0
 
 
-def test_meter_snapshot_shim_reexport() -> None:
+def test_meter_snapshot_dataclass() -> None:
     snapshot = MeterSnapshot(
         recorded_at=datetime.now(UTC),
         cumulative_kwh=1.0,
@@ -46,7 +41,4 @@ def test_meter_snapshot_shim_reexport() -> None:
         phase_current_l3_a=None,
         energy_source="meter",
     )
-    assert ShimMeterSnapshot is MeterSnapshot
-    assert shim_integrate(1000.0, 1.0) == integrate_power_kwh(1000.0, 1.0)
-    assert shim_session_energy(1.0, 2.0) == session_energy_from_meter(1.0, 2.0)
     assert snapshot.energy_source == "meter"

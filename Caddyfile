@@ -27,9 +27,8 @@
 	}
 }
 
-# Primary site — HTTPS on the FQDN.
+# Primary site — HTTPS on the FQDN (Let's Encrypt when ports 80+443 are reachable).
 {$CADDY_DOMAIN:localhost} {
-	tls internal
 	import emic_app
 
 	header {

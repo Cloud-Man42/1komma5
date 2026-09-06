@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from energy_core.charging.command_controller import CommandApplyResult
-from energy_core.energy_control.chargeamps_provider import ChargeAmpsControlProvider
+from energy_core.integrations.chargeamps.control_provider import ChargeAmpsControlProvider
 from energy_core.energy_control.types import ControlOutcome, ControlTarget
 from energy_core.energy_optimizer.types import EnergyAction
 
