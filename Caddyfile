@@ -27,13 +27,13 @@
 	}
 }
 
-# Primary site — HTTPS on the FQDN (Let's Encrypt when ports 80+443 are reachable).
+# Primary site — HTTPS on the FQDN.
+# Use Caddy's internal CA until emic.inacloud.se has a public A-record and ports
+# 80+443 are reachable from the internet; then switch to automatic Let's Encrypt
+# by replacing "tls internal" with no tls directive (or set CADDY_TLS=auto).
 {$CADDY_DOMAIN:localhost} {
+	tls internal
 	import emic_app
-
-	header {
-		Strict-Transport-Security "max-age=31536000;"
-	}
 }
 
 # Redirect plain HTTP on the FQDN to HTTPS.
