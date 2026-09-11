@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.integrations.chargeamps.meter_factory import meter_reader_for_charger
+from energy_core.chargers.framework.meter_factory import MeterReaderFactory
 from energy_core.db.chargefinder_integration_status_repo import ChargeFinderIntegrationStatusRepository
 from energy_core.db.charging_location_repo import ChargingLocationRepository
 from energy_core.db.charging_station_lookup_cache_repo import ChargingStationLookupCacheRepository
@@ -15,10 +15,12 @@ from energy_core.db.charging_station_repo import ChargingStationRepository
 from energy_core.db.models import SiteModel
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository
 from energy_core.ev_accounting.models import SiteEnergySample
-from energy_core.integrations.heartbeat.live_overview import parse_live_overview
-from energy_core.integrations.charging_stations.chargefinder.provider import ChargeFinderChargingStationProvider
-from energy_core.integrations.charging_stations.chargefinder_metrics import get_chargefinder_metrics
-from energy_core.integrations.charging_stations.models import StationResolutionStatus
+from energy_core.energy.live_overview import parse_live_overview
+from energy_core.providers.charging_stations import (
+    ChargeFinderChargingStationProvider,
+    StationResolutionStatus,
+    get_chargefinder_metrics,
+)
 from energy_core.vehicles.charging_intelligence.knowledge_base import ChargingLocationKnowledgeBase
 from energy_core.vehicles.charging_intelligence.location import HaloCorrelationHint
 from energy_core.vehicles.charging_intelligence.service import ChargingSessionService
@@ -225,7 +227,7 @@ class VehicleChargeSessionCoordinator:
         return 1
 
     async def _meter_snapshot(self, charger):
-        reader = meter_reader_for_charger(charger)
+        reader = MeterReaderFactory.from_charger_model(charger)
         if reader is None:
             from energy_core.contracts.devices.meter import MeterSnapshot
             from datetime import UTC, datetime

@@ -943,7 +943,7 @@ export async function readApiError(res: Response): Promise<string> {
 }
 
 export async function fetchSites(): Promise<Site[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch sites: ${res.status}`);
   return res.json();
 }
@@ -960,7 +960,7 @@ export async function fetchSiteHistory(
     to: to.toISOString(),
     bucket: String(bucket),
   });
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/readings?${params}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/readings?${params}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to fetch history: ${res.status}`);
@@ -974,7 +974,7 @@ export async function fetchSitePeaks(
 ): Promise<PeaksResponse> {
   const params = new URLSearchParams({ period });
   if (year !== undefined) params.set("year", String(year));
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/peaks?${params}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/peaks?${params}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to fetch peak values: ${res.status}`);
@@ -988,7 +988,7 @@ export async function fetchFinancialStats(
 ): Promise<FinancialStatsResponse> {
   const params = new URLSearchParams({ period });
   if (year !== undefined) params.set("year", String(year));
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/financial-stats?${params}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/financial-stats?${params}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to fetch financial statistics: ${res.status}`);
@@ -999,7 +999,7 @@ export async function fetchYearForecast(
   slug: string,
   year: number,
 ): Promise<YearForecastResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/forecast?year=${year}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/forecast?year=${year}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to fetch forecast: ${res.status}`);
@@ -1027,7 +1027,7 @@ export async function fetchMarketPrices(
     to: to.toISOString(),
     resolution: "1h",
   });
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/market-prices?${params}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/market-prices?${params}`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1038,7 +1038,7 @@ export async function fetchMarketPrices(
 }
 
 export async function fetchHeartbeatAuditToday(slug: string): Promise<HeartbeatAuditDaily> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat-audit/today`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat-audit/today`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1051,7 +1051,7 @@ export async function fetchHeartbeatAuditToday(slug: string): Promise<HeartbeatA
 export async function fetchHeartbeatAuditMonth(slug: string, month?: string): Promise<HeartbeatAuditMonthly> {
   const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat-audit/month`);
   if (month) url.searchParams.set("month", month);
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await adminFetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(detail || `Failed to fetch heartbeat audit month: ${res.status}`);
@@ -1065,7 +1065,7 @@ export async function fetchForecastLearningSummary(
 ): Promise<ForecastLearningSummary> {
   const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/forecast-learning/summary`);
   url.searchParams.set("days", String(days));
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await adminFetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(detail || `Failed to fetch forecast learning summary: ${res.status}`);
@@ -1081,7 +1081,7 @@ export async function fetchForecastLearningRecent(
   const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/forecast-learning/recent`);
   url.searchParams.set("days", String(days));
   if (kind) url.searchParams.set("kind", kind);
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await adminFetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(detail || `Failed to fetch forecast learning recent: ${res.status}`);
@@ -1090,7 +1090,7 @@ export async function fetchForecastLearningRecent(
 }
 
 export async function fetchEnergyControlStatus(slug: string): Promise<EnergyControlStatus> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/status`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/status`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1121,7 +1121,7 @@ export async function previewEnergyControlAction(
   action: string,
   target = "site",
 ): Promise<EnergyControlResult> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/preview`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, target }),
@@ -1156,7 +1156,7 @@ export async function fetchEnergyControlRecent(
 ): Promise<EnergyControlRecent> {
   const url = new URL(`${getApiBaseUrl()}/api/sites/${slug}/energy-control/recent`);
   url.searchParams.set("limit", String(limit));
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const res = await adminFetch(url.toString(), { cache: "no-store" });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(detail || `Failed to fetch energy control recent: ${res.status}`);
@@ -1165,7 +1165,7 @@ export async function fetchEnergyControlRecent(
 }
 
 export async function fetchEnergyStrategyCurrent(slug: string): Promise<EnergyStrategyCurrent> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-strategy/current`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-strategy/current`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1176,7 +1176,7 @@ export async function fetchEnergyStrategyCurrent(slug: string): Promise<EnergySt
 }
 
 export async function fetchBatteryOpportunity(slug: string): Promise<BatteryOpportunity> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/battery-opportunity`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/battery-opportunity`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1187,7 +1187,7 @@ export async function fetchBatteryOpportunity(slug: string): Promise<BatteryOppo
 }
 
 export async function fetchHorizonOptimizer(slug: string): Promise<HorizonOptimizerPlan> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/horizon-optimizer`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/horizon-optimizer`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1203,7 +1203,7 @@ export async function fetchPriceEngineToday(slug: string): Promise<{
   day: string;
   periods: PricePeriodSnapshot[];
 }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/price-engine/today`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/price-engine/today`, {
     cache: "no-store",
   });
   if (!res.ok) {
@@ -1213,7 +1213,7 @@ export async function fetchPriceEngineToday(slug: string): Promise<{
 }
 
 export async function fetchHeartbeatConfig(): Promise<HeartbeatConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/system/heartbeat-config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-config`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Failed to fetch heartbeat config: ${res.status}`);
@@ -1259,13 +1259,13 @@ export async function fetchAdminAuditLog(limit = 50): Promise<AdminAuditLog> {
 }
 
 export async function fetchChargeAmpsConfig(): Promise<ChargeAmpsConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/system/chargeamps-config`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/chargeamps-config`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch Charge Amps config: ${res.status}`);
   return res.json();
 }
 
 export async function fetchChargingReadiness(): Promise<ChargingReadiness> {
-  const res = await fetch(`${getApiBaseUrl()}/api/system/charging-readiness`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/charging-readiness`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch charging readiness: ${res.status}`);
   return res.json();
 }
@@ -1314,7 +1314,7 @@ export async function deleteSite(slug: string): Promise<void> {
 }
 
 export async function fetchEvChargers(slug: string): Promise<EvCharger[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/ev-chargers`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -1390,13 +1390,13 @@ export async function syncEvChargers(slug: string): Promise<EvCharger[]> {
 }
 
 export async function fetchChargerManufacturers(): Promise<ChargerManufacturer[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/chargers/manufacturers`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/chargers/manufacturers`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchChargerModels(manufacturerId: string): Promise<ChargerCatalogModel[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/chargers/manufacturers/${manufacturerId}/models`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/chargers/manufacturers/${manufacturerId}/models`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -1407,7 +1407,7 @@ export async function fetchChargerModelDetail(
   manufacturerId: string,
   modelId: string,
 ): Promise<ChargerModelDetail> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/chargers/manufacturers/${manufacturerId}/models/${modelId}`,
     { cache: "no-store" },
   );
@@ -1416,7 +1416,7 @@ export async function fetchChargerModelDetail(
 }
 
 export async function fetchChargerManufacturer(manufacturerId: string): Promise<ChargerManufacturer> {
-  const res = await fetch(`${getApiBaseUrl()}/api/chargers/manufacturers/${manufacturerId}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/chargers/manufacturers/${manufacturerId}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -1424,13 +1424,13 @@ export async function fetchChargerManufacturer(manufacturerId: string): Promise<
 }
 
 export async function fetchChargerFeatureMatrix(): Promise<ChargerFeatureMatrixRow[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/chargers/feature-matrix`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/chargers/feature-matrix`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchChargerIntegrationMethods(): Promise<ChargerIntegrationMethod[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/chargers/integration-methods`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/chargers/integration-methods`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -1515,7 +1515,7 @@ export async function fetchEvBridgeStatus(
   slug: string,
   chargerId: number,
 ): Promise<EvBridgeStatus> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/bridge-status`,
     { cache: "no-store" },
   );
@@ -1527,7 +1527,7 @@ export async function fetchEnergyBalance(
   slug: string,
   chargerId: number,
 ): Promise<EnergyBalanceSnapshot> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/energy-balance`,
     { cache: "no-store" },
   );
@@ -1549,7 +1549,7 @@ export async function fetchEnergyBalanceHistory(
     limit: String(Math.min(limit, ENERGY_BALANCE_HISTORY_MAX_LIMIT)),
     offset: String(offset),
   });
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/energy-balance/history?${params}`,
     { cache: "no-store" },
   );
@@ -1561,7 +1561,7 @@ export async function fetchEnergyReasoning(
   slug: string,
   chargerId: number,
 ): Promise<EnergyReasoning> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/energy-reasoning`,
     { cache: "no-store" },
   );
@@ -1573,7 +1573,7 @@ export async function fetchVirtualEvseStatus(
   slug: string,
   chargerId: number,
 ): Promise<VirtualEvseStatus> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/virtual-evse/status`,
     { cache: "no-store" },
   );
@@ -1582,7 +1582,7 @@ export async function fetchVirtualEvseStatus(
 }
 
 export async function fetchSiteEnergyConfig(slug: string): Promise<SiteEnergyConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-config`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy-config`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -1610,7 +1610,7 @@ export async function fetchEvSolarChargingPlan(
   slug: string,
   chargerId: number,
 ): Promise<EvSolarChargingPlan> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/solar-charging-plan`,
     { cache: "no-store" },
   );
@@ -1623,7 +1623,7 @@ export async function fetchEvChargerSavings(
   chargerId: number,
   days = 30,
 ): Promise<EvChargingSavings> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/savings?days=${days}`,
     { cache: "no-store" },
   );
@@ -1636,7 +1636,7 @@ export async function fetchEvChargingStats(
   chargerId: number,
   period = "month",
 ): Promise<EvChargingStats> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/stats?period=${period}`,
     { cache: "no-store" },
   );
@@ -1649,7 +1649,7 @@ export async function fetchEvChargingSessions(
   chargerId: number,
   limit = 20,
 ): Promise<EvChargingSession[]> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/sessions?limit=${limit}`,
     { cache: "no-store" },
   );
@@ -1662,7 +1662,7 @@ export async function fetchEvChargingSession(
   chargerId: number,
   sessionId: number,
 ): Promise<EvChargingSession> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/sessions/${sessionId}`,
     { cache: "no-store" },
   );
@@ -1674,7 +1674,7 @@ export async function fetchCurrentEvSession(
   slug: string,
   chargerId: number,
 ): Promise<EvChargingSession | null> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/ev-chargers/${chargerId}/sessions/current`,
     { cache: "no-store" },
   );
@@ -1800,7 +1800,7 @@ export interface SolarDiagnostics {
 }
 
 export async function fetchSolarForecast(slug: string): Promise<SolarForecast> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/forecast`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/forecast`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -1808,7 +1808,7 @@ export async function fetchSolarForecast(slug: string): Promise<SolarForecast> {
 }
 
 export async function fetchSolarConfig(slug: string): Promise<SolarSiteConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/config`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -1819,7 +1819,7 @@ export async function updateSolarConfig(
   slug: string,
   payload: Partial<SolarSiteConfig> & { enabled: boolean },
 ): Promise<SolarSiteConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/config`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -1829,7 +1829,7 @@ export async function updateSolarConfig(
 }
 
 export async function fetchSolarAccuracy(slug: string): Promise<SolarAccuracy> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/accuracy`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/accuracy`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -1837,7 +1837,7 @@ export async function fetchSolarAccuracy(slug: string): Promise<SolarAccuracy> {
 }
 
 export async function fetchSolarDiagnostics(slug: string, limit = 60): Promise<SolarDiagnostics> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/solar/diagnostics?limit=${limit}`,
     { cache: "no-store" },
   );
@@ -1848,7 +1848,7 @@ export async function fetchSolarDiagnostics(slug: string, limit = 60): Promise<S
 export async function fetchSolarProviderStatus(
   slug: string,
 ): Promise<{ providers: Array<{ provider: string; status: string }> }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/provider-status`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/provider-status`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   const data = await res.json();
   return { providers: data.providers ?? [] };
@@ -1857,7 +1857,7 @@ export async function fetchSolarProviderStatus(
 export async function fetchSolarModelMetrics(
   slug: string,
 ): Promise<{ model_version: string | null; wape: number | null } | null> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/model/metrics`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/model/metrics`, { cache: "no-store" });
   if (!res.ok) return null;
   const data = await res.json();
   return { model_version: data.model_version ?? null, wape: data.wape ?? null };
@@ -1891,7 +1891,7 @@ export interface SolarWeather {
 }
 
 export async function fetchSolarWeather(slug: string): Promise<SolarWeather> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/weather`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/weather`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -1917,7 +1917,7 @@ export interface DmiForecast {
 }
 
 export async function fetchDmiForecast(slug: string): Promise<DmiForecast> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/dmi/forecast`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/dmi/forecast`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -1946,7 +1946,7 @@ export interface SolarPerformance {
 }
 
 export async function fetchSolarPerformance(slug: string): Promise<SolarPerformance> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/performance`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/solar/performance`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -2093,19 +2093,19 @@ export interface SpaConnectionTest {
 }
 
 export async function fetchSpaStatus(slug: string): Promise<SpaStatus> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/status`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/status`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchSpaEnergyPeriod(slug: string, period: string): Promise<SpaEnergyPeriod> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/${period}`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/${period}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchSpaEnergyBreakdown(slug: string, period: string): Promise<SpaEnergyBreakdown> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/breakdown?period=${period}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/energy/breakdown?period=${period}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -2113,19 +2113,19 @@ export async function fetchSpaEnergyBreakdown(slug: string, period: string): Pro
 }
 
 export async function fetchSpaHistory(slug: string, period: string): Promise<SpaHistory> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/history?period=${period}`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/history?period=${period}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchSpaHealth(slug: string): Promise<SpaHealth> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/health`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/health`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchSpaConfig(slug: string): Promise<SpaConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/config`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/config`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2147,7 +2147,7 @@ export async function testSpaConnection(slug: string): Promise<SpaConnectionTest
 }
 
 export async function fetchSpaReadiness(): Promise<{ enabled: boolean; configured_sites: number; online_sites: number; error_sites: number }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/system/integrations/spa-readiness`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/integrations/spa-readiness`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2304,7 +2304,7 @@ export interface SpaShadow {
 }
 
 export async function fetchSpaControlConfig(slug: string): Promise<SpaControlConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/control/config`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2320,31 +2320,31 @@ export async function updateSpaControlConfig(slug: string, payload: Partial<SpaC
 }
 
 export async function fetchSpaPlan(slug: string): Promise<SpaPlan> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/plan`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/plan`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchSpaTimeline(slug: string): Promise<SpaTimeline> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/timeline`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/timeline`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchSpaEvents(slug: string, limit = 50): Promise<{ events: SpaEnergyEvent[]; total: number }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/events?limit=${limit}`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/events?limit=${limit}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchSpaEconomics(slug: string, period: string): Promise<SpaEconomics> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/economics?period=${period}`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/economics?period=${period}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchSpaShadow(slug: string): Promise<SpaShadow> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/shadow`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/spa/shadow`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2379,7 +2379,7 @@ export interface EnergyOrchestration {
 }
 
 export async function fetchEnergyOrchestration(slug: string): Promise<EnergyOrchestration> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2388,7 +2388,7 @@ export async function updateEnergyOrchestrationPriorities(
   slug: string,
   loads: Array<{ load_id: string; priority: number }>,
 ): Promise<EnergyOrchestration> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration/priorities`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/energy/orchestration/priorities`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ loads }),
@@ -2630,7 +2630,7 @@ export interface VehicleChargeSessionListResponse {
 }
 
 export async function fetchVehicles(slug: string): Promise<VehicleListResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2645,13 +2645,13 @@ export async function syncVehicles(slug: string): Promise<VehicleSyncResponse> {
 }
 
 export async function fetchVehicleIntegrationStatus(slug: string): Promise<VehicleIntegrationStatus> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/status`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/status`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function fetchVehicleIntegrationConfig(slug: string): Promise<VehicleIntegrationConfig> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/config`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -2740,7 +2740,7 @@ export async function fetchVehicleRawAttributes(
   vehicleId?: number,
 ): Promise<VehicleRawAttributesResponse> {
   const query = vehicleId != null ? `?vehicle_id=${vehicleId}` : "";
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/raw-attributes${query}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/raw-attributes${query}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -2750,7 +2750,7 @@ export async function fetchVehicleRawAttributes(
 export async function fetchVehicleIntegrationDiagnostics(
   slug: string,
 ): Promise<VehicleIntegrationDiagnosticsResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/diagnostics`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/integration/diagnostics`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -2773,7 +2773,7 @@ export async function fetchVehicleChargeSessions(
   slug: string,
   vehicleId: number,
 ): Promise<VehicleChargeSessionListResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -2784,7 +2784,7 @@ export async function fetchCurrentVehicleChargeSession(
   slug: string,
   vehicleId: number,
 ): Promise<VehicleChargeSession> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/current`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charge-sessions/current`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await res.text());
@@ -2822,13 +2822,13 @@ export async function patchVehicleChargeSession(
 }
 
 export async function fetchChargeFinderStatus(): Promise<ChargeFinderStatusResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/status`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/integrations/chargefinder/status`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchChargeFinderDiagnostics(): Promise<ChargeFinderDiagnosticsResponse> {
-  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/diagnostics`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/integrations/chargefinder/diagnostics`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2840,7 +2840,7 @@ export async function runChargeFinderTestLookup(payload: {
   use_mercedes_position?: boolean;
   site_slug?: string;
 }): Promise<{ latitude: number; longitude: number; radius_m: number; candidate_count: number; candidates: unknown[] }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/test-lookup`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/integrations/chargefinder/test-lookup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -2859,7 +2859,7 @@ export async function fetchChargeFinderRawLookup(
     longitude: String(longitude),
   });
   if (radius_m != null) params.set("radius_m", String(radius_m));
-  const res = await fetch(`${getApiBaseUrl()}/api/integrations/chargefinder/raw-lookup?${params}`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/integrations/chargefinder/raw-lookup?${params}`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -2869,7 +2869,7 @@ export async function fetchVehicleChargingStats(
   vehicleId: number,
   period: "day" | "week" | "month" | "year" = "month",
 ): Promise<VehicleChargingStats> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/vehicles/${vehicleId}/charging-stats?period=${period}`,
     { cache: "no-store" },
   );
@@ -2999,6 +2999,376 @@ export async function fetchIntegrationHealth(slug: string): Promise<IntegrationH
   return res.json();
 }
 
+export interface SiteDeviceRecord {
+  device_type: string;
+  device_id: number;
+  name: string;
+  manufacturer: string;
+  model: string;
+  integration: string | null;
+  connection_status: string | null;
+  health_status: string;
+  last_seen: string | null;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface SiteDevicesResponse {
+  slug: string;
+  devices: SiteDeviceRecord[];
+}
+
+export async function fetchSiteDevices(slug: string): Promise<SiteDevicesResponse> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/devices`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface SiteModuleRecord {
+  module_id: string;
+  legacy_module_id?: string | null;
+  name: string;
+  version: string;
+  module_type: string;
+  enabled: boolean;
+  activation: string;
+  runtime_status: string;
+  health_status: string;
+  capabilities_provided: string[];
+  capabilities_required: string[];
+  optional_capabilities: string[];
+  missing_required_capabilities: string[];
+  missing_optional_capabilities: string[];
+  can_start: boolean;
+  last_error?: string | null;
+  configuration_schema?: { fields?: ConfigSchemaField[] };
+  onboardable?: boolean;
+  device_categories?: string[];
+  connection_types?: string[];
+  can_disable?: boolean;
+  dependencies?: string[];
+  supports_discovery?: boolean;
+  package_source?: string | null;
+  installed_version?: string | null;
+  publisher?: string | null;
+  package_state?: string | null;
+  rollback_available?: boolean;
+  update_available?: boolean;
+}
+
+export interface ConfigSchemaField {
+  name: string;
+  label: string;
+  type: string;
+  required?: boolean;
+  secret?: boolean;
+  advanced?: boolean;
+  help?: string;
+  default?: unknown;
+  options?: string[];
+}
+
+export interface ModuleCatalogRecord extends SiteModuleRecord {
+  description?: string;
+  dependencies?: string[];
+  supports_per_site_activation?: boolean;
+  onboard_handler?: string | null;
+}
+
+export interface OnboardingCategory {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export interface OnboardingCatalogResponse {
+  categories: OnboardingCategory[];
+  modules_by_category: Record<string, ModuleCatalogRecord[]>;
+}
+
+export interface ModuleConfigResponse {
+  module_id: string;
+  config: Record<string, unknown>;
+  configured_fields: Record<string, boolean>;
+  restart_required: string;
+  configuration_active?: boolean;
+  effectively_configured?: boolean;
+  configuration_status?: string;
+}
+
+export interface ModuleApplyResponse {
+  module_id: string;
+  success: boolean;
+  message: string;
+  runtime_status: string;
+  health_status: string;
+}
+
+export interface DiscoveryDevice {
+  external_id: string;
+  name: string;
+  device_type: string;
+  manufacturer?: string;
+  model?: string;
+}
+
+export interface DiscoveryResponse {
+  supported: boolean;
+  message: string;
+  devices: DiscoveryDevice[];
+}
+
+export interface OnboardDeviceResult {
+  device_type: string;
+  device_id: number;
+  name: string;
+  external_id: string;
+  manufacturer?: string;
+  model?: string;
+}
+
+export interface ModuleOnboardResponse {
+  module_id: string;
+  enabled: boolean;
+  runtime_status: string;
+  health_status: string;
+  device?: OnboardDeviceResult | null;
+  capabilities: ConnectionTestCapability[];
+  warnings: string[];
+  message: string;
+}
+
+export interface SiteDeviceDetail {
+  slug: string;
+  device_type: string;
+  device_id: number;
+  name: string;
+  manufacturer: string;
+  model: string;
+  integration?: string | null;
+  connection_status?: string | null;
+  health_status: string;
+  last_seen?: string | null;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+  configuration_status: string;
+}
+
+export interface OperationsModuleItem {
+  module_id: string;
+  name: string;
+  module_type: string;
+  enabled: boolean;
+  runtime_status: string;
+  health_status: string;
+  last_error?: string | null;
+  device_count: number;
+  can_disable: boolean;
+  onboardable: boolean;
+}
+
+export interface OperationsDeviceItem {
+  device_type: string;
+  device_id: number;
+  name: string;
+  manufacturer: string;
+  model: string;
+  integration?: string | null;
+  connection_status?: string | null;
+  health_status: string;
+  last_seen?: string | null;
+  enabled: boolean;
+}
+
+export interface SiteOperationsResponse {
+  slug: string;
+  overall_health_status: string;
+  modules: OperationsModuleItem[];
+  devices: OperationsDeviceItem[];
+  integration_health: Array<Record<string, unknown>>;
+}
+
+export interface ConnectionTestCapability {
+  name: string;
+  kind: string;
+  available: boolean;
+}
+
+export interface ConnectionTestDevice {
+  external_id: string;
+  name: string;
+  device_type: string;
+  manufacturer?: string;
+  model?: string;
+}
+
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  devices_found: ConnectionTestDevice[];
+  capabilities: ConnectionTestCapability[];
+  latency_ms?: number | null;
+}
+
+export interface SiteModulesResponse {
+  site_slug: string;
+  modules: SiteModuleRecord[];
+}
+
+export async function fetchSiteModules(slug: string): Promise<SiteModulesResponse> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateSiteModule(
+  slug: string,
+  moduleId: string,
+  enabled: boolean,
+): Promise<SiteModuleRecord> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}`, {
+    method: "PUT",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSiteModuleDetail(slug: string, moduleId: string): Promise<SiteModuleRecord> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSiteOperations(slug: string): Promise<SiteOperationsResponse> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/operations`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchOnboardingCatalog(): Promise<OnboardingCatalogResponse> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/system/onboarding-catalog`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchModuleConfig(slug: string, moduleId: string): Promise<ModuleConfigResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/config`, {
+    cache: "no-store",
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateModuleConfig(
+  slug: string,
+  moduleId: string,
+  config: Record<string, unknown>,
+): Promise<ModuleConfigResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/config`, {
+    method: "PUT",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ config }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface ExternalModuleConfigResponse {
+  module_id: string;
+  site_slug: string;
+  credential_configured: boolean;
+  poll_interval_seconds: number;
+  selected_device_ids: string[];
+}
+
+export async function fetchExternalModuleConfig(
+  slug: string,
+  moduleId: string,
+): Promise<ExternalModuleConfigResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/external-config`, {
+    cache: "no-store",
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function upsertExternalModuleConfig(
+  slug: string,
+  moduleId: string,
+  payload: {
+    api_key?: string;
+    poll_interval_seconds?: number;
+    selected_device_ids?: string[];
+  },
+): Promise<ExternalModuleConfigResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/external-config`, {
+    method: "PUT",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function testModuleConnection(slug: string, moduleId: string): Promise<ConnectionTestResult> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/test-connection`, {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function discoverModuleDevices(slug: string, moduleId: string): Promise<DiscoveryResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/discover`, {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function applyModuleConfiguration(slug: string, moduleId: string): Promise<ModuleApplyResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/apply`, {
+    method: "POST",
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function onboardModuleDevice(
+  slug: string,
+  moduleId: string,
+  payload: Record<string, unknown>,
+): Promise<ModuleOnboardResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/modules/${moduleId}/onboard`, {
+    method: "POST",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchSiteDevice(
+  slug: string,
+  deviceType: string,
+  deviceId: number,
+): Promise<SiteDeviceDetail> {
+  const res = await apiFetch(`${getApiBaseUrl()}/api/sites/${slug}/devices/${deviceType}/${deviceId}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
 export async function fetchPerformanceMetrics(): Promise<PerformanceCenterMetrics> {
   const res = await apiFetch(`${getApiBaseUrl()}/api/system/performance`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -3074,7 +3444,7 @@ export interface HeartbeatBridgeSettings {
 }
 
 export async function runHeartbeatDiscovery(slug: string): Promise<HeartbeatDiscoveryRunResult> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/run`, { method: "POST" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/run`, { method: "POST" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -3083,7 +3453,7 @@ export async function fetchHeartbeatDiscoveryRun(
   slug: string,
   runId: number,
 ): Promise<HeartbeatDiscoveryRunDetail> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/runs/${runId}`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/discovery/runs/${runId}`, {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
@@ -3091,13 +3461,13 @@ export async function fetchHeartbeatDiscoveryRun(
 }
 
 export async function fetchHeartbeatBridgeStatus(slug: string): Promise<HeartbeatBridgeStatus> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/status`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/status`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchHeartbeatBridgeSettings(slug: string): Promise<HeartbeatBridgeSettings> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -3106,7 +3476,7 @@ export async function updateHeartbeatBridgeSettings(
   slug: string,
   payload: Partial<HeartbeatBridgeSettings>,
 ): Promise<HeartbeatBridgeSettings> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -3123,7 +3493,7 @@ export async function runHeartbeatWriteTest(
   http_status?: number | null;
   error?: string | null;
 }> {
-  const res = await fetch(
+  const res = await adminFetch(
     `${getApiBaseUrl()}/api/sites/${slug}/heartbeat/write-test/run?dry_run=${dryRun ? "true" : "false"}`,
     { method: "POST" },
   );
@@ -3132,13 +3502,13 @@ export async function runHeartbeatWriteTest(
 }
 
 export async function runHeartbeatReplay(slug: string): Promise<{ report_text: string }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/replay/run`, { method: "POST" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/replay/run`, { method: "POST" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
 
 export async function fetchHeartbeatBridgeDecisions(slug: string): Promise<HeartbeatBridgeDecision[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/decisions`, { cache: "no-store" });
+  const res = await adminFetch(`${getApiBaseUrl()}/api/sites/${slug}/heartbeat/bridge/decisions`, { cache: "no-store" });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();
 }
@@ -3162,7 +3532,7 @@ export interface AppleDeviceCreateResult extends AppleDevice {
 }
 
 export async function fetchAppleDevices(): Promise<AppleDevice[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/apple-devices`, {
     cache: "no-store",
     headers: adminAuthHeaders(),
   });
@@ -3176,7 +3546,7 @@ export async function createAppleDevice(payload: {
   device_type?: string;
   default_site_slug?: string;
 }): Promise<AppleDeviceCreateResult> {
-  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/apple-devices`, {
     method: "POST",
     headers: adminAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
@@ -3186,9 +3556,748 @@ export async function createAppleDevice(payload: {
 }
 
 export async function revokeAppleDevice(deviceId: number): Promise<AppleDevice> {
-  const res = await fetch(`${getApiBaseUrl()}/api/apple-devices/${deviceId}/revoke`, {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/apple-devices/${deviceId}/revoke`, {
     method: "POST",
     headers: adminAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface PackageValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  manifest: {
+    module_id: string;
+    name: string;
+    version: string;
+    publisher: string;
+    module_type?: string;
+    description?: string;
+  } | null;
+  signed: boolean;
+  signature_valid: boolean;
+  publisher_trusted: boolean;
+  install_allowed: boolean;
+  permissions: string[];
+  provided_capabilities: string[];
+  required_capabilities: string[];
+  optional_capabilities: string[];
+  module_dependencies: Array<{ module_id: string; version_range: string }>;
+  minimum_emic_version: string | null;
+  maximum_emic_version: string | null;
+  module_api_version: number | null;
+  compatible_with_emic: boolean | null;
+}
+
+export interface PackageStoreCard {
+  module_id: string;
+  name: string;
+  installed_version: string;
+  publisher: string;
+  package_state: string;
+  signature_status: string;
+  signed: boolean;
+  signature_valid: boolean;
+  publisher_trusted: boolean;
+  publisher_status: string;
+  install_allowed: boolean;
+  rollback_version: string | null;
+  restart_required: boolean;
+  checksum_sha256: string;
+  runtime_checksum: string | null;
+  enabled_sites: string[];
+  runtime_status: string | null;
+  runtime_version: string | null;
+  version_match: boolean | null;
+  checksum_match: boolean | null;
+  needs_attention: boolean;
+  attention_reasons: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface CatalogEntry {
+  entry_id: string;
+  module_id: string;
+  name: string;
+  version: string;
+  publisher: string;
+  description: string;
+  package_filename: string;
+  trusted: boolean;
+}
+
+export interface StoreOverviewResponse {
+  installed: PackageStoreCard[];
+  catalog: CatalogEntry[];
+  needs_attention: PackageStoreCard[];
+  allow_unsigned_modules: boolean;
+}
+
+export interface PackageMutationResult {
+  module_id: string;
+  success: boolean;
+  message: string;
+  package_state: string;
+  installed_version: string | null;
+  restart_required: boolean;
+  rollback_version: string | null;
+}
+
+export interface PackageImpactResult {
+  module_id: string;
+  affected_modules: string[];
+  affected_sites: string[];
+  affected_devices: string[];
+  capabilities_added: string[];
+  capabilities_removed: string[];
+  restart_required: boolean;
+  warnings: string[];
+}
+
+export interface PublisherKeyRecord {
+  publisher_id: string;
+  key_id: string;
+  status: string;
+  public_key_hex: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PackageSiteActivation {
+  site_slug: string;
+  site_name: string;
+  enabled: boolean;
+  runtime_status: string | null;
+  runtime_version: string | null;
+}
+
+export async function fetchStoreOverview(): Promise<StoreOverviewResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/store/overview`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function validateModulePackage(file: File): Promise<PackageValidationResult> {
+  const form = new FormData();
+  form.append("upload", file);
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/validate`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function installModulePackage(file: File): Promise<PackageMutationResult> {
+  const form = new FormData();
+  form.append("upload", file);
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/install`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateModulePackage(
+  moduleId: string,
+  file: File,
+  options?: { allowDowngrade?: boolean },
+): Promise<PackageMutationResult> {
+  const form = new FormData();
+  form.append("upload", file);
+  const query = options?.allowDowngrade ? "?allow_downgrade=true" : "";
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/${encodeURIComponent(moduleId)}/update${query}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function rollbackModulePackage(moduleId: string): Promise<PackageMutationResult> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/${encodeURIComponent(moduleId)}/rollback`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function removeModulePackage(moduleId: string): Promise<PackageMutationResult> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/${encodeURIComponent(moduleId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function analyzePackageImpact(
+  moduleId: string,
+  file?: File,
+): Promise<PackageImpactResult> {
+  const form = new FormData();
+  if (file) form.append("upload", file);
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/${encodeURIComponent(moduleId)}/impact`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchPackageStoreDetail(moduleId: string): Promise<PackageStoreCard> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/packages/store/packages/${encodeURIComponent(moduleId)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function validateCatalogEntry(entryId: string): Promise<PackageValidationResult> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/packages/catalog/${encodeURIComponent(entryId)}/validate`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function analyzeCatalogImpact(entryId: string): Promise<PackageImpactResult> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/packages/catalog/${encodeURIComponent(entryId)}/impact`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function installCatalogEntry(entryId: string): Promise<PackageMutationResult> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/packages/catalog/${encodeURIComponent(entryId)}/install`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchPackageSiteActivations(moduleId: string): Promise<PackageSiteActivation[]> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/packages/${encodeURIComponent(moduleId)}/sites`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchPublisherKeys(): Promise<PublisherKeyRecord[]> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/publishers`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function addPublisherKey(payload: {
+  publisher_id: string;
+  key_id: string;
+  public_key_hex: string;
+  status?: string;
+}): Promise<PublisherKeyRecord> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/publishers`, {
+    method: "POST",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function revokePublisherKey(publisherId: string, keyId: string): Promise<PublisherKeyRecord> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/publishers/${encodeURIComponent(publisherId)}/${encodeURIComponent(keyId)}/revoke`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface MarketplaceMetadataStatus {
+  enabled: boolean;
+  metadata_health: string;
+  revocation_freshness: string;
+  last_sync: string | null;
+  last_success: string | null;
+  last_error: string | null;
+  sync_failed: boolean;
+  offline: boolean;
+  root_version: number | null;
+  timestamp_version: number | null;
+  snapshot_version: number | null;
+  targets_version: number | null;
+  catalog_age_seconds: number | null;
+  revocation_age_seconds: number | null;
+  cache_generation: number;
+  catalog_status: string;
+  revocation_status: string;
+}
+
+export async function fetchMarketplaceMetadataStatus(): Promise<MarketplaceMetadataStatus> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/marketplace/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface GovernancePublisher {
+  publisher_id: string;
+  display_name: string;
+  organization: string | null;
+  verified_domain: string | null;
+  tier: string;
+  status: string;
+  verified_at: string | null;
+  suspended_at: string | null;
+  revoked_at: string | null;
+  module_count: number;
+}
+
+export interface InstallationPolicy {
+  policy_scope: string;
+  policy_version: number;
+  allowed_tiers: string[];
+  publisher_allowlist: string[];
+  publisher_denylist: string[];
+  module_allowlist: string[];
+  module_denylist: string[];
+  blocked_permissions: string[];
+  control_module_policy: string;
+  break_glass_enabled: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface PolicyEvaluation {
+  decision: string;
+  reason_codes: string[];
+  publisher_tier: string | null;
+  publisher_status: string | null;
+  control_capable: boolean;
+  policy_version: number;
+  explanation: string;
+}
+
+export async function fetchGovernancePublishers(): Promise<GovernancePublisher[]> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/governance/publishers`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function createGovernancePublisher(payload: {
+  publisher_id: string;
+  display_name: string;
+  tier?: string;
+  organization?: string;
+  verified_domain?: string;
+}): Promise<GovernancePublisher> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/governance/publishers`, {
+    method: "POST",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function suspendGovernancePublisher(publisherId: string): Promise<GovernancePublisher> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/governance/publishers/${encodeURIComponent(publisherId)}/suspend`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function verifyGovernancePublisher(publisherId: string): Promise<GovernancePublisher> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/governance/publishers/${encodeURIComponent(publisherId)}/verify`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchInstallationPolicy(): Promise<InstallationPolicy> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/governance/policy`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function updateInstallationPolicy(payload: {
+  expected_version: number;
+  allowed_tiers?: string[];
+  publisher_allowlist?: string[];
+  publisher_denylist?: string[];
+  module_allowlist?: string[];
+  module_denylist?: string[];
+  blocked_permissions?: string[];
+  control_module_policy?: string;
+  break_glass_enabled?: boolean;
+}): Promise<InstallationPolicy> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/governance/policy`, {
+    method: "PUT",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function evaluateModulePolicy(payload: {
+  action?: string;
+  module_id: string;
+  publisher_id: string;
+  permissions?: string[];
+  provided_capabilities?: string[];
+}): Promise<PolicyEvaluation> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/governance/evaluate`, {
+    method: "POST",
+    headers: { ...adminAuthHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface MarketplaceCatalogRelease {
+  module_id: string;
+  publisher_id: string;
+  version: string;
+  release_id: string;
+  content_sha256: string | null;
+  artifact_size: number | null;
+  source: string;
+}
+
+export interface MarketplaceCatalogResponse {
+  releases: MarketplaceCatalogRelease[];
+  catalog_version: number | null;
+}
+
+export interface MarketplaceFetchResult {
+  artifact_id: number;
+  state: string;
+  reason_codes: string[];
+  security_status: string | null;
+  policy_decision: string | null;
+  message: string;
+}
+
+export interface MarketplaceArtifactSecurity {
+  artifact_id: number;
+  integrity_verified: boolean;
+  sbom_status: string;
+  advisory_status: string;
+  highest_severity: string;
+  vulnerability_count: number;
+  critical_count: number;
+  high_count: number;
+  security_review_required: boolean;
+  policy_decision: string | null;
+  reason_codes: string[];
+  vulnerabilities: Array<Record<string, unknown>>;
+  runtime_blocked: boolean;
+  runtime_message: string;
+}
+
+export async function fetchMarketplaceCatalog(): Promise<MarketplaceCatalogResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/marketplace/catalog`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchMarketplaceRelease(moduleId: string, version: string): Promise<MarketplaceFetchResult> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/marketplace/releases/${encodeURIComponent(moduleId)}/${encodeURIComponent(version)}/fetch`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchMarketplaceArtifactSecurity(artifactId: number): Promise<MarketplaceArtifactSecurity> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/marketplace/artifacts/${artifactId}/security`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export interface ModuleRuntimeSummary {
+  id: number;
+  runtime_instance_id: string;
+  module_id: string;
+  version: string;
+  publisher_id: string;
+  artifact_sha256: string;
+  site_id: number;
+  state: string;
+  sandbox_mode?: string | null;
+  process_identity?: string | null;
+  last_error?: string | null;
+  started_at?: string | null;
+}
+
+export interface ModuleRuntimeListResponse {
+  runtimes: ModuleRuntimeSummary[];
+  runtime_blocked: boolean;
+  selective_authorization_available?: boolean;
+  active_authorizations?: number;
+  message: string;
+}
+
+export interface RuntimeAuthorizationView {
+  id: number;
+  module_id: string;
+  version: string;
+  artifact_sha256: string;
+  publisher_id: string;
+  site_id: number;
+  approved_by: string;
+  approved_at: string;
+  expires_at: string;
+  revoked_at?: string | null;
+  reason?: string | null;
+  active: boolean;
+}
+
+export interface GrantRuntimeAuthorizationRequest {
+  module_id: string;
+  version: string;
+  artifact_sha256: string;
+  publisher_id: string;
+  site_id: number;
+  expires_at?: string;
+  reason?: string;
+}
+
+export async function fetchModuleRuntimes(): Promise<ModuleRuntimeListResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/runtime`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchRuntimeAuthorizations(includeRevoked = false): Promise<RuntimeAuthorizationView[]> {
+  const qs = includeRevoked ? "?include_revoked=true" : "";
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/runtime/authorizations${qs}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function grantRuntimeAuthorization(body: GrantRuntimeAuthorizationRequest): Promise<RuntimeAuthorizationView> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/runtime/authorizations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function revokeRuntimeAuthorization(authId: number): Promise<RuntimeAuthorizationView> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/runtime/authorizations/${authId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+// --- Module Store (Sprint D) ---
+
+export interface StorePolicyView {
+  decision: string;
+  reason_codes: string[];
+  explanation: string;
+  publisher_tier?: string | null;
+  control_capable?: boolean;
+  policy_version?: number | null;
+}
+
+export interface StoreModuleSummary {
+  module_id: string;
+  display_name: string;
+  publisher_id: string;
+  publisher_name: string;
+  description: string;
+  category: string;
+  categories: string[];
+  icon_url: string | null;
+  origin: string;
+  trust_tier: string;
+  trust_badge: string;
+  security_badge: string;
+  installed_state: string;
+  installed_version: string | null;
+  latest_version: string | null;
+  update_available: boolean;
+  compatible: boolean;
+  control_capable: boolean;
+  primary_action: string;
+  policy: StorePolicyView;
+  capabilities_summary?: string[];
+  published_at?: string | null;
+}
+
+export interface StoreCatalogResponse {
+  modules: StoreModuleSummary[];
+  page: number;
+  page_size: number;
+  total: number;
+  categories: Array<{ id: string; label: string; count: number }>;
+  marketplace_status: Record<string, unknown>;
+}
+
+export interface StoreStatusResponse {
+  marketplace_enabled: boolean;
+  metadata_health: string;
+  message: string;
+  offline: boolean;
+  stale: boolean;
+  invalid: boolean;
+  last_success: string | null;
+}
+
+export interface StoreModuleDetailResponse {
+  summary: StoreModuleSummary;
+  long_description: string;
+  capabilities: Array<{ capability: string; label: string }>;
+  permissions: Array<{ permission: string; label: string; risk_level: string; group: string }>;
+  features: Array<{ feature_id: string; feature_name: string; description: string }>;
+  compatibility: {
+    compatible: boolean;
+    emic_version: string;
+    reasons: string[];
+  };
+  security: Record<string, unknown>;
+  dependencies: Array<Record<string, string>>;
+  configuration_schema: Record<string, unknown>;
+  supports_per_site_activation: boolean;
+}
+
+export interface StorePreflightResponse {
+  module_id: string;
+  version: string;
+  display_name: string;
+  policy: StorePolicyView;
+  primary_action: string;
+  install_allowed: boolean;
+  stage_allowed: boolean;
+  runtime_blocked: boolean;
+  runtime_message: string;
+  permissions: StoreModuleDetailResponse["permissions"];
+  capabilities: StoreModuleDetailResponse["capabilities"];
+  features: StoreModuleDetailResponse["features"];
+  compatibility: StoreModuleDetailResponse["compatibility"];
+  security: Record<string, unknown>;
+  sites: Array<{ site_slug: string; site_name: string }>;
+  configuration_schema: Record<string, unknown>;
+  trust_tier: string;
+  publisher_status: string;
+}
+
+export interface StoreCatalogParams {
+  search?: string;
+  category?: string;
+  trust?: string;
+  installed?: boolean;
+  update_available?: boolean;
+  compatible?: boolean;
+  control_capable?: boolean;
+  official?: boolean;
+  page?: number;
+  page_size?: number;
+  sort?: string;
+}
+
+function storeQuery(params?: StoreCatalogParams): string {
+  if (!params) return "";
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function fetchStoreStatus(): Promise<StoreStatusResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStoreCatalog(params?: StoreCatalogParams): Promise<StoreCatalogResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store${storeQuery(params)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStoreModuleDetail(moduleId: string): Promise<StoreModuleDetailResponse> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store/${encodeURIComponent(moduleId)}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStorePreflight(
+  moduleId: string,
+  version: string,
+  body?: { site_slug?: string; config?: Record<string, unknown> },
+): Promise<StorePreflightResponse> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/store/${encodeURIComponent(moduleId)}/${encodeURIComponent(version)}/preflight`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function installStoreModule(
+  moduleId: string,
+  version: string,
+  body?: { site_slug?: string; config?: Record<string, unknown> },
+): Promise<{ success: boolean; message: string; package_state?: string }> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/modules/store/${encodeURIComponent(moduleId)}/${encodeURIComponent(version)}/install`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStoreSecurityCenter(): Promise<Record<string, unknown>> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store/security`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStorePublishers(): Promise<
+  Array<{ publisher_id: string; display_name: string; tier: string; status: string; module_count: number }>
+> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store/publishers`, { cache: "no-store" });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function fetchStorePublisher(publisherId: string): Promise<Record<string, unknown>> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/modules/store/publishers/${encodeURIComponent(publisherId)}`, {
+    cache: "no-store",
   });
   if (!res.ok) throw new Error(await readApiError(res));
   return res.json();

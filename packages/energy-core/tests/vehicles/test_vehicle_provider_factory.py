@@ -61,11 +61,11 @@ async def test_build_supervisor_provider_builds_mercedes_in_development(provider
     session_factory, settings, row = provider_context
     mock_provider = MagicMock()
     monkeypatch.setattr(
-        "energy_core.integrations.mercedes.factory.build_mercedes_provider",
+        "energy_core.providers.vehicle_integrations.build_mercedes_provider",
         MagicMock(return_value=mock_provider),
     )
     monkeypatch.setattr(
-        "energy_core.integrations.mercedes.factory.wire_supervisor_token_callbacks",
+        "energy_core.providers.vehicle_integrations.wire_supervisor_token_callbacks",
         MagicMock(),
     )
     async with session_factory() as session:

@@ -35,8 +35,9 @@ async def _build_mercedes_provider(
     settings: Settings,
     session_factory: Any,
 ) -> Any:
-    from energy_core.integrations.mercedes.factory import (
+    from energy_core.providers.vehicle_integrations import (
         build_mercedes_provider,
+        build_tesla_provider,
         wire_supervisor_token_callbacks,
     )
 
@@ -62,7 +63,7 @@ async def _build_tesla_provider(
     settings: Settings,
     session_factory: Any,
 ) -> Any:
-    from energy_core.integrations.tesla.factory import build_tesla_provider
+    from energy_core.providers.vehicle_integrations import build_tesla_provider
 
     return await build_tesla_provider(row, provider_repo, secret_box, settings, session_factory)
 

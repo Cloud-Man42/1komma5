@@ -26,8 +26,8 @@ from energy_core.vehicles.diagnostics.events import (
     SelfHealAction,
 )
 from energy_core.vehicles.diagnostics.self_heal import evaluate_vehicle_self_heal
-from energy_core.integrations.mercedes.factory import is_mercedes_provider
-from energy_core.integrations.tesla.factory import is_tesla_provider
+from energy_core.providers.vehicle_integrations import is_mercedes_provider, is_tesla_provider
+from energy_core.providers.collector_wiring import IntegrationHealthRecorder, record_provider_outcome
 from energy_core.contracts.telemetry import STALE_TELEMETRY_SECONDS
 from energy_core.vehicles.provider_factory import (
     build_supervisor_provider,
@@ -158,6 +158,33 @@ class VehicleIntegrationSupervisor:
         self._runtimes.clear()
         logger.info("Vehicle integration supervisor stopped")
 
+    async def start_site(self, site_id: int) -> None:
+        if site_id in self._runtimes and self._runtimes[site_id].task is not None:
+            return
+        from energy_core.db.models import SiteModel
+
+        async with self._session_factory() as session:
+            provider_repo = VehicleProviderRepository(session, secret_box=self._secret_box)
+            row = await provider_repo.get_for_site(site_id)
+            if row is None or not row.enabled:
+                return
+            site = await session.get(SiteModel, site_id)
+            if site is None:
+                return
+            runtime = _SiteRuntime(
+                site_id=site.id,
+                site_slug=site.slug,
+                provider=await self._build_provider(row, provider_repo),
+            )
+            runtime.task = asyncio.create_task(self._run_site(runtime, row.id))
+            self._runtimes[site_id] = runtime
+            await session.commit()
+
+    async def stop_site(self, site_id: int) -> None:
+        runtime = self._runtimes.pop(site_id, None)
+        if runtime is not None:
+            await self._stop_site(runtime)
+
     async def _record_mercedes_health(
         self,
         site_id: int,
@@ -167,9 +194,6 @@ class VehicleIntegrationSupervisor:
         latency_ms: float | None = None,
         circuit_breaker_state: str | None = None,
     ) -> None:
-        from energy_core.integrations.collector_health import record_provider_outcome
-        from energy_core.integrations.health import IntegrationHealthRecorder
-
         async with self._session_factory() as session:
             recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
             await record_provider_outcome(

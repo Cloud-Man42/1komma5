@@ -48,6 +48,7 @@ BASELINE_CHARGEAMPS_IMPORTS_OUTSIDE_VENDOR: frozenset[str] = frozenset()
 HEARTBEAT_LEGACY_SHIM_FILES: frozenset[str] = frozenset(
     {
         "packages/energy-core/src/energy_core/sungrow/heartbeat_provider.py",
+        "packages/energy-core/src/energy_core/energy/live_overview.py",
     }
 )
 
@@ -65,6 +66,23 @@ ARCTIC_SPA_FACADE_PREFIXES = (
 BASELINE_ARCTIC_SPA_IMPORTS_OUTSIDE_INTEGRATION: frozenset[str] = frozenset()
 
 BASELINE_SOLAR_INTELLIGENCE_IMPORTS_IN_BACKEND: frozenset[str] = frozenset()
+
+FEATURE_MODULE_PREFIXES = (
+    "packages/energy-core/src/energy_core/charging/",
+    "packages/energy-core/src/energy_core/ev_accounting/",
+    "packages/energy-core/src/energy_core/energy_balance/",
+    "packages/energy-core/src/energy_core/spa_energy/",
+    "packages/energy-core/src/energy_core/vehicles/",
+    "packages/energy-core/src/energy_core/energy_control/",
+    "packages/energy-core/src/energy_core/solar_forecast/",
+    "packages/energy-core/src/energy_core/solar_intelligence/",
+    "packages/energy-core/src/energy_core/flexible_load/",
+    "packages/energy-core/src/energy_core/financial/",
+    "packages/energy-core/src/energy_core/price_engine/",
+)
+
+# Feature modules must not import integrations.* directly — shrink over time.
+BASELINE_FEATURE_INTEGRATIONS_IMPORTS: frozenset[str] = frozenset()
 
 
 def _repo_relative(path: Path) -> str:
@@ -210,6 +228,19 @@ def _find_solar_intelligence_imports_in_backend() -> set[str]:
     return violations
 
 
+def _find_feature_integrations_imports() -> set[str]:
+    violations: set[str] = set()
+    for path in _iter_python_files(ENERGY_CORE_SRC):
+        rel = _repo_relative(path)
+        normalized = rel.replace("\\", "/")
+        if not any(normalized.startswith(prefix) for prefix in FEATURE_MODULE_PREFIXES):
+            continue
+        imports = _module_imports(path)
+        if any(name.startswith("energy_core.integrations") for name in imports):
+            violations.add(rel)
+    return violations
+
+
 def test_contracts_have_no_downward_dependencies() -> None:
     contracts_root = ENERGY_CORE_SRC / "contracts"
     for path in _iter_python_files(contracts_root):
@@ -284,6 +315,17 @@ def test_solar_intelligence_backend_import_baseline_does_not_grow() -> None:
     assert current == BASELINE_SOLAR_INTELLIGENCE_IMPORTS_IN_BACKEND
 
 
+def test_feature_integrations_import_baseline_does_not_grow() -> None:
+    current = _find_feature_integrations_imports()
+    new_violations = current - BASELINE_FEATURE_INTEGRATIONS_IMPORTS
+    assert not new_violations, (
+        "New integrations.* imports in feature modules detected:\n"
+        + "\n".join(sorted(new_violations))
+        + "\nRoute through contracts/factories or update the shrinking baseline allowlist."
+    )
+    assert current == BASELINE_FEATURE_INTEGRATIONS_IMPORTS
+
+
 @pytest.mark.parametrize(
     "path_suffix",
     [
@@ -292,7 +334,16 @@ def test_solar_intelligence_backend_import_baseline_does_not_grow() -> None:
         "contracts/capabilities.py",
         "platform/events/bus.py",
         "platform/devices/registry.py",
+        "platform/capabilities/registry.py",
+        "platform/modules/resolver.py",
+        "platform/modules/site_modules.py",
     ],
 )
 def test_new_layer_modules_exist(path_suffix: str) -> None:
     assert (ENERGY_CORE_SRC / path_suffix).is_file()
+
+
+def test_collector_references_module_orchestrator() -> None:
+    collector_path = COLLECTOR_SRC / "app" / "collector.py"
+    imports = _module_imports(collector_path)
+    assert "energy_core.platform.modules.orchestrator" in imports

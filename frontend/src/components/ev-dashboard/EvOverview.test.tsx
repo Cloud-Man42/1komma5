@@ -19,6 +19,7 @@ const mockFetchSiteDashboard = vi.fn();
 const mockFetchSiteEnergyConfig = vi.fn();
 const mockControlEvCharger = vi.fn();
 const mockFetchEnergyBalance = vi.fn();
+const mockFetchSiteDevices = vi.fn();
 const mockUseEvSection = vi.fn(() => ({ section: "overview" as const }));
 
 vi.mock("./useEvSection", () => ({
@@ -37,6 +38,7 @@ vi.mock("@/lib/api", async () => {
     fetchEvChargingSessions: (...args: unknown[]) => mockFetchEvChargingSessions(...args),
     fetchEnergyBalanceHistory: (...args: unknown[]) => mockFetchEnergyBalanceHistory(...args),
     fetchEnergyBalance: (...args: unknown[]) => mockFetchEnergyBalance(...args),
+    fetchSiteDevices: (...args: unknown[]) => mockFetchSiteDevices(...args),
     fetchEnergyReasoning: (...args: unknown[]) => mockFetchEnergyReasoning(...args),
     fetchSiteDashboard: (...args: unknown[]) => mockFetchSiteDashboard(...args),
     fetchSiteEnergyConfig: (...args: unknown[]) => mockFetchSiteEnergyConfig(...args),
@@ -77,6 +79,7 @@ beforeEach(() => {
     alignment_delta_seconds: 1,
     energy_flow_line: "Sol → hus",
   });
+  mockFetchSiteDevices.mockResolvedValue({ slug: "akarp", devices: [] });
   mockControlEvCharger.mockResolvedValue(charger);
   mockFetchEvChargers.mockResolvedValue([charger]);
   mockFetchEvBridgeStatus.mockResolvedValue({
@@ -354,8 +357,9 @@ describe("EvOverview", () => {
     mockUseEvSection.mockReturnValue({ section: "diagnostics" });
     render(<EvOverview siteSlug="akarp" />);
     expect(await screen.findByTestId("ev-diagnostics-panel")).toBeTruthy();
-    expect(screen.getByText(/BRIDGE & ENERGIBALANS/i)).toBeTruthy();
+    expect(await screen.findByText(/BRIDGE & ENERGIBALANS/i)).toBeTruthy();
     expect(mockFetchEnergyBalance).toHaveBeenCalledWith("akarp", 1);
+    expect(mockFetchSiteDevices).toHaveBeenCalledWith("akarp");
   });
 
   it("shows empty state without chargers", async () => {

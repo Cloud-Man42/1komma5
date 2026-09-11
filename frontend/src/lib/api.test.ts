@@ -79,7 +79,7 @@ describe("fetchSitePeaks", () => {
     await expect(fetchSitePeaks("akarp", "day", 2026)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sites/akarp/peaks?period=day&year=2026",
-      { cache: "no-store" },
+      { cache: "no-store", headers: {} },
     );
   });
 
@@ -115,7 +115,7 @@ describe("fetchFinancialStats", () => {
     await expect(fetchFinancialStats("akarp", "month", 2026)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sites/akarp/financial-stats?period=month&year=2026",
-      { cache: "no-store" },
+      { cache: "no-store", headers: {} },
     );
   });
 
@@ -144,7 +144,7 @@ describe("fetchYearForecast", () => {
     await expect(fetchYearForecast("akarp", 2027)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sites/akarp/forecast?year=2027",
-      { cache: "no-store" },
+      { cache: "no-store", headers: {} },
     );
   });
 
@@ -173,6 +173,7 @@ describe("charger catalog API client", () => {
     await expect(fetchChargerManufacturer("zaptec")).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith("/api/chargers/manufacturers/zaptec", {
       cache: "no-store",
+      headers: {},
     });
   });
 
@@ -185,7 +186,7 @@ describe("charger catalog API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchChargerFeatureMatrix()).resolves.toEqual(response);
-    expect(fetchMock).toHaveBeenCalledWith("/api/chargers/feature-matrix", { cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/chargers/feature-matrix", { cache: "no-store", headers: {} });
   });
 
   it("requests integration methods", async () => {
@@ -199,6 +200,7 @@ describe("charger catalog API client", () => {
     await expect(fetchChargerIntegrationMethods()).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith("/api/chargers/integration-methods", {
       cache: "no-store",
+      headers: {},
     });
   });
 
@@ -228,7 +230,7 @@ describe("charger catalog API client", () => {
     await expect(fetchEnergyBalanceHistory("akarp", 4, 25, 5)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/sites/akarp/ev-chargers/4/energy-balance/history?limit=25&offset=5",
-      { cache: "no-store" },
+      { cache: "no-store", headers: {} },
     );
   });
 
@@ -243,7 +245,7 @@ describe("charger catalog API client", () => {
     await expect(fetchEnergyBalanceHistory("akarp", 4, 288, 0)).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/sites/akarp/ev-chargers/4/energy-balance/history?limit=${ENERGY_BALANCE_HISTORY_MAX_LIMIT}&offset=0`,
-      { cache: "no-store" },
+      { cache: "no-store", headers: {} },
     );
   });
 
@@ -255,5 +257,39 @@ describe("charger catalog API client", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(fetchEnergyBalanceHistory("akarp", 4)).rejects.toThrow("limit too large");
+  });
+});
+
+describe("updateSiteModule", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  it("sends admin authorization header on PUT", async () => {
+    vi.stubGlobal(
+      "sessionStorage",
+      {
+        getItem: vi.fn().mockReturnValue("admin-token"),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      } as unknown as Storage,
+    );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ module_id: "feature.solar-forecast", enabled: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { updateSiteModule } = await import("./api");
+    await updateSiteModule("akarp", "feature.solar-forecast", true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/sites/akarp/modules/feature.solar-forecast"),
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({ Authorization: "Bearer admin-token" }),
+      }),
+    );
   });
 });

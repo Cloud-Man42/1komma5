@@ -249,6 +249,36 @@ async def get_vehicle_readiness(session: AsyncSession = Depends(get_db_session))
     )
 
 
+@router.get("/system/modules")
+async def list_registered_modules() -> dict:
+    from energy_core.platform.modules.registry import default_module_registry
+    from energy_core.platform.modules.catalog_serialization import serialize_module_descriptor
+
+    modules = default_module_registry.list_modules()
+    return {
+        "modules": [serialize_module_descriptor(module) for module in modules],
+    }
+
+
+@router.get("/system/onboarding-catalog")
+async def get_onboarding_catalog() -> dict:
+    from energy_core.platform.modules.onboarding_schemas import ONBOARDING_CATEGORIES
+    from energy_core.platform.modules.registry import default_module_registry
+    from energy_core.platform.modules.catalog_serialization import serialize_module_descriptor
+
+    modules_by_category: dict[str, list[dict]] = {item["id"]: [] for item in ONBOARDING_CATEGORIES}
+    for module in default_module_registry.list_modules():
+        if not module.onboardable:
+            continue
+        payload = serialize_module_descriptor(module)
+        for category in module.device_categories:
+            modules_by_category.setdefault(category, []).append(payload)
+    return {
+        "categories": list(ONBOARDING_CATEGORIES),
+        "modules_by_category": modules_by_category,
+    }
+
+
 @router.get("/system/performance")
 async def get_performance_metrics(
     session: AsyncSession = Depends(get_db_session),

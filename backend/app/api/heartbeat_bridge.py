@@ -7,6 +7,7 @@ from dataclasses import asdict
 from typing import Any
 
 
+from app.admin_audit_helpers import audit_admin_mutation
 from app.schemas.heartbeat_bridge import HeartbeatBridgeSettingsResponse, HeartbeatBridgeSettingsUpdateRequest, HeartbeatBridgeStatusResponse, HeartbeatDiscoveryRunDetailResponse, HeartbeatDiscoveryRunResponse, HeartbeatDiscoveryRunResultResponse, HeartbeatEvMappingResponse, HeartbeatEvMappingUpdateRequest, HeartbeatReplayResponse, HeartbeatWriteTestResponse
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
@@ -15,7 +16,7 @@ from energy_core.integrations.heartbeat.bridge import (
     HeartbeatWriteTestService,
     VirtualChargerReplayService,
 )
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db_session
@@ -35,6 +36,7 @@ async def _get_site_or_404(session: AsyncSession, slug: str):
 @router.post("/sites/{slug}/heartbeat/discovery/run", response_model=HeartbeatDiscoveryRunResultResponse)
 async def run_heartbeat_discovery(
     slug: str,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> HeartbeatDiscoveryRunResultResponse:
     service = HeartbeatEvBridgeService(session)
@@ -45,6 +47,17 @@ async def run_heartbeat_discovery(
     except Exception as exc:
         logger.exception("Heartbeat discovery failed for %s", slug)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    await audit_admin_mutation(
+        request,
+        session,
+        action="heartbeat.discovery.run",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary={"run_id": run_id},
+    )
+    await session.commit()
 
     return HeartbeatDiscoveryRunResultResponse(
         run_id=run_id,
@@ -159,6 +172,7 @@ async def update_heartbeat_ev_mapping(
     slug: str,
     mapping_id: int,
     payload: HeartbeatEvMappingUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> HeartbeatEvMappingResponse:
     site = await _get_site_or_404(session, slug)
@@ -172,6 +186,15 @@ async def update_heartbeat_ev_mapping(
     )
     if mapping is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mapping not found")
+    await audit_admin_mutation(
+        request,
+        session,
+        action="heartbeat.mapping.update",
+        site_slug=slug,
+        resource_type="heartbeat_mapping",
+        resource_id=str(mapping_id),
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     return HeartbeatEvMappingResponse(
         id=mapping.id,
@@ -201,11 +224,21 @@ async def get_heartbeat_bridge_settings(
 async def update_heartbeat_bridge_settings(
     slug: str,
     payload: HeartbeatBridgeSettingsUpdateRequest,
+    request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> HeartbeatBridgeSettingsResponse:
     site = await _get_site_or_404(session, slug)
     repo = HeartbeatDiscoveryRepository(session)
     settings = await repo.update_bridge_settings(site.id, **payload.model_dump(exclude_unset=True))
+    await audit_admin_mutation(
+        request,
+        session,
+        action="heartbeat.bridge_settings.update",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary=payload.model_dump(exclude_unset=True),
+    )
     await session.commit()
     return HeartbeatBridgeSettingsResponse(**asdict(settings))
 
@@ -213,6 +246,7 @@ async def update_heartbeat_bridge_settings(
 @router.post("/sites/{slug}/heartbeat/write-test/run", response_model=HeartbeatWriteTestResponse)
 async def run_heartbeat_write_test(
     slug: str,
+    request: Request,
     dry_run: bool = Query(default=True),
     session: AsyncSession = Depends(get_db_session),
 ) -> HeartbeatWriteTestResponse:
@@ -224,6 +258,16 @@ async def run_heartbeat_write_test(
     except Exception as exc:
         logger.exception("Heartbeat write test failed for %s", slug)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="heartbeat.write_test.run",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary={"dry_run": dry_run, "classification": result.classification},
+    )
+    await session.commit()
     return HeartbeatWriteTestResponse(
         classification=result.classification,
         requested_value=result.requested_value,
@@ -240,6 +284,7 @@ async def run_heartbeat_write_test(
 @router.post("/sites/{slug}/heartbeat/replay/run", response_model=HeartbeatReplayResponse)
 async def run_heartbeat_replay(
     slug: str,
+    request: Request,
     hours: int = Query(default=24, ge=1, le=168),
     session: AsyncSession = Depends(get_db_session),
 ) -> HeartbeatReplayResponse:
@@ -251,6 +296,16 @@ async def run_heartbeat_replay(
     except Exception as exc:
         logger.exception("Heartbeat replay failed for %s", slug)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    await audit_admin_mutation(
+        request,
+        session,
+        action="heartbeat.replay.run",
+        site_slug=slug,
+        resource_type="site",
+        resource_id=slug,
+        summary={"hours": hours},
+    )
+    await session.commit()
     return HeartbeatReplayResponse(report=report, report_text=report_text)
 
 

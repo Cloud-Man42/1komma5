@@ -16,7 +16,7 @@ from energy_core.contracts.devices.meter import MeterSnapshot
 
 from energy_core.db.models import EvChargerModel, SiteModel, VehicleModel, VehicleStateLatestModel
 
-from energy_core.integrations.charging_stations.models import ResolvedChargingLocation, StationResolutionStatus
+from energy_core.providers.charging_stations import ResolvedChargingLocation, StationResolutionStatus
 
 from energy_core.vehicles.charging_intelligence.classification import classify_charging_type
 

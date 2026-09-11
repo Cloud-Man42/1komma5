@@ -107,9 +107,8 @@ async def test_vehicle_commands_require_enabled_flag(client, monkeypatch):
     )
     assert missing_vehicle.status_code == 403
 
-    with patch("energy_core.vehicles.commands.service.build_mercedes_provider") as provider_cls:
-        provider = AsyncMock()
-        provider_cls.return_value = provider
+    with patch("energy_core.providers.vehicle_command_wiring.resolve_vehicle_command_provider") as resolve_provider:
+        resolve_provider.return_value = AsyncMock()
         # Enable commands but vehicle still missing -> 404 after enable check passes
         await ac.put(
             "/api/sites/akarp/vehicles/integration/config",

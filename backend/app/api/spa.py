@@ -52,58 +52,17 @@ from energy_core.integrations.arctic_spa.factory import (
     build_arctic_spa_service,
     mask_api_key,
 )
+from app.spa_compute import (
+    get_spa_context as _get_spa_context,
+    normalize_spa_period as _normalize_spa_period,
+    spa_period_energy_totals as _period_energy_totals,
+    spa_period_range as _period_range,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["spa"])
 logger = logging.getLogger(__name__)
-
-
-async def _get_spa_context(session: AsyncSession, slug: str):
-    from energy_core.db.repositories import SiteRepository
-
-    site_repo = SiteRepository(session)
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    repo = ConsumerRepository(session)
-    row = await repo.get_spa_by_site_slug(slug)
-    if row is None:
-        consumer, config = await repo.get_or_create_spa(site)
-        await session.flush()
-        return site, consumer, config
-    consumer, config, _site = row
-    return site, consumer, config
-
-
-def _normalize_spa_period(period: str) -> str:
-    if period == "day":
-        return "24h"
-    return period
-
-
-def _period_range(period: str, timezone: str) -> tuple[datetime, datetime, str]:
-    period = _normalize_spa_period(period)
-    now = datetime.now(UTC)
-    if period == "24h":
-        return now - timedelta(hours=24), now, "hour"
-    if period == "today":
-        start, end = period_bounds(granularity="day", reference=now, timezone=timezone)
-        return start, end, "day"
-    if period == "week":
-        start = now - timedelta(days=7)
-        return start, now, "day"
-    if period == "month":
-        start, end = period_bounds(granularity="month", reference=now, timezone=timezone)
-        return start, end, "month"
-    if period == "year":
-        start, end = period_bounds(granularity="year", reference=now, timezone=timezone)
-        return start, end, "year"
-    if period == "rolling12":
-        return now - timedelta(days=365), now, "month"
-    if period == "total":
-        return datetime(1970, 1, 1, tzinfo=UTC), now, "day"
-    raise HTTPException(status_code=422, detail="Invalid period")
 
 
 def _build_period_response(
@@ -219,41 +178,6 @@ async def _ensure_spa_intervals(session: AsyncSession, site, consumer_id: int, p
     )
     if created or corrupt or rebuild_existing:
         await session.commit()
-
-
-async def _period_energy_totals(
-    session: AsyncSession,
-    consumer_id: int,
-    *,
-    start: datetime,
-    end: datetime,
-    fallback_price_sek_kwh: float,
-    site,
-) -> dict:
-    interval_repo = ConsumerIntervalRepository(session)
-    totals = await interval_repo.sum_for_period(consumer_id, start=start, end=end)
-    if totals:
-        return totals
-
-    sample_repo = ConsumerSampleRepository(session)
-    sample_totals = await sample_repo.sum_for_period(consumer_id, start=start, end=end)
-    energy = sample_totals.get("energy_kwh", 0.0) or 0.0
-    if energy <= 0:
-        return {}
-    return {
-        "energy_kwh": energy,
-        "solar_direct_kwh": 0.0,
-        "solar_battery_kwh": 0.0,
-        "grid_battery_kwh": 0.0,
-        "grid_direct_kwh": energy,
-        "unknown_kwh": 0.0,
-        "actual_cost_sek": energy * fallback_price_sek_kwh,
-        "reference_cost_sek": energy * fallback_price_sek_kwh,
-        "savings_sek": 0.0,
-        "heater_runtime_seconds": 0.0,
-        "pump_runtime_seconds": 0.0,
-        "max_power_w": sample_totals.get("max_power_w"),
-    }
 
 
 @router.get("/sites/{slug}/spa/status", response_model=SpaStatusResponse)

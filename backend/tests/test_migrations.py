@@ -65,6 +65,31 @@ def test_heartbeat_settings_seed_row_gets_a_timestamp(migrated_sqlite_db):
     assert row.updated_at is not None
 
 
+def test_isolated_runtime_tables_exist_after_head(migrated_sqlite_db):
+    """Regression: migration 069 creates isolated runtime persistence tables."""
+    tables = set(inspect(migrated_sqlite_db).get_table_names())
+    for name in ("isolated_runtime_instances", "runtime_events", "runtime_control_leases"):
+        assert name in tables
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("TEST_POSTGRES_URL"), reason="TEST_POSTGRES_URL required")
+def test_upgrade_head_on_postgresql(tmp_path, monkeypatch):
+    """Validate Alembic head (including 069) against PostgreSQL semantics."""
+    postgres_url = __import__("os").environ["TEST_POSTGRES_URL"]
+    monkeypatch.setenv("DATABASE_URL", postgres_url)
+    command.upgrade(_alembic_config(), "head")
+    engine = create_engine(postgres_url.replace("+asyncpg", "").replace("+psycopg", ""))
+    try:
+        with engine.connect() as conn:
+            applied = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+            expected = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+            assert applied == expected
+            tables = set(inspect(engine).get_table_names())
+            assert "isolated_runtime_instances" in tables
+    finally:
+        engine.dispose()
+
+
 def test_no_migration_hardcodes_the_postgres_now_function():
     """sa.func.now() renders per dialect; sa.text("now()") is passed through verbatim."""
     literal_now = re.compile(r"""text\(\s*["']now\(\)["']\s*\)""")

@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Post-deploy health check for Mercedes EQE + Charge Amps Halo stack.
 param(
-    [string]$BaseUrl = "http://192.168.50.54",
+    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
     [string]$SiteSlug = "akarp",
     [double]$SolarKwhTolerance = 2.0,
     [int]$TimeoutSec = 20

@@ -10,6 +10,21 @@ from energy_core.chargers.capabilities import ChargerCapabilities
 
 
 @pytest.mark.asyncio
+async def test_clamp_skips_when_set_current_unsupported():
+    adapter = AsyncMock()
+    adapter.get_capabilities.return_value = ChargerCapabilities(
+        min_current_a=6.0,
+        max_current_a=16.0,
+        phases=3,
+        supports_current_control=False,
+    )
+    config = ChargingConfig(max_current_a=32.0, min_current_a=4.0, phases=3)
+    clamped = await _clamp_config_to_capabilities(config, adapter)
+    assert clamped.max_current_a == 32.0
+    assert clamped.min_current_a == 4.0
+
+
+@pytest.mark.asyncio
 async def test_clamp_leaves_config_when_capabilities_unavailable():
     adapter = AsyncMock()
     adapter.get_capabilities.side_effect = RuntimeError("offline")

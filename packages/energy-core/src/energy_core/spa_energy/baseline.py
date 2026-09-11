@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from energy_core.flexible_load.types import HorizonBlock, ScoredBlock
 from energy_core.spa_energy.estimate import estimate_cleaning_window
-from energy_core.integrations.arctic_spa.profiles import SpaPowerProfiles
+from energy_core.providers.spa import SpaPowerProfiles
 
 
 def baseline_cleaning_cost_sek(

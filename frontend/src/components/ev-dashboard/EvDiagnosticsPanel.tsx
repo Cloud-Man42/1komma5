@@ -6,6 +6,7 @@ import {
   type EnergyReasoning,
   type EvBridgeStatus,
   fetchEnergyBalance,
+  fetchSiteDevices,
   formatWatts,
 } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
@@ -31,6 +32,7 @@ export function EvDiagnosticsPanel({
   refreshSeconds,
 }: Props) {
   const [balance, setBalance] = useState<EnergyBalanceSnapshot | null>(null);
+  const [deviceCount, setDeviceCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,9 +40,13 @@ export function EvDiagnosticsPanel({
 
     async function load() {
       try {
-        const snapshot = await fetchEnergyBalance(siteSlug, chargerId);
+        const [snapshot, devices] = await Promise.all([
+          fetchEnergyBalance(siteSlug, chargerId),
+          fetchSiteDevices(siteSlug),
+        ]);
         if (!cancelled) {
           setBalance(snapshot);
+          setDeviceCount(devices.devices.length);
           setError(null);
         }
       } catch (err) {
@@ -80,6 +86,11 @@ export function EvDiagnosticsPanel({
   return (
     <section className="evdash-panel diagnostics-panel" data-testid="ev-diagnostics-panel">
       <h2 className="evdash-panel-title">BRIDGE &amp; ENERGIBALANS</h2>
+      {deviceCount != null ? (
+        <p className="evdash-muted" data-testid="ev-device-registry-count">
+          Enhetsregister: {deviceCount} enhet{deviceCount === 1 ? "" : "er"}
+        </p>
+      ) : null}
 
       <div className="diagnostics-grid">
         <div>

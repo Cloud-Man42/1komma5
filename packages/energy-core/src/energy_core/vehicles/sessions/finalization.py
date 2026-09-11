@@ -6,7 +6,7 @@ from typing import Any
 
 from energy_core.db.models import VehicleStateLatestModel
 from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecord
-from energy_core.integrations.charging_stations.models import ResolvedChargingLocation, StationResolutionStatus
+from energy_core.providers.charging_stations import ResolvedChargingLocation, StationResolutionStatus
 from energy_core.vehicles.charging_intelligence.location import AWAY_LOCATION_NAME
 from energy_core.vehicles.sessions.constants import estimate_battery_delta_kwh
 

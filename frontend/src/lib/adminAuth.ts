@@ -24,9 +24,20 @@ export function adminAuthHeaders(extra?: HeadersInit): HeadersInit {
   };
 }
 
+export class AdminAuthRequiredError extends Error {
+  constructor(message = "Admin token required") {
+    super(message);
+    this.name = "AdminAuthRequiredError";
+  }
+}
+
 export async function adminFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     headers: adminAuthHeaders(init?.headers),
   });
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("emic:admin-auth-required"));
+  }
+  return response;
 }

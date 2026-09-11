@@ -2,7 +2,7 @@
 #
 # Production (.env):
 #   CADDY_DOMAIN=emic.inacloud.se
-#   CADDY_LAN_HOST=192.168.50.54          # optional HTTP fallback for direct IP access
+#   CADDY_LAN_HOST=192.168.50.54          # LAN HTTPS; plain HTTP redirects to HTTPS
 #
 # TLS: uses Caddy's internal CA by default (works with LAN / split-horizon DNS).
 # When emic.inacloud.se has a public A-record and ports 80+443 are forwarded,
@@ -20,6 +20,11 @@
 
 	handle /health {
 		reverse_proxy backend:8000
+	}
+
+	handle /sprint-b-fixtures/* {
+		root * /srv/sprint-b-fixtures
+		file_server
 	}
 
 	handle {
@@ -41,7 +46,18 @@ http://{$CADDY_DOMAIN:localhost} {
 	redir https://{host}{uri} permanent
 }
 
-# LAN IP fallback — plain HTTP for legacy clients that still hit the server by IP.
-http://{$CADDY_LAN_HOST:192.168.50.54} {
+# LAN IP — HTTPS for kiosks and operators; plain HTTP redirects to HTTPS.
+https://{$CADDY_LAN_HOST:192.168.50.54} {
+	tls internal
 	import emic_app
+}
+
+http://{$CADDY_LAN_HOST:192.168.50.54} {
+	redir https://{host}{uri} permanent
+}
+
+# Internal Docker-only artifact fixture server (no TLS, no redirect).
+:8080 {
+	root * /srv/sprint-b-fixtures
+	file_server
 }

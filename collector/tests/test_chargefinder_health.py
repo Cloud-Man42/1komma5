@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from energy_core.config import Settings
 from energy_core.db.chargefinder_integration_status_repo import ChargeFinderIntegrationStatusRepository
@@ -39,7 +41,11 @@ async def test_chargefinder_health_sync_records_per_vehicle_site(tmp_path, monke
     collector._session_factory = session_factory
 
     async with session_factory() as session:
-        await collector._sync_chargefinder_health(session)
+        with patch(
+            "energy_core.platform.modules.gating.any_site_module_runtime_active",
+            AsyncMock(return_value=True),
+        ):
+            await collector._sync_chargefinder_health(session)
         await session.commit()
 
         rows = (

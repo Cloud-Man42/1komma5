@@ -29,7 +29,7 @@ def _chargeamps_factory(settings: Settings, session: AsyncSession | None) -> IEn
     _ = settings
     if session is None:
         raise ValueError("Charge Amps control provider requires database session")
-    from energy_core.integrations.chargeamps.control_provider import ChargeAmpsControlProvider
+    from energy_core.providers.energy_control_wiring import ChargeAmpsControlProvider
 
     return ChargeAmpsControlProvider(session)
 

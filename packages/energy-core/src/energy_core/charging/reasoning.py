@@ -384,37 +384,7 @@ def _price_wait_step(reason: str) -> str:
     return labels.get(reason, f"Prisregel säger vänta ({reason}).")
 
 
-def parse_active_optimizations(items: list[dict[str, Any]] | None, *, now: datetime | None = None) -> tuple[str, ...]:
-    if not items:
-        return ()
-    now = now or datetime.now(UTC)
-    active: list[str] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        event_type = str(item.get("type") or item.get("eventType") or "UNKNOWN")
-        start = _parse_dt(item.get("start") or item.get("from"))
-        end = _parse_dt(item.get("end") or item.get("to"))
-        if start and end:
-            if start <= now <= end:
-                active.append(event_type)
-        elif start and start <= now:
-            active.append(event_type)
-        elif start is None and end is None:
-            active.append(event_type)
-    return tuple(active)
-
-
-def _parse_dt(value: Any) -> datetime | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+from energy_core.energy.optimizations import parse_active_optimizations  # noqa: F401 — re-export for tests
 
 
 async def load_energy_reasoning_for_charger(
@@ -430,8 +400,7 @@ async def load_energy_reasoning_for_charger(
     from energy_core.charging.solar_plan import load_solar_charging_plan_for_charger
     from energy_core.config import get_settings
     from energy_core.db.energy_balance_repo import EnergyBalanceRepository
-    from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
-    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
+    from energy_core.energy.provider_resolver import resolve_energy_state_provider
     from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
     from energy_core.charging.solar_plan import charging_config_from_models
 
@@ -442,25 +411,17 @@ async def load_energy_reasoning_for_charger(
     vehicle_context = None
     config = charging_config_from_models(charger, site)
 
-    client = await create_heartbeat_client(session)
-    if client is not None and site.external_system_id:
+    energy_provider = await resolve_energy_state_provider(
+        session,
+        site,
+        ev_id=charger.heartbeat_ev_id,
+    )
+    if energy_provider is not None:
         try:
-            provider = HeartbeatEnergyProvider(
-                client,
-                system_id=site.external_system_id,
-                ev_id=charger.heartbeat_ev_id,
-            )
-            energy = await provider.get_energy_state(now=now)
-            from_iso = (now - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-            to_iso = (now + timedelta(hours=24)).isoformat().replace("+00:00", "Z")
-            items = await client.fetch_optimizations(
-                site.external_system_id,
-                from_iso=from_iso,
-                to_iso=to_iso,
-            )
-            active_optimizations = parse_active_optimizations(items, now=now)
+            energy = await energy_provider.get_energy_state(now=now)
+            active_optimizations = await energy_provider.get_active_optimizations(now=now)
         except Exception:
-            logger.debug("energy reasoning heartbeat fetch failed site=%s", site.slug, exc_info=True)
+            logger.debug("energy reasoning energy fetch failed site=%s", site.slug, exc_info=True)
 
     vehicle_context = await resolve_vehicle_charging_context(
         session,

@@ -1,0 +1,1 @@
+TEST ONLY — Sprint D Module Store fixtures. Do not deploy to production trusted catalog.

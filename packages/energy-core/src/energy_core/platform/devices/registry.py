@@ -144,6 +144,44 @@ class DeviceRegistry:
 
         return tuple(records)
 
+    async def list_referencing_module(self, module_id: str) -> tuple[DeviceRecord, ...]:
+        matched: list[DeviceRecord] = []
+        seen: set[tuple[str, int, int]] = set()
+        from energy_core.db.models import SiteModel
+
+        site_ids = (await self._session.scalars(select(SiteModel.id))).all()
+        for site_id in site_ids:
+            for record in await self.list_for_site(int(site_id)):
+                key = (record.device_id.device_type.value, record.device_id.id, record.site_id)
+                if key in seen:
+                    continue
+                integration = (record.integration or "").lower()
+                metadata_module = record.metadata.get("module_id")
+                if (
+                    integration == module_id.lower()
+                    or integration.replace("_", ".") == module_id.lower()
+                    or metadata_module == module_id
+                ):
+                    seen.add(key)
+                    matched.append(record)
+        return tuple(matched)
+
+    async def get_for_site(
+        self,
+        site_id: int,
+        device_type: DeviceType | str,
+        device_id: int,
+    ) -> DeviceRecord | None:
+        if isinstance(device_type, str):
+            try:
+                device_type = DeviceType(device_type)
+            except ValueError:
+                return None
+        for record in await self.list_for_site(site_id):
+            if record.device_id.device_type == device_type and record.device_id.id == device_id:
+                return record
+        return None
+
     async def _health_by_provider(self, site_id: int) -> dict[str, str]:
         rows = (
             await self._session.scalars(

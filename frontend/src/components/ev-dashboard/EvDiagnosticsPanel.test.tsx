@@ -4,12 +4,14 @@ import { EvDiagnosticsPanel } from "./EvDiagnosticsPanel";
 import type { EnergyReasoning, EvBridgeStatus } from "@/lib/api";
 
 const mockFetchEnergyBalance = vi.fn();
+const mockFetchSiteDevices = vi.fn();
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
     ...actual,
     fetchEnergyBalance: (...args: unknown[]) => mockFetchEnergyBalance(...args),
+    fetchSiteDevices: (...args: unknown[]) => mockFetchSiteDevices(...args),
   };
 });
 
@@ -103,6 +105,24 @@ beforeEach(() => {
     alignment_delta_seconds: 2,
     energy_flow_line: "Sol → export",
   });
+  mockFetchSiteDevices.mockResolvedValue({
+    slug: "akarp",
+    devices: [
+      {
+        device_type: "ev_charger",
+        device_id: 1,
+        name: "Halo",
+        manufacturer: "ChargeAmps",
+        model: "Halo",
+        integration: "chargeamp",
+        connection_status: "online",
+        health_status: "healthy",
+        last_seen: "2026-09-06T10:00:00Z",
+        enabled: true,
+        metadata: {},
+      },
+    ],
+  });
 });
 
 describe("EvDiagnosticsPanel", () => {
@@ -121,12 +141,15 @@ describe("EvDiagnosticsPanel", () => {
     expect(within(panel).getByText(/Virtual EV bridge/i)).toBeTruthy();
     expect(within(panel).getByText(/Halo: Online/i)).toBeTruthy();
     expect(within(panel).getByText(/PV:/)).toBeTruthy();
+    expect(within(panel).getByTestId("ev-device-registry-count")).toHaveTextContent("Enhetsregister: 1 enhet");
     expect(within(panel).getByText(/Prisnivå röd/)).toBeTruthy();
     expect(mockFetchEnergyBalance).toHaveBeenCalledWith("akarp", 1);
+    expect(mockFetchSiteDevices).toHaveBeenCalledWith("akarp");
   });
 
   it("shows error when energy balance fetch fails", async () => {
     mockFetchEnergyBalance.mockRejectedValueOnce(new Error("503"));
+    mockFetchSiteDevices.mockRejectedValueOnce(new Error("503"));
     render(
       <EvDiagnosticsPanel
         siteSlug="akarp"

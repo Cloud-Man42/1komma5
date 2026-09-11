@@ -11,8 +11,8 @@ from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.db.models import SiteModel
 from energy_core.energy_control.types import ControlOutcome, ControlResult, ControlTarget, OptimizationAction
 from energy_core.energy_optimizer.types import EnergyAction
-from energy_core.integrations.heartbeat.bridge import HeartbeatWriteClient
-from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
+from energy_core.energy.client_access import open_heartbeat_client
+from energy_core.providers.heartbeat_wiring import HeartbeatWriteClient
 
 _BATTERY_ACTIONS = frozenset(
     {
@@ -162,7 +162,7 @@ class HeartbeatControlProvider:
                 payload=preview_payload,
             )
 
-        client = await create_heartbeat_client(self._session)
+        client = await open_heartbeat_client(self._session)
         if client is None:
             return self._result(
                 action,

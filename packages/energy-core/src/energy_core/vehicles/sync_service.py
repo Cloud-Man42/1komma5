@@ -7,11 +7,10 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from energy_core.db.vehicle_repo import VehicleProviderRepository, VehicleRepository, _carries_telemetry
-from energy_core.integrations.mercedes.factory import build_mercedes_provider
+from energy_core.providers.vehicle_integrations import MercedesAuthError, build_mercedes_provider
 from energy_core.secrets import SecretBox, SecretBoxError
 from energy_core.vehicles.abstractions.models import VehicleState
 from energy_core.vehicles.correlation.repo import VehicleHaloCorrelationRepository
-from energy_core.integrations.mercedes.auth import MercedesAuthError
 
 logger = logging.getLogger(__name__)
 

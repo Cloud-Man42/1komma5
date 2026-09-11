@@ -1,5 +1,5 @@
 param(
-    [string]$BaseUrl = "http://192.168.50.54",
+    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
     [string]$Site = "akarp",
     [int[]]$Concurrency = @(1, 5, 10)
 )
@@ -46,12 +46,12 @@ $p95One = ($results | Where-Object Users -eq 1 | Select-Object -First 1).P95Ms
 Write-Host ""
 Write-Host "External benchmark p95 @ 1 user = ${p95One}ms (includes LAN RTT)"
 
+. "$PSScriptRoot/lib/Get-EmicDeployCredential.ps1"
 $plink = "C:\Program Files\PuTTY\plink.exe"
-$pw = $env:EMIC_DEPLOY_PASSWORD
-if (-not $pw) { $pw = "mathias3" }
 if (Test-Path $plink) {
     Write-Host "Server-side warm cache timings (inside backend container):"
-    $serverRaw = (& $plink -batch -pw $pw hm@192.168.50.54 "cd ~/energy-monitoring && echo $pw | sudo -S docker compose exec -T backend python /app/scripts/benchmark_solar_forecast.py 2>/dev/null")
+    $authArgs = Get-EmicDeployAuthArgs
+    $serverRaw = (& $plink @authArgs hm@192.168.50.54 "cd ~/energy-monitoring && ~/.emic-deploy-sudo docker compose exec -T backend python /app/scripts/benchmark_solar_forecast.py 2>/dev/null")
     if ($serverRaw) {
         $p95Line = ($serverRaw -split "`n" | Where-Object { $_ -match '^p95_ms=' } | Select-Object -First 1)
         if ($p95Line -match 'p95_ms=([\d\.]+)') {

@@ -1,0 +1,1 @@
+"""Sensibo integration module package."""

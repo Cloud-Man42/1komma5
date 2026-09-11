@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from energy_core.chargers.framework.factory import ChargerAdapterFactory
 from energy_core.chargers.framework.legacy_bridge import LegacyControlBridge
 from energy_core.chargers.framework.meter_factory import MeterReaderFactory
+from energy_core.contracts.capabilities import DeviceCapability, supports
 from energy_core.contracts.devices.meter import MeterSnapshot
 from energy_core.charging.anti_flapping import AntiFlappingConfig, AntiFlappingState
 from energy_core.charging.command_controller import ChargingCommandController
@@ -34,9 +35,8 @@ from energy_core.charging.state_machine import (
 )
 from energy_core.db.ev_bridge_cycle_repo import EvBridgeCycleRepository
 from energy_core.db.models import EvChargerModel, SiteModel
-from energy_core.energy.heartbeat_provider import HeartbeatEnergyProvider
+from energy_core.energy.provider_resolver import resolve_energy_state_provider
 from energy_core.energy.state import EnergyState
-from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
 from energy_core.vehicles.smart_charging import apply_vehicle_charging_context, resolve_vehicle_charging_context
 
 logger = logging.getLogger(__name__)
@@ -66,11 +66,6 @@ class SmartChargingEngine:
         self._runtime: dict[int, ChargerRuntimeState] = {}
 
     async def run_cycle(self, session: AsyncSession) -> int:
-        client = await create_heartbeat_client(session)
-        if client is None:
-            logger.debug("smart_charging skipped: no HeartBeat client")
-            return 0
-
         chargers = await self._list_active_chargers(session)
         if not chargers:
             return 0
@@ -81,7 +76,7 @@ class SmartChargingEngine:
             if not self._is_due(charger, now):
                 continue
             try:
-                await self._run_charger_cycle(session, client, charger, site, now=now)
+                await self._run_charger_cycle(session, charger, site, now=now)
                 processed += 1
             except Exception:
                 logger.exception(
@@ -101,12 +96,32 @@ class SmartChargingEngine:
     async def _run_charger_cycle(
         self,
         session: AsyncSession,
-        client,
         charger: EvChargerModel,
         site: SiteModel,
         *,
         now: datetime,
     ) -> None:
+        from energy_core.config import get_settings
+        from energy_core.platform.modules.gating import is_module_runtime_active
+        from energy_core.platform.modules.site_modules import SiteModuleResolver
+
+        settings = get_settings()
+        if settings.module_gate_enabled:
+            if not await is_module_runtime_active(
+                session, site.id, "feature.smart-charging", settings=settings
+            ):
+                return
+            can_start = await SiteModuleResolver(session, settings=settings).can_start_module(
+                site.id, "feature.smart-charging"
+            )
+            if not can_start.can_start:
+                logger.warning(
+                    "smart_charging blocked site=%s missing=%s",
+                    site.slug,
+                    [cap.value for cap in can_start.missing_required],
+                )
+                return
+
         if not site.external_system_id:
             logger.warning("smart_charging charger_id=%s missing system_id", charger.id)
             return
@@ -116,12 +131,16 @@ class SmartChargingEngine:
             charger.last_bridge_run_at = now
             return
 
-        provider = HeartbeatEnergyProvider(
-            client,
-            system_id=site.external_system_id,
+        energy_provider = await resolve_energy_state_provider(
+            session,
+            site,
             ev_id=charger.heartbeat_ev_id,
         )
-        energy = await provider.get_energy_state(now=now)
+        if energy_provider is not None:
+            energy = await energy_provider.get_energy_state(now=now)
+        else:
+            logger.warning("smart_charging degraded: no energy provider — charger-only mode site=%s", site.slug)
+            energy = _degraded_energy_state(charger, now=now)
         energy = _apply_local_prefs(charger, energy)
         is_sqlite = session.bind is not None and session.bind.dialect.name == "sqlite"
         energy = await enrich_energy_import_prices(
@@ -188,25 +207,32 @@ class SmartChargingEngine:
                 is_charging = meter.is_charging
 
         if halo_connected and not vehicle_connected:
+            can_start = True
             try:
-                await adapter.start_charging()
-                adapter_status = await adapter.get_status()
-                halo_connected = adapter_status.connected
-                runtime.halo_connected = adapter_status.connected
-                meter = await self._read_meter(charger)
-                runtime.last_meter = meter
-                vehicle_connected = adapter_status.vehicle_connected or (meter.vehicle_connected if meter else False)
-                runtime.vehicle_connected = vehicle_connected
-                is_charging = adapter_status.charging or (meter.is_charging if meter else False)
-                if configured_current is None and adapter_status.current_limit_a is not None:
-                    configured_current = adapter_status.current_limit_a
-                if meter is not None:
-                    actual_current = meter.actual_charging_current_a
-                    actual_power = meter.power_w
-                    if meter.configured_current_a is not None:
-                        configured_current = meter.configured_current_a
+                capabilities = await adapter.get_capabilities()
+                can_start = supports(capabilities, DeviceCapability.START)
             except Exception:
-                logger.debug("charger arm failed charger_id=%s", charger.id, exc_info=True)
+                can_start = True
+            if can_start:
+                try:
+                    await adapter.start_charging()
+                    adapter_status = await adapter.get_status()
+                    halo_connected = adapter_status.connected
+                    runtime.halo_connected = adapter_status.connected
+                    meter = await self._read_meter(charger)
+                    runtime.last_meter = meter
+                    vehicle_connected = adapter_status.vehicle_connected or (meter.vehicle_connected if meter else False)
+                    runtime.vehicle_connected = vehicle_connected
+                    is_charging = adapter_status.charging or (meter.is_charging if meter else False)
+                    if configured_current is None and adapter_status.current_limit_a is not None:
+                        configured_current = adapter_status.current_limit_a
+                    if meter is not None:
+                        actual_current = meter.actual_charging_current_a
+                        actual_power = meter.power_w
+                        if meter.configured_current_a is not None:
+                            configured_current = meter.configured_current_a
+                except Exception:
+                    logger.debug("charger arm failed charger_id=%s", charger.id, exc_info=True)
 
         runtime.smart_runtime, decision = evaluate_smart_charging(
             runtime=runtime.smart_runtime,
@@ -602,9 +628,25 @@ async def _clamp_config_to_capabilities(config: ChargingConfig, adapter) -> Char
         capabilities = await adapter.get_capabilities()
     except Exception:
         return config
+    if not supports(capabilities, DeviceCapability.SET_CURRENT):
+        return config
     return replace(
         config,
         max_current_a=min(config.max_current_a, capabilities.max_current_a),
         min_current_a=max(config.min_current_a, capabilities.min_current_a),
         phases=capabilities.phases if capabilities.phases and capabilities.phases > 0 else config.phases,
+    )
+
+
+def _degraded_energy_state(charger: EvChargerModel, *, now: datetime) -> EnergyState:
+    """Fallback energy state when Heartbeat is unavailable."""
+    ts = charger.last_heartbeat_data_at or now
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=UTC)
+    age = max(0.0, (now - ts).total_seconds()) if charger.last_heartbeat_data_at else float(charger.stale_timeout_seconds)
+    return EnergyState(
+        timestamp=ts,
+        heartbeat_charging_mode=charger.charging_mode,
+        stale=True,
+        data_age_seconds=age,
     )

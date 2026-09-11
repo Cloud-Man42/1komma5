@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "entry_id": "integration.demo-1.0.0",
+      "module_id": "integration.demo",
+      "name": "Integration Demo",
+      "version": "1.0.0",
+      "publisher": "emic-tests",
+      "description": "Safe reference module for internal package store tests",
+      "package_filename": "../integration.demo-1.0.0.emicpkg",
+      "trusted": true
+    },
+    {
+      "entry_id": "integration.demo-1.1.0",
+      "module_id": "integration.demo",
+      "name": "Integration Demo",
+      "version": "1.1.0",
+      "publisher": "emic-tests",
+      "description": "Demo module update target",
+      "package_filename": "../integration.demo-1.1.0.emicpkg",
+      "trusted": true
+    }
+  ]
+}

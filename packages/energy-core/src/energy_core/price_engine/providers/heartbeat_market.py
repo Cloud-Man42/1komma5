@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from energy_core.integrations.heartbeat.client import HeartbeatClient
-from energy_core.integrations.heartbeat.parsing import parse_market_prices
+from energy_core.providers.heartbeat_wiring import HeartbeatClient, parse_market_prices
 from energy_core.price_engine.types import RawPricePoint
 
 

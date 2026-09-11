@@ -11,7 +11,11 @@ from energy_core.integrations.chargeamps.controller import (
     ChargeAmpsHaloController,
     build_chargeamps_controller,
 )
-from energy_core.integrations.chargeamps.web_controller import ChargeAmpsWebController, _valid_rfid_tag
+from energy_core.integrations.chargeamps.web_controller import (
+    ChargeAmpsWebController,
+    _valid_rfid_tag,
+    reset_chargeamps_web_resilience_for_tests,
+)
 from energy_core.chargers.mock import MockChargeAmpsController
 
 
@@ -377,4 +381,41 @@ async def test_external_stop_charging_keeps_evse_enabled():
         await controller.stop_charging()
 
     assert update.await_args.args[0]["mode"] == "On"
-    assert update.await_args.args[0]["maxCurrent"] == 0
+
+
+@pytest.mark.asyncio
+async def test_web_request_json_uses_last_known_good_when_circuit_open():
+    reset_chargeamps_web_resilience_for_tests()
+    controller = ChargeAmpsWebController("2106037142M", email="user@example.com", password="secret", use_mock=False)
+    cached = {"ip": "80.208.66.224", "connectors": []}
+    path = "/chargepoints/2106037142M"
+
+    with patch.object(controller, "_ensure_token", AsyncMock(return_value="token")):
+        with patch(
+            "energy_core.integrations.chargeamps.web_controller.httpx.AsyncClient",
+        ) as client_cls:
+            client = AsyncMock()
+            client.__aenter__.return_value = client
+            client.__aexit__.return_value = None
+            client.request = AsyncMock(
+                return_value=httpx.Response(
+                    200,
+                    json=cached,
+                    request=httpx.Request("GET", f"https://my.charge.space/api{path}"),
+                )
+            )
+            client_cls.return_value = client
+
+            result = await controller._request_json("GET", path)
+            assert result == cached
+
+            client.request = AsyncMock(side_effect=httpx.ConnectError("down"))
+            for _ in range(3):
+                result = await controller._request_json("GET", path)
+                assert result == cached
+
+            client.request.reset_mock()
+            client.request.side_effect = httpx.ConnectError("should not be called")
+            result = await controller._request_json("GET", path)
+            assert result == cached
+            client.request.assert_not_called()

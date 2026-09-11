@@ -9,7 +9,7 @@ from energy_core.db.spa_control_repo import SpaControlConfigRecord
 from energy_core.flexible_load.types import LoadPlan, PlanWindow
 from energy_core.contracts.spa.control import ISpaControlService
 from energy_core.contracts.spa.errors import SpaControlError
-from energy_core.integrations.arctic_spa.status import SpaStatus
+from energy_core.providers.spa import SpaStatus
 
 
 from energy_core.spa_energy.filter_policy import is_spa_filter_self_managed

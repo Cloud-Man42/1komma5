@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 
-import { adminAuthHeaders, getAdminToken, setAdminToken } from "@/lib/adminAuth";
+import { adminAuthHeaders, adminFetch, getAdminToken, setAdminToken } from "@/lib/adminAuth";
 
 describe("adminAuth", () => {
   beforeEach(() => {
@@ -22,5 +22,30 @@ describe("adminAuth", () => {
     setAdminToken("secret-token");
     setAdminToken("");
     expect(getAdminToken()).toBe("");
+  });
+
+  it("adminFetch attaches bearer token to requests", async () => {
+    setAdminToken("secret-token");
+    const fetchMock = vi.fn().mockResolvedValue({ status: 200, ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await adminFetch("/api/sites");
+    expect(fetchMock).toHaveBeenCalledWith("/api/sites", {
+      headers: { Authorization: "Bearer secret-token" },
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("adminFetch dispatches auth-required event on 401", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ status: 401, ok: false });
+    vi.stubGlobal("fetch", fetchMock);
+    const events: string[] = [];
+    window.addEventListener("emic:admin-auth-required", () => events.push("required"));
+
+    await adminFetch("/api/sites");
+    expect(events).toEqual(["required"]);
+
+    vi.unstubAllGlobals();
   });
 });

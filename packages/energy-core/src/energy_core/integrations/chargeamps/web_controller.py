@@ -24,6 +24,34 @@ CHARGEAMPS_WEB_ORIGIN = "https://my.charge.space"
 DEFAULT_CONNECTOR_ID = 1
 DEFAULT_RFID_TAG = "999999"
 
+_web_breaker: Any = None
+_web_lkg: Any = None
+
+
+def _chargeamps_web_breaker() -> Any:
+    global _web_breaker
+    if _web_breaker is None:
+        from energy_core.providers.resilience import CircuitBreaker
+
+        _web_breaker = CircuitBreaker()
+    return _web_breaker
+
+
+def _chargeamps_web_lkg() -> Any:
+    global _web_lkg
+    if _web_lkg is None:
+        from energy_core.providers.resilience import LastKnownGoodStore
+
+        _web_lkg = LastKnownGoodStore()
+    return _web_lkg
+
+
+def reset_chargeamps_web_resilience_for_tests() -> None:
+    """Reset module-level breaker/LKG — test helper only."""
+    global _web_breaker, _web_lkg
+    _web_breaker = None
+    _web_lkg = None
+
 
 class ChargeAmpsWebController:
     """Control Charge Amps Halo via the my.charge.space web API."""
@@ -188,19 +216,33 @@ class ChargeAmpsWebController:
         params: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
     ) -> Any:
-        token = await self._ensure_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Origin": CHARGEAMPS_WEB_ORIGIN,
-            "Accept": "application/json",
-        }
-        url = f"{CHARGEAMPS_WEB_BASE}{path}"
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.request(method, url, headers=headers, params=params, json=json_body)
-            response.raise_for_status()
-            if response.status_code == 204 or not response.content:
-                return {}
-            return response.json()
+        from energy_core.providers.resilience import resilient_call
+
+        cache_key = f"{method}:{path}"
+
+        async def _call() -> Any:
+            token = await self._ensure_token()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Origin": CHARGEAMPS_WEB_ORIGIN,
+                "Accept": "application/json",
+            }
+            url = f"{CHARGEAMPS_WEB_BASE}{path}"
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.request(method, url, headers=headers, params=params, json=json_body)
+                response.raise_for_status()
+                if response.status_code == 204 or not response.content:
+                    return {}
+                return response.json()
+
+        return await resilient_call(
+            breaker=_chargeamps_web_breaker(),
+            lkg=_chargeamps_web_lkg(),
+            key=cache_key,
+            call=_call,
+            max_age_seconds=30.0,
+            should_cache=lambda result: method.upper() == "GET",
+        )
 
     async def _default_rfid_tag_for_connector(self) -> str:
         return await self._resolve_rfid_tag()

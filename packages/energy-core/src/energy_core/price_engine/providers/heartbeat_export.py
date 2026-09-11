@@ -5,8 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from energy_core.export_revenue.calculator import SellPriceConfig, effective_sell_price_sek_kwh, ore_to_kr
-from energy_core.integrations.heartbeat.client import HeartbeatClient
-from energy_core.integrations.heartbeat.parsing import parse_feed_in_tariff, parse_market_prices
+from energy_core.providers.heartbeat_wiring import HeartbeatClient, parse_feed_in_tariff, parse_market_prices
 from energy_core.market_prices.currency import stored_eur_to_sek_kwh, sek_to_eur
 from energy_core.price_engine.types import RawPricePoint
 

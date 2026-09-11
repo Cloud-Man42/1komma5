@@ -14,6 +14,13 @@ export const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
     description: "Status och snabblänkar",
   },
   {
+    id: "modules-devices",
+    label: "Moduler & enheter",
+    href: "/config/modules-devices",
+    description: "Modulhantering, enheter och onboarding",
+    matchPrefix: true,
+  },
+  {
     id: "system",
     label: "System",
     href: "/config/system",

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from energy_core.integrations.charging_stations.abstractions import IChargingStationProvider
-from energy_core.integrations.charging_stations.models import (
+from energy_core.providers.charging_stations import (
+    IChargingStationProvider,
     ResolvedChargingLocation,
     StationResolutionStatus,
 )

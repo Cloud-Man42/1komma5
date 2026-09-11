@@ -1,5 +1,5 @@
 param(
-    [string]$BaseUrl = "http://192.168.50.54",
+    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
     [string]$Site = "akarp",
     [string]$AdminToken = $env:EMIC_ADMIN_TOKEN
 )
@@ -7,12 +7,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $AdminToken) {
-    $plink = "C:\Program Files\PuTTY\plink.exe"
-    $pw = $env:EMIC_DEPLOY_PASSWORD
-    if (-not $pw) { $pw = "mathias3" }
-    if (Test-Path $plink) {
-        $AdminToken = (& $plink -batch -pw $pw hm@192.168.50.54 "grep -E '^EMIC_ADMIN_TOKEN=' ~/energy-monitoring/.env | head -1 | cut -d= -f2-").Trim()
-    }
+    . "$PSScriptRoot/lib/Get-EmicDeployCredential.ps1"
+    $AdminToken = Get-EmicAdminTokenFromRemote
 }
 
 if (-not $AdminToken) {

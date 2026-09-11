@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from energy_core.export_revenue.site_config import sell_price_config_from_site
-from energy_core.integrations.heartbeat.client import HeartbeatClient
+from energy_core.providers.heartbeat_wiring import HeartbeatClient
 from energy_core.price_engine.providers.heartbeat_export import HeartbeatExportPriceProvider
 from energy_core.price_engine.providers.heartbeat_market import (
     HeartbeatImportPriceProvider,

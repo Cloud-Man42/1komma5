@@ -1,0 +1,1 @@
+{"advisories":[{"advisory_id":"emic-adv-demo-001","affected":{"package":"demo-lib","version_range":">=0.0.0"},"published_at":"2026-09-07T12:00:00Z","severity":"CRITICAL","source":"emic-tests","status":"ACTIVE"}],"bundle":{"generated_at":"2026-09-02T12:00:00Z","generation":2,"schema_version":1}}

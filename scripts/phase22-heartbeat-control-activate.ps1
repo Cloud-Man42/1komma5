@@ -1,5 +1,5 @@
 param(
-    [string]$BaseUrl = "http://192.168.50.54",
+    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
     [string]$Site = "akarp",
     [int]$PollSeconds = 120,
     [int]$MaxWaitMinutes = 720,

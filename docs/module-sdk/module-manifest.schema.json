@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EMIC Module Manifest",
+  "type": "object",
+  "required": [
+    "module_id",
+    "name",
+    "version",
+    "module_type",
+    "description",
+    "publisher",
+    "entrypoint",
+    "module_api_version",
+    "minimum_emic_version",
+    "provided_capabilities",
+    "required_capabilities",
+    "optional_capabilities",
+    "module_dependencies",
+    "configuration_schema",
+    "permissions",
+    "supports_per_site_activation",
+    "requires_restart_on_update",
+    "integrity"
+  ],
+  "properties": {
+    "module_id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9_-]*)+$" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "module_type": { "type": "string", "enum": ["integration", "feature"] },
+    "description": { "type": "string" },
+    "publisher": { "type": "string" },
+    "entrypoint": { "type": "string" },
+    "module_api_version": { "type": "integer", "minimum": 1 },
+    "minimum_emic_version": { "type": "string" },
+    "maximum_emic_version": { "type": "string" },
+    "provided_capabilities": { "type": "array", "items": { "type": "string" } },
+    "required_capabilities": { "type": "array", "items": { "type": "string" } },
+    "optional_capabilities": { "type": "array", "items": { "type": "string" } },
+    "module_dependencies": { "type": "array" },
+    "configuration_schema": { "type": "object" },
+    "permissions": { "type": "array", "items": { "type": "string" } },
+    "network_hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+      },
+      "description": "HTTPS hostnames allowed via Network Broker (no wildcards)"
+    },
+    "supports_per_site_activation": { "type": "boolean" },
+    "requires_restart_on_update": { "type": "boolean" },
+    "integrity": {
+      "type": "object",
+      "required": ["archive_sha256"],
+      "properties": {
+        "archive_sha256": { "type": "string" },
+        "manifest_sha256": { "type": "string" }
+      }
+    }
+  }
+}

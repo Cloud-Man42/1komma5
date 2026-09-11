@@ -57,10 +57,18 @@ $tarArgs = @(
     "--exclude=__pycache__",
     "--exclude=.venv",
     "--exclude=.env",
+    "--exclude=**/.build",
+    "--exclude=**/.pytest_cache",
+    "--exclude=**/pytest_cache",
+    "--exclude=**/__pycache__",
+    "--exclude=packages/energy-core/tests",
+    "--exclude=backend/tests",
+    "--exclude=collector/tests",
     "-C", $repoRoot,
     "backend", "collector", "frontend", "packages", "docker", "scripts", "alembic", "alembic.ini",
     "scripts/verify_mercedes_eqe_commands.py",
     "scripts/deploy-linux-remote.sh",
+    "scripts/deploy-linux-extract.sh",
     "docker-compose.yml", "Caddyfile", "pyproject.toml", "uv.lock", ".env.production.example"
 )
 
@@ -69,16 +77,24 @@ $ErrorActionPreference = "Continue"
 & tar @tarArgs
 if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
 
+$localHash = (Get-FileHash -Path $archive -Algorithm SHA256).Hash.ToLower()
+$localSize = (Get-Item $archive).Length
+Write-Host "Local archive: size=$localSize sha256=$localHash"
+
 Write-Host "Uploading to ${User}@${Server}..."
 & $pscp @authArgs $archive "${User}@${Server}:${RemoteDir}.tar.gz"
 if ($LASTEXITCODE -ne 0) { throw "pscp upload failed" }
 
 $remoteScript = Join-Path $repoRoot "scripts/deploy-linux-remote.sh"
-$remoteScriptUnix = Join-Path $env:TEMP "deploy-linux-remote-unix.sh"
-$unixContent = (Get-Content -Path $remoteScript -Raw).Replace("`r`n", "`n")
-[System.IO.File]::WriteAllText($remoteScriptUnix, $unixContent)
-& $pscp @authArgs $remoteScriptUnix "${User}@${Server}:deploy-linux-remote.sh"
-if ($LASTEXITCODE -ne 0) { throw "pscp script upload failed" }
+$extractScript = Join-Path $repoRoot "scripts/deploy-linux-extract.sh"
+foreach ($scriptPath in @($remoteScript, $extractScript)) {
+    $baseName = Split-Path -Leaf $scriptPath
+    $unixPath = Join-Path $env:TEMP "${baseName}-unix.sh"
+    $unixContent = (Get-Content -Path $scriptPath -Raw).Replace("`r`n", "`n")
+    [System.IO.File]::WriteAllText($unixPath, $unixContent)
+    & $pscp @authArgs $unixPath "${User}@${Server}:$baseName"
+    if ($LASTEXITCODE -ne 0) { throw "pscp $baseName upload failed" }
+}
 
 if ($SudoPasswordFile) {
     if (-not (Test-Path $SudoPasswordFile)) { throw "Sudo password file not found: $SudoPasswordFile" }
@@ -88,8 +104,8 @@ if ($SudoPasswordFile) {
     if ($LASTEXITCODE -ne 0) { throw "chmod on remote sudo password file failed" }
 }
 
-Write-Host "Extracting and starting Docker stack on server..."
-$extractCmd = "mkdir -p ~/$RemoteDir && rm -rf ~/$RemoteDir/frontend && tar -xzf ~/$RemoteDir.tar.gz -C ~/$RemoteDir && cp ~/deploy-linux-remote.sh ~/$RemoteDir/deploy-linux-remote.sh && chmod +x ~/$RemoteDir/deploy-linux-remote.sh"
+Write-Host "Extracting to staging and activating on server..."
+$extractCmd = "chmod +x ~/deploy-linux-extract.sh && bash ~/deploy-linux-extract.sh $RemoteDir $localHash"
 & $plink @authArgs "${User}@${Server}" $extractCmd
 if ($LASTEXITCODE -ne 0) { throw "Remote extract failed" }
 

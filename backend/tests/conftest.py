@@ -77,6 +77,22 @@ def isolate_admin_token_env(monkeypatch):
     monkeypatch.setenv("EMIC_ADMIN_TOKEN", "")
 
 
+@pytest.fixture(autouse=True)
+def restore_module_registry():
+    """Package loader tests mutate the process-global registry; reset for each backend test."""
+    from energy_core.platform.modules.bootstrap import register_default_modules
+    from energy_core.platform.modules.registry import default_module_registry
+    from energy_core.platform.modules.site_modules import invalidate_site_module_cache
+
+    default_module_registry.clear()
+    register_default_modules()
+    invalidate_site_module_cache()
+    yield
+    default_module_registry.clear()
+    register_default_modules()
+    invalidate_site_module_cache()
+
+
 @pytest.fixture
 async def client(tmp_path):
     db_file = tmp_path / "test.db"

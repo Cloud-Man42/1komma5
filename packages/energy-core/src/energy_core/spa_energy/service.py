@@ -21,12 +21,12 @@ from energy_core.flexible_load.house_load import HouseLoadForecastProvider
 from energy_core.flexible_load.optimizer import FlexibleLoadOptimizer
 from energy_core.flexible_load.orchestrator import OrchestratedLoadSpec
 from energy_core.flexible_load.types import EnergySource, FlexibleLoad, LoadPlan, LoadStrategy
-from energy_core.integrations.arctic_spa.factory import (
+from energy_core.providers.spa import (
     ArcticSpaConfiguration,
+    SpaPowerProfiles,
+    SpaStatus,
     build_arctic_spa_control_service,
 )
-from energy_core.integrations.arctic_spa.profiles import SpaPowerProfiles
-from energy_core.integrations.arctic_spa.status import SpaStatus
 from energy_core.secrets import CredentialCipher
 from energy_core.spa_energy.actuator import SpaActuatorDecision, SpaCleaningActuator
 from energy_core.spa_energy.filter_policy import SpaFilterPolicy, is_spa_filter_self_managed

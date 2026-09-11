@@ -8,10 +8,24 @@ import signal
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from energy_core.config import assert_emic_admin_token_production_safe
 from energy_core.integrations.chargeamps.config import assert_chargeamps_production_safe
 from energy_core.charging.engine import SmartChargingEngine
 from energy_core.config import get_settings
 from energy_core.platform.events import get_event_bus, register_default_subscribers
+from energy_core.platform.modules.bootstrap import register_default_modules
+from energy_core.platform.modules.packages.loader import load_installed_module_packages
+from energy_core.platform.modules.handlers import register_default_module_handlers
+from energy_core.platform.modules.orchestrator import ModuleOrchestrator
+from energy_core.platform.modules.sync_state import drain_dirty_module_sites
+from energy_core.platform.modules.gating import (
+    any_site_module_runtime_active,
+    filter_sites_for_module,
+    is_module_runtime_active,
+)
+from energy_core.cache.module_pubsub import listen_module_events
+from energy_core.cache.module_runtime_state import refresh_runtime_heartbeats
+from energy_core.platform.modules.runtime_registry import default_module_runtime_registry
 from energy_core.platform.events.site_refresh import drain_dirty_site_ids, mark_site_dirty
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
 from energy_core.db.repositories import (
@@ -63,16 +77,97 @@ class Collector:
         self._energy_aggregation = EnergyAggregationService(is_sqlite=self._settings.is_sqlite)
         self._financial_aggregation = FinancialAggregationService(self._settings)
         self._lane_tasks: list[asyncio.Task] = []
+        self._module_listener_task: asyncio.Task | None = None
+        self._orchestrator: ModuleOrchestrator | None = None
+        self._last_reconcile_at: datetime | None = None
+        self._reconcile_interval_seconds = 120
 
     async def setup(self) -> None:
+        register_default_modules()
+        register_default_module_handlers(vehicle_supervisor=self._vehicle_supervisor)
+        await load_installed_module_packages(self._session_factory, settings=self._settings)
         register_default_subscribers(get_event_bus())
         assert_chargeamps_production_safe(app_env=self._settings.app_env.value)
+        assert_emic_admin_token_production_safe(
+            app_env=self._settings.app_env.value,
+            emic_admin_token=self._settings.emic_admin_token,
+        )
         async with self._session_factory() as session:
             await seed_sites(session)
             await self._ev_accounting.setup(session)
             await self._vehicle_charge_sessions.setup(session)
+            self._orchestrator = ModuleOrchestrator(
+                session,
+                settings=self._settings,
+                session_factory=self._session_factory,
+                extras={"vehicle_supervisor": self._vehicle_supervisor},
+            )
+            await self._orchestrator.start_all_sites()
             await session.commit()
-        await self._vehicle_supervisor.start()
+        self._module_listener_task = asyncio.create_task(
+            self._module_event_listener(),
+            name="collector-module-events",
+        )
+
+    async def _sync_dirty_module_sites(self) -> None:
+        if self._orchestrator is None:
+            return
+        for site_id in drain_dirty_module_sites():
+            async with self._session_factory() as session:
+                self._orchestrator._session = session
+                await self._orchestrator.sync_site(site_id)
+                await session.commit()
+
+    async def _maybe_reconcile_all_sites(self) -> None:
+        if self._orchestrator is None:
+            return
+        now = datetime.now(UTC)
+        if self._last_reconcile_at is not None:
+            elapsed = (now - self._last_reconcile_at).total_seconds()
+            if elapsed < self._reconcile_interval_seconds:
+                return
+        async with self._session_factory() as session:
+            self._orchestrator._session = session
+            await self._orchestrator.reconcile_all_sites()
+            await session.commit()
+        self._last_reconcile_at = now
+
+    async def _refresh_runtime_heartbeats(self) -> None:
+        async with self._session_factory() as session:
+            sites = await SiteRepository(session).list_all()
+            for site in sites:
+                running = default_module_runtime_registry.active_modules_for_site(site.id)
+                if running:
+                    await refresh_runtime_heartbeats(self._settings, site.id, running)
+
+    async def _module_event_listener(self) -> None:
+        try:
+            async for event in listen_module_events(self._settings):
+                site_id = event.get("site_id")
+                module_id = event.get("module_id")
+                enabled = event.get("enabled")
+                action = event.get("action")
+                if not isinstance(site_id, int) or not isinstance(module_id, str):
+                    continue
+                if self._orchestrator is None:
+                    continue
+                async with self._session_factory() as session:
+                    self._orchestrator._session = session
+                    if action == "restart":
+                        await self._orchestrator.stop_module(site_id, module_id)
+                        await self._orchestrator.start_module(site_id, module_id)
+                    elif isinstance(enabled, bool):
+                        if enabled:
+                            await self._orchestrator.start_module(site_id, module_id)
+                        else:
+                            await self._orchestrator.stop_module(site_id, module_id)
+                    else:
+                        continue
+                    await session.commit()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Module event listener failed")
 
     async def poll_once(self) -> None:
         """Compatibility wrapper: run all lanes sequentially."""
@@ -80,14 +175,15 @@ class Collector:
         await self.run_medium_lane()
         await self.run_slow_lane()
 
-    async def _run_lane(self, lane: str, task_name: str, coro) -> None:
+    async def _run_lane(self, lane: str, task_name: str, coro):
         import time
 
         started = time.perf_counter()
         success = True
         error_class: str | None = None
+        result = None
         try:
-            await asyncio.wait_for(coro, timeout=float(self._settings.collector_lane_timeout_seconds))
+            result = await asyncio.wait_for(coro, timeout=float(self._settings.collector_lane_timeout_seconds))
         except Exception as exc:
             success = False
             error_class = type(exc).__name__
@@ -101,15 +197,37 @@ class Collector:
             success=success,
             error_class=error_class,
         )
+        return result
+
+    async def _supervise_isolated_runtimes(self) -> None:
+        from energy_core.platform.modules.isolation.manager import IsolatedModuleRuntimeManager
+
+        try:
+            async with self._session_factory() as session:
+                manager = IsolatedModuleRuntimeManager(session, self._settings)
+                await manager.supervise_tick()
+                await session.commit()
+        except Exception:
+            logger.exception("Isolated runtime supervision tick failed")
 
     async def run_fast_lane(self) -> None:
+        await self._sync_dirty_module_sites()
+        await self._maybe_reconcile_all_sites()
+        await self._supervise_isolated_runtimes()
+        await self._refresh_runtime_heartbeats()
         reading_count = 0
         reading_site_ids: set[int] = set()
         async with self._session_factory() as session:
-            provider = await create_heartbeat_provider_from_db(session)
-            heartbeat_readings = await provider.fetch_readings()
-
             site_repo = SiteRepository(session)
+            sites = await site_repo.list_all()
+            if await any_site_module_runtime_active(
+                session, sites, "integration.heartbeat", settings=self._settings
+            ):
+                provider = await create_heartbeat_provider_from_db(session)
+                heartbeat_readings = await provider.fetch_readings()
+            else:
+                heartbeat_readings = []
+
             reading_repo = EnergyReadingRepository(session, is_sqlite=self._settings.is_sqlite)
 
             for raw in heartbeat_readings:
@@ -120,6 +238,10 @@ class Collector:
                 site = await site_repo.get_by_slug(normalized.site_slug)
                 if site is None:
                     logger.warning("Unknown site slug %s, skipping", normalized.site_slug)
+                    continue
+                if not await is_module_runtime_active(
+                    session, site.id, "integration.heartbeat", settings=self._settings
+                ):
                     continue
                 await reading_repo.upsert_reading(site.id, normalized)
                 reading_site_ids.add(site.id)
@@ -144,7 +266,7 @@ class Collector:
                     "fast",
                     "smart_charging",
                     self._charging_engine.run_cycle(session),
-                )
+                ) or 0
                 dirty_ids = drain_dirty_site_ids()
                 refresh_ids = dirty_ids | reading_site_ids
                 if refresh_ids:
@@ -163,6 +285,7 @@ class Collector:
         logger.info("Fast lane: %d readings, smart charging processed %d chargers", reading_count, bridge_count)
 
     async def run_medium_lane(self) -> None:
+        await self._sync_dirty_module_sites()
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
@@ -198,6 +321,7 @@ class Collector:
             logger.exception("Collector medium bridge lane failed")
 
     async def run_slow_lane(self) -> None:
+        await self._sync_dirty_module_sites()
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
@@ -243,7 +367,13 @@ class Collector:
 
         recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         engine = EmicPriceEngine(session, is_sqlite=self._settings.is_sqlite)
-        for site in await site_repo.list_all():
+        sites = await filter_sites_for_module(
+            session,
+            await site_repo.list_all(),
+            "feature.price-engine",
+            settings=self._settings,
+        )
+        for site in sites:
             if not site.external_system_id:
                 continue
             started = time.perf_counter()
@@ -309,7 +439,13 @@ class Collector:
         service = EnergyControlService(session)
         recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         count = 0
-        for site in await site_repo.list_all():
+        sites = await filter_sites_for_module(
+            session,
+            await site_repo.list_all(),
+            "feature.energy-control",
+            settings=self._settings,
+        )
+        for site in sites:
             if site.optimization_mode == OptimizationMode.MONITOR_ONLY.value:
                 continue
             try:
@@ -346,6 +482,15 @@ class Collector:
         from energy_core.integrations.health import IntegrationHealthRecorder
 
         if not self._settings.chargefinder_enabled:
+            return
+
+        from energy_core.platform.modules.gating import any_site_module_runtime_active
+        from energy_core.db.repositories import SiteRepository
+
+        sites = await SiteRepository(session).list_all()
+        if not await any_site_module_runtime_active(
+            session, sites, "integration.chargefinder", settings=self._settings
+        ):
             return
 
         try:
@@ -396,6 +541,10 @@ class Collector:
         recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         live_overviews: dict[str, dict] = {}
         for site in sites:
+            if not await is_module_runtime_active(
+                session, site.id, "integration.heartbeat", settings=self._settings
+            ):
+                continue
             overview = await poll_ctx.live_overview(site)
             if overview is not None:
                 live_overviews[site.slug] = overview
@@ -415,11 +564,20 @@ class Collector:
         from energy_core.db.consumer_repo import ConsumerRepository
         from energy_core.integrations.collector_health import record_provider_outcome
         from energy_core.integrations.health import IntegrationHealthRecorder
+        from energy_core.platform.modules.gating import is_module_runtime_active
 
         spa_sites = {
             site.id: site
             for _, _, site in await ConsumerRepository(session).list_enabled_spa_consumers()
         }
+        if self._settings.module_gate_enabled:
+            spa_sites = {
+                site_id: site
+                for site_id, site in spa_sites.items()
+                if await is_module_runtime_active(
+                    session, site_id, "integration.arctic_spa", settings=self._settings
+                )
+            }
         if not spa_sites:
             return
 
@@ -465,7 +623,13 @@ class Collector:
         live_overviews: dict[str, dict],
     ) -> None:
         total = 0
-        for site in await site_repo.list_all():
+        sites = await filter_sites_for_module(
+            session,
+            await site_repo.list_all(),
+            "feature.smart-charging",
+            settings=self._settings,
+        )
+        for site in sites:
             total += await self._ev_accounting.process_site(
                 session,
                 site=site,
@@ -482,7 +646,13 @@ class Collector:
         live_overviews: dict[str, dict],
     ) -> None:
         total = 0
-        for site in await site_repo.list_all():
+        sites = await filter_sites_for_module(
+            session,
+            await site_repo.list_all(),
+            "feature.vehicles",
+            settings=self._settings,
+        )
+        for site in sites:
             total += await self._vehicle_charge_sessions.process_site(
                 session,
                 site=site,
@@ -502,7 +672,13 @@ class Collector:
 
         charger_repo = EvChargerRepository(session)
         total = 0
-        for site in await site_repo.list_all():
+        sites = await filter_sites_for_module(
+            session,
+            await site_repo.list_all(),
+            "feature.energy-balance",
+            settings=self._settings,
+        )
+        for site in sites:
             live_overview = live_overviews.get(site.slug)
             chargers = await charger_repo.list_for_site(site.id)
             for charger in chargers:
@@ -532,6 +708,14 @@ class Collector:
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
         for site in await site_repo.list_all():
+            if not await is_module_runtime_active(
+                session, site.id, "integration.heartbeat", settings=self._settings
+            ):
+                continue
+            if not await is_module_runtime_active(
+                session, site.id, "feature.smart-charging", settings=self._settings
+            ):
+                continue
             if not site.external_system_id:
                 continue
             settings = await bridge_repo.get_or_create_bridge_settings(site.id)
@@ -603,6 +787,10 @@ class Collector:
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
         for site in await site_repo.list_all():
+            if not await is_module_runtime_active(
+                session, site.id, "feature.energy-control", settings=self._settings
+            ):
+                continue
             if not site.external_system_id:
                 continue
             settings = await bridge_repo.get_or_create_bridge_settings(site.id)
@@ -663,6 +851,13 @@ class Collector:
         from energy_core.integrations.health import IntegrationHealthRecorder
 
         sites = await site_repo.list_all()
+        if self._settings.module_gate_enabled:
+            sites = await filter_sites_for_module(
+                session,
+                sites,
+                "feature.solar-forecast",
+                settings=self._settings,
+            )
         now = datetime.now(UTC)
         recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         for site in sites:
@@ -740,6 +935,10 @@ class Collector:
             task.cancel()
 
     async def shutdown(self) -> None:
+        if self._module_listener_task is not None:
+            self._module_listener_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._module_listener_task
         await self._vehicle_supervisor.stop()
         await self._engine.dispose()
 

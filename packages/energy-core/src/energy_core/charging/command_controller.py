@@ -16,6 +16,7 @@ from energy_core.charging.anti_flapping import (
     should_apply_current,
 )
 from energy_core.charging.models import ChargingDecision
+from energy_core.contracts.capabilities import DeviceCapability, supports
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,31 @@ class ChargingCommandController:
 
         requested = max(0.0, decision.requested_current_a)
         try:
+            capabilities = None
+            try:
+                capabilities = await self._adapter.get_capabilities()
+            except Exception:
+                capabilities = None
             status = await self._adapter.get_status()
+            if capabilities is not None:
+                if requested <= 0 and not supports(capabilities, DeviceCapability.STOP):
+                    current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
+                    return CommandApplyResult(
+                        applied=False,
+                        applied_current_a=current,
+                        reason="capability_stop_unsupported",
+                        charger_status=status,
+                        error_code="CAPABILITY_STOP_UNSUPPORTED",
+                    )
+                if requested > 0 and not supports(capabilities, DeviceCapability.SET_CURRENT):
+                    current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
+                    return CommandApplyResult(
+                        applied=False,
+                        applied_current_a=current,
+                        reason="capability_set_current_unsupported",
+                        charger_status=status,
+                        error_code="CAPABILITY_SET_CURRENT_UNSUPPORTED",
+                    )
             if not status.connected:
                 current = self._anti_flapping.last_command_current_a or self._anti_flapping.last_applied_current_a or 0.0
                 return CommandApplyResult(
@@ -153,6 +178,15 @@ class ChargingCommandController:
 
             await self._adapter.set_current(next_current)
             if not status.charging:
+                if capabilities is not None and not supports(capabilities, DeviceCapability.START):
+                    record_applied(self._anti_flapping, next_current, now=now)
+                    return CommandApplyResult(
+                        applied=False,
+                        applied_current_a=next_current,
+                        reason="capability_start_unsupported",
+                        charger_status=status,
+                        error_code="CAPABILITY_START_UNSUPPORTED",
+                    )
                 await self._adapter.start_charging()
             record_applied(self._anti_flapping, next_current, now=now)
             return CommandApplyResult(

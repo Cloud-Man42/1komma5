@@ -1,5 +1,8 @@
 # EMIC Modular Architecture — Step 1 Result
 
+> **Superseded:** This document is a historical snapshot from 2026-09-05.  
+> See [EMIC_STEP1_VERIFICATION.md](./EMIC_STEP1_VERIFICATION.md) (2026-09-07) for verified current state.
+
 **Date:** 2026-09-05  
 **Status:** Complete  
 **Analysis reference:** [EMIC_MODULAR_ARCHITECTURE_STEP1.md](./EMIC_MODULAR_ARCHITECTURE_STEP1.md)

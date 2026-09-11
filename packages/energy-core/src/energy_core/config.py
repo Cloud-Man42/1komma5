@@ -150,6 +150,64 @@ class Settings(BaseSettings):
         default=300.0, ge=30.0, alias="HORIZON_OPTIMIZER_REDIS_CACHE_TTL_SECONDS"
     )
     energy_control_collector_enabled: bool = Field(default=True, alias="ENERGY_CONTROL_COLLECTOR_ENABLED")
+    module_gate_enabled: bool = Field(default=True, alias="EMIC_MODULE_GATE_ENABLED")
+    emic_modules_path: str = Field(default="", alias="EMIC_MODULES_PATH")
+    emic_allow_unsigned_modules: bool = Field(default=False, alias="EMIC_ALLOW_UNSIGNED_MODULES")
+    emic_version: str = Field(default="0.1.0", alias="EMIC_VERSION")
+    emic_module_api_version: int = Field(default=1, ge=1, alias="EMIC_MODULE_API_VERSION")
+    emic_module_package_max_bytes: int = Field(default=52_428_800, ge=1024, alias="EMIC_MODULE_PACKAGE_MAX_BYTES")
+    emic_module_catalog_path: str = Field(default="", alias="EMIC_MODULE_CATALOG_PATH")
+    marketplace_metadata_enabled: bool = Field(default=False, alias="MARKETPLACE_METADATA_ENABLED")
+    marketplace_metadata_url: str = Field(default="", alias="MARKETPLACE_METADATA_URL")
+    marketplace_targets_url: str = Field(default="", alias="MARKETPLACE_TARGETS_URL")
+    marketplace_trusted_root_path: str = Field(default="", alias="MARKETPLACE_TRUSTED_ROOT_PATH")
+    marketplace_sync_interval_seconds: int = Field(default=3600, ge=60, alias="MARKETPLACE_SYNC_INTERVAL_SECONDS")
+    marketplace_metadata_max_bytes: int = Field(default=1_048_576, ge=1024, alias="MARKETPLACE_METADATA_MAX_BYTES")
+    marketplace_connect_timeout_seconds: float = Field(default=5.0, ge=1.0, alias="MARKETPLACE_CONNECT_TIMEOUT_SECONDS")
+    marketplace_read_timeout_seconds: float = Field(default=15.0, ge=1.0, alias="MARKETPLACE_READ_TIMEOUT_SECONDS")
+    marketplace_tuf_state_path: str = Field(default="", alias="MARKETPLACE_TUF_STATE_PATH")
+    marketplace_artifact_max_bytes: int = Field(default=52_428_800, ge=1024, alias="MARKETPLACE_ARTIFACT_MAX_BYTES")
+    marketplace_artifact_connect_timeout_seconds: float = Field(
+        default=10.0, ge=1.0, alias="MARKETPLACE_ARTIFACT_CONNECT_TIMEOUT_SECONDS"
+    )
+    marketplace_artifact_read_timeout_seconds: float = Field(
+        default=120.0, ge=1.0, alias="MARKETPLACE_ARTIFACT_READ_TIMEOUT_SECONDS"
+    )
+    marketplace_artifact_allow_redirects: bool = Field(default=False, alias="MARKETPLACE_ARTIFACT_ALLOW_REDIRECTS")
+    marketplace_artifact_max_redirects: int = Field(default=0, ge=0, le=5, alias="MARKETPLACE_ARTIFACT_MAX_REDIRECTS")
+    marketplace_artifact_tls_verify: bool = Field(default=True, alias="MARKETPLACE_ARTIFACT_TLS_VERIFY")
+    marketplace_staging_path: str = Field(default="", alias="MARKETPLACE_STAGING_PATH")
+    marketplace_internal_cidrs: str = Field(default="", alias="MARKETPLACE_INTERNAL_CIDRS")
+    third_party_runtime_enabled: bool = Field(default=False, alias="THIRD_PARTY_RUNTIME_ENABLED")
+    isolated_runtime_enabled: bool = Field(default=False, alias="ISOLATED_RUNTIME_ENABLED")
+    isolated_runtime_socket_dir: str = Field(default="", alias="ISOLATED_RUNTIME_SOCKET_DIR")
+    isolated_runtime_data_root: str = Field(default="", alias="ISOLATED_RUNTIME_DATA_ROOT")
+    isolated_runtime_sandbox: str = Field(default="auto", alias="ISOLATED_RUNTIME_SANDBOX")
+    isolated_runtime_memory_mb: int = Field(default=256, ge=32, alias="ISOLATED_RUNTIME_MEMORY_MB")
+    isolated_runtime_cpu_quota_percent: int = Field(default=50, ge=1, le=100, alias="ISOLATED_RUNTIME_CPU_QUOTA_PERCENT")
+    isolated_runtime_max_processes: int = Field(default=32, ge=1, alias="ISOLATED_RUNTIME_MAX_PROCESSES")
+    isolated_runtime_max_open_files: int = Field(default=256, ge=16, alias="ISOLATED_RUNTIME_MAX_OPEN_FILES")
+    isolated_runtime_startup_timeout_seconds: float = Field(default=30.0, ge=5.0, alias="ISOLATED_RUNTIME_STARTUP_TIMEOUT_SECONDS")
+    isolated_runtime_handshake_timeout_seconds: float = Field(default=15.0, ge=1.0, alias="ISOLATED_RUNTIME_HANDSHAKE_TIMEOUT_SECONDS")
+    isolated_runtime_heartbeat_interval_seconds: float = Field(default=10.0, ge=1.0, alias="ISOLATED_RUNTIME_HEARTBEAT_INTERVAL_SECONDS")
+    isolated_runtime_heartbeat_miss_threshold: int = Field(default=3, ge=1, alias="ISOLATED_RUNTIME_HEARTBEAT_MISS_THRESHOLD")
+    isolated_runtime_max_restarts: int = Field(default=3, ge=0, alias="ISOLATED_RUNTIME_MAX_RESTARTS")
+    isolated_runtime_restart_backoff_seconds: float = Field(
+        default=5.0, ge=0.5, alias="ISOLATED_RUNTIME_RESTART_BACKOFF_SECONDS"
+    )
+    isolated_runtime_control_lease_ttl_seconds: float = Field(
+        default=30.0, ge=1.0, alias="ISOLATED_RUNTIME_CONTROL_LEASE_TTL_SECONDS"
+    )
+    isolated_runtime_data_quota_mb: int = Field(default=128, ge=8, alias="ISOLATED_RUNTIME_DATA_QUOTA_MB")
+    isolated_runtime_cpu_time_limit_seconds: int = Field(
+        default=300, ge=10, alias="ISOLATED_RUNTIME_CPU_TIME_LIMIT_SECONDS"
+    )
+    isolated_runtime_rpc_max_bytes: int = Field(default=1_048_576, ge=1024, alias="ISOLATED_RUNTIME_RPC_MAX_BYTES")
+    isolated_runtime_rpc_rate_limit_per_minute: int = Field(default=600, ge=1, alias="ISOLATED_RUNTIME_RPC_RATE_LIMIT_PER_MINUTE")
+    isolated_runtime_rpc_max_concurrent: int = Field(default=16, ge=1, alias="ISOLATED_RUNTIME_RPC_MAX_CONCURRENT")
+    isolated_runtime_module_uid: int = Field(default=10001, ge=1, alias="ISOLATED_RUNTIME_MODULE_UID")
+    isolated_runtime_module_gid: int = Field(default=10001, ge=1, alias="ISOLATED_RUNTIME_MODULE_GID")
+    isolated_runtime_protocol_version: int = Field(default=1, ge=1, alias="ISOLATED_RUNTIME_PROTOCOL_VERSION")
     energy_control_provider: str = Field(default="noop", alias="ENERGY_CONTROL_PROVIDER")
     timescale_retention_enabled: bool = Field(default=False, alias="TIMESCALE_RETENTION_ENABLED")
     timescale_compression_enabled: bool = Field(default=False, alias="TIMESCALE_COMPRESSION_ENABLED")
@@ -179,6 +237,131 @@ class Settings(BaseSettings):
     @property
     def is_test(self) -> bool:
         return self.app_env == AppEnvironment.TEST
+
+    def resolved_modules_path(self) -> str:
+        if self.emic_modules_path.strip():
+            return self.emic_modules_path.strip()
+        import sys
+        from pathlib import Path
+
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local" / "emic" / "modules"
+        else:
+            base = Path("/var/lib/emic/modules")
+        if self.is_test or self.is_development:
+            base = Path.cwd() / ".emic-modules"
+        return str(base)
+
+    def resolved_catalog_path(self) -> str:
+        if self.emic_module_catalog_path.strip():
+            return self.emic_module_catalog_path.strip()
+        from pathlib import Path
+
+        repo_catalog = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "modules" / "catalog"
+        if repo_catalog.exists():
+            return str(repo_catalog)
+        return str(Path(self.resolved_modules_path()) / "catalog")
+
+    def resolved_marketplace_trusted_root_path(self) -> str:
+        if self.marketplace_trusted_root_path.strip():
+            return self.marketplace_trusted_root_path.strip()
+        from pathlib import Path
+
+        fixture = (
+            Path(__file__).resolve().parents[2]
+            / "tests"
+            / "fixtures"
+            / "marketplace_tuf"
+            / "pinned_root.json"
+        )
+        if fixture.exists():
+            return str(fixture)
+        return str(Path(self.resolved_modules_path()) / "marketplace" / "pinned_root.json")
+
+    def resolved_marketplace_tuf_state_path(self) -> str:
+        if self.marketplace_tuf_state_path.strip():
+            return self.marketplace_tuf_state_path.strip()
+        import sys
+        from pathlib import Path
+
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local" / "emic" / "marketplace" / "tuf-state"
+        else:
+            base = Path("/var/lib/emic/marketplace/tuf-state")
+        if self.is_test or self.is_development:
+            base = Path.cwd() / ".emic-marketplace-tuf"
+        return str(base)
+
+    def resolved_marketplace_staging_path(self) -> str:
+        if self.marketplace_staging_path.strip():
+            return self.marketplace_staging_path.strip()
+        import sys
+        from pathlib import Path
+
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local" / "emic" / "module-staging"
+        else:
+            base = Path("/var/lib/emic/module-staging")
+        if self.is_test or self.is_development:
+            base = Path.cwd() / "data" / "module-staging"
+        return str(base)
+
+    def marketplace_internal_cidrs_list(self) -> list[str]:
+        if not self.marketplace_internal_cidrs.strip():
+            return []
+        return [part.strip() for part in self.marketplace_internal_cidrs.split(",") if part.strip()]
+
+    def resolved_isolated_runtime_socket_dir(self) -> str:
+        if self.isolated_runtime_socket_dir.strip():
+            return self.isolated_runtime_socket_dir.strip()
+        import sys
+        from pathlib import Path
+
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local" / "emic" / "runtime-sockets"
+        else:
+            base = Path("/var/lib/emic/runtime/sockets")
+        if self.is_test or self.is_development:
+            base = Path.cwd() / "data" / "runtime-sockets"
+        return str(base)
+
+    def resolved_isolated_runtime_data_root(self) -> str:
+        if self.isolated_runtime_data_root.strip():
+            return self.isolated_runtime_data_root.strip()
+        import sys
+        from pathlib import Path
+
+        if sys.platform == "win32":
+            base = Path.home() / "AppData" / "Local" / "emic" / "runtime-data"
+        else:
+            base = Path("/var/lib/emic/runtime/data")
+        if self.is_test or self.is_development:
+            base = Path.cwd() / "data" / "runtime-data"
+        return str(base)
+
+    def resolved_isolated_runtime_sandbox(self) -> str:
+        mode = (self.isolated_runtime_sandbox or "auto").strip().lower()
+        import sys
+
+        if mode == "auto":
+            return "bwrap" if sys.platform != "win32" else "subprocess"
+        return mode
+
+    def runtime_spawn_allowed(self) -> bool:
+        return self.third_party_runtime_enabled or (
+            self.isolated_runtime_enabled and not self.is_production
+        )
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == AppEnvironment.PRODUCTION
+
+
+def assert_emic_admin_token_production_safe(*, app_env: str, emic_admin_token: str) -> None:
+    if app_env.lower() != "production":
+        return
+    if not (emic_admin_token or "").strip():
+        raise RuntimeError("EMIC_ADMIN_TOKEN is required in production")
 
 
 @lru_cache

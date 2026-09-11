@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from energy_core.integrations.chargeamps.config import build_chargeamps_connection_info
+from energy_core.chargers.framework.readiness import build_chargeamps_readiness
 from energy_core.db.models import EvChargerModel, SiteModel
 from energy_core.secrets import CredentialCipher
 
@@ -34,7 +34,7 @@ def evaluate_charging_readiness(
     charger_api_keys_configured = sum(
         1 for charger, _ in chargers if CredentialCipher.is_configured(charger.chargeamps_api_key)
     )
-    chargeamps = build_chargeamps_connection_info(
+    chargeamps = build_chargeamps_readiness(
         charger_api_keys_configured=charger_api_keys_configured,
     )
     notes = list(chargeamps.notes)

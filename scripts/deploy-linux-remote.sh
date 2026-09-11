@@ -81,6 +81,11 @@ fi
 if ! grep -q '^EMIC_ADMIN_TOKEN=.\+' .env 2>/dev/null; then
   echo "EMIC_ADMIN_TOKEN=$(openssl rand -hex 24)" >> .env
 fi
+grep -q '^MARKETPLACE_METADATA_ENABLED=' .env 2>/dev/null || echo MARKETPLACE_METADATA_ENABLED=true >> .env
+grep -q '^MARKETPLACE_INTERNAL_CIDRS=' .env 2>/dev/null || echo 'MARKETPLACE_INTERNAL_CIDRS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12' >> .env
+grep -q '^MARKETPLACE_STAGING_PATH=' .env 2>/dev/null || echo MARKETPLACE_STAGING_PATH=/var/lib/emic/marketplace/staging >> .env
+grep -q '^EMIC_ALLOW_UNSIGNED_MODULES=' .env 2>/dev/null || echo EMIC_ALLOW_UNSIGNED_MODULES=false >> .env
+grep -q '^MARKETPLACE_ARTIFACT_TLS_VERIFY=' .env 2>/dev/null || echo MARKETPLACE_ARTIFACT_TLS_VERIFY=false >> .env
 
 run_docker() {
   if [ -f ~/.emic-deploy-sudo ]; then

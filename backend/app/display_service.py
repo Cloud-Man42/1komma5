@@ -205,10 +205,10 @@ async def _weather_section(
         return section
 
     try:
-        from energy_core.solar_forecast.coordinator import SolarForecastCoordinator
+        from energy_core.platform.forecasting import build_solar_forecast_coordinator
         from energy_core.solar_forecast.weather_conditions import build_current_weather
 
-        coordinator = SolarForecastCoordinator(settings)
+        coordinator = build_solar_forecast_coordinator(settings)
         resolved = await coordinator.resolve_weather(session, site, now=datetime.now(UTC))
         if resolved is not None:
             weather, _, _ = resolved
@@ -254,18 +254,13 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
         return DisplaySpaSection(available=False, unavailable_reason="Spa-integration är inte aktiverad")
 
     try:
-        from app.api.spa import _get_spa_context, _period_energy_totals, _period_range
+        from app.spa_compute import get_spa_context, spa_period_energy_totals, spa_period_range
+        from energy_core.db.consumer_repo import ConsumerSampleRepository
+        from energy_core.providers.spa import SpaStatus, filter_cycle_active, filter_status_sv
 
-        site, consumer, config = await _get_spa_context(session, slug)
+        site, consumer, config = await get_spa_context(session, slug)
         if not config.integration_enabled:
             return DisplaySpaSection(available=False, unavailable_reason="Spa-integration är avstängd")
-
-        from energy_core.db.consumer_repo import ConsumerSampleRepository
-        from energy_core.integrations.arctic_spa.operational import (
-            filter_cycle_active,
-            filter_status_sv,
-        )
-        from energy_core.integrations.arctic_spa.status import SpaStatus
 
         sample_repo = ConsumerSampleRepository(session)
         latest = await sample_repo.get_latest(consumer.id)
@@ -301,8 +296,8 @@ async def _spa_section(session: AsyncSession, slug: str, enabled: bool) -> Displ
 
         next_cleaning_at = await _next_spa_cleaning_at(session, site.id)
 
-        start, end, _gran = _period_range("today", consumer.timezone or site.timezone)
-        totals = await _period_energy_totals(
+        start, end, _gran = spa_period_range("today", consumer.timezone or site.timezone)
+        totals = await spa_period_energy_totals(
             session,
             consumer.id,
             start=start,

@@ -17,7 +17,6 @@ from energy_core.vehicles.mercedes.commands.builder import (
     describe_client_message,
 )
 from energy_core.vehicles.mercedes.commands.features import MercedesCommandFeatures
-from energy_core.vehicles.mercedes.commands.response import MercedesCommandStatus
 from energy_core.vehicles.mercedes.protocol.proto import client_pb2, vehicle_commands_pb2
 
 
@@ -150,21 +149,20 @@ async def test_command_service_set_target_soc_sends_payload():
 
     service = VehicleCommandService(session)
     service._provider_repo.get_for_site = AsyncMock(return_value=row)
-    service._provider_repo.load_token_bundle = MagicMock(return_value=object())
     session.get = AsyncMock(return_value=vehicle)
     session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=cap)))
 
-    with patch("energy_core.vehicles.commands.service.build_mercedes_provider") as provider_cls:
-        provider = AsyncMock()
-        provider._rest.get_command_capabilities = AsyncMock(  # noqa: SLF001
-            return_value={"commands": ["CHARGING_CONFIGURE"]}
-        )
-        provider.send_command_and_wait = AsyncMock(
-            return_value=MercedesCommandStatus(request_id="req", state="FINISHED")
-        )
-        provider_cls.return_value = provider
+    mock_provider = AsyncMock()
+    mock_provider.load_command_features = AsyncMock(return_value=object())
+    mock_provider.set_target_soc = AsyncMock(
+        return_value=SimpleNamespace(state="FINISHED", detail="charging_configure, max_soc=80")
+    )
+
+    with patch(
+        "energy_core.vehicles.commands.service.resolve_vehicle_command_provider",
+        AsyncMock(return_value=mock_provider),
+    ):
         result = await service.set_target_soc(site_id=1, vehicle_id=3, target_soc_percent=80)
 
     assert result.success is True
-    provider.connect.assert_awaited_once()
-    provider.send_command_and_wait.assert_awaited_once()
+    mock_provider.set_target_soc.assert_awaited_once()

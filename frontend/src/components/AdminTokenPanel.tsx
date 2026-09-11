@@ -10,6 +10,11 @@ export function AdminTokenPanel() {
 
   useEffect(() => {
     setToken(getAdminToken());
+    const onAuthRequired = () => {
+      setMessage("Admin-token krävs. Ange token från serverns .env och spara.");
+    };
+    window.addEventListener("emic:admin-auth-required", onAuthRequired);
+    return () => window.removeEventListener("emic:admin-auth-required", onAuthRequired);
   }, []);
 
   function onSave(event: FormEvent) {
@@ -22,8 +27,8 @@ export function AdminTokenPanel() {
     <div className="card config-card" data-testid="admin-token-panel">
       <h3 className="config-section-title">Admin-token</h3>
       <p className="muted config-env-intro">
-        Krävs när servern har <code>EMIC_ADMIN_TOKEN</code> satt. Används för väggdisplay-registrering och
-        Apple-enheter. Sparas bara i sessionStorage i denna webbläsare.
+        Krävs när servern har <code>EMIC_ADMIN_TOKEN</code> satt. Alla API-anrop (dashboard, fordon,
+        konfiguration) skickar denna token. Sparas bara i sessionStorage i denna webbläsare.
       </p>
       <form className="form-grid" onSubmit={onSave}>
         <label className="form-field">

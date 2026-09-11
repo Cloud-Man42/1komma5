@@ -1,0 +1,150 @@
+{
+  "snapshot": {
+    "version": 100,
+    "generated_at": "2026-09-08T12:00:00Z"
+  },
+  "artifact_source": "PUBLIC",
+  "modules": {
+    "integration.official-readonly": {
+      "display_name": "Official Read Fixture",
+      "description": "Official read-only test module",
+      "publisher_id": "emic-official",
+      "device_categories": ["monitoring"],
+      "capabilities": ["read_status", "read_power"],
+      "permissions": ["network.external"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.official-readonly@1.0.0",
+          "publisher_id": "emic-official",
+          "artifact_url": "https://cdn.example.test/official-readonly-1.0.0.emicpkg",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "published_at": "2026-09-01T10:00:00Z",
+          "channel": "stable",
+          "sbom_ref": {"embedded": true}
+        }
+      }
+    },
+    "integration.official-control": {
+      "display_name": "Official Control Fixture",
+      "description": "Official control-capable test module",
+      "publisher_id": "emic-official",
+      "device_categories": ["ev_charger"],
+      "capabilities": ["ev_charger.start", "ev_charger.stop"],
+      "permissions": ["device.control", "network.external"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.official-control@1.0.0",
+          "publisher_id": "emic-official",
+          "artifact_url": "https://cdn.example.test/official-control-1.0.0.emicpkg",
+          "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "published_at": "2026-09-02T10:00:00Z",
+          "channel": "stable"
+        }
+      }
+    },
+    "integration.verified-readonly": {
+      "display_name": "Verified Read Fixture",
+      "description": "Verified non-control test module",
+      "publisher_id": "vendor-verified",
+      "device_categories": ["weather"],
+      "capabilities": ["weather.read_current"],
+      "permissions": ["network.external"],
+      "latest_stable": "2.0.0",
+      "releases": {
+        "2.0.0": {
+          "release_id": "integration.verified-readonly@2.0.0",
+          "publisher_id": "vendor-verified",
+          "artifact_url": "https://cdn.example.test/verified-readonly-2.0.0.emicpkg",
+          "content_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "published_at": "2026-09-03T10:00:00Z",
+          "channel": "stable"
+        }
+      }
+    },
+    "integration.community-denied": {
+      "display_name": "Community Fixture",
+      "description": "COMMUNITY tier — must be denied in production",
+      "publisher_id": "community-publisher",
+      "device_categories": ["other"],
+      "capabilities": ["read_status"],
+      "permissions": ["network.external"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.community-denied@1.0.0",
+          "publisher_id": "community-publisher",
+          "artifact_url": "https://cdn.example.test/community-1.0.0.emicpkg",
+          "content_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "published_at": "2026-09-04T10:00:00Z",
+          "channel": "stable"
+        }
+      }
+    },
+    "integration.revoked-module": {
+      "display_name": "Revoked Publisher Fixture",
+      "description": "Module from revoked publisher",
+      "publisher_id": "revoked-publisher",
+      "device_categories": ["monitoring"],
+      "capabilities": ["read_status"],
+      "permissions": ["network.external"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.revoked-module@1.0.0",
+          "publisher_id": "revoked-publisher",
+          "artifact_url": "https://cdn.example.test/revoked-1.0.0.emicpkg",
+          "content_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "published_at": "2026-09-05T10:00:00Z",
+          "channel": "stable"
+        }
+      }
+    },
+    "integration.sensibo": {
+      "display_name": "Sensibo Climate",
+      "description": "Read-only Sensibo climate monitoring via isolated runtime",
+      "publisher_id": "emic-official",
+      "device_categories": ["climate"],
+      "capabilities": [
+        "hvac.read_temperature",
+        "hvac.read_humidity",
+        "hvac.read_state",
+        "hvac.read_target_temperature",
+        "hvac.read_status"
+      ],
+      "permissions": ["network.external", "secrets.read_own", "device.read"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.sensibo@1.0.0",
+          "publisher_id": "emic-official",
+          "artifact_url": "https://cdn.example.test/integration.sensibo-1.0.0.emicpkg",
+          "content_sha256": "428a646dba8fbcc6658abd13e4965391ab7a83941e1f0d9549b75af60a45e135",
+          "published_at": "2026-09-09T10:00:00Z",
+          "channel": "stable",
+          "sbom_ref": {"embedded": true}
+        }
+      }
+    },
+    "integration.xss-test": {
+      "display_name": "<script>alert('xss')</script>Malicious Name",
+      "description": "<img src=x onerror=alert(1)>Evil **markdown**",
+      "publisher_id": "vendor-verified",
+      "device_categories": ["monitoring"],
+      "capabilities": ["read_status"],
+      "permissions": ["network.external"],
+      "latest_stable": "1.0.0",
+      "releases": {
+        "1.0.0": {
+          "release_id": "integration.xss-test@1.0.0",
+          "publisher_id": "vendor-verified",
+          "artifact_url": "https://cdn.example.test/xss-1.0.0.emicpkg",
+          "content_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "published_at": "2026-09-06T10:00:00Z",
+          "channel": "stable"
+        }
+      }
+    }
+  }
+}
