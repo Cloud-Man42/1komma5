@@ -3,6 +3,7 @@
 param(
     [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
     [string]$SiteSlug = "akarp",
+    [string]$AdminToken = $env:EMIC_ADMIN_TOKEN,
     [double]$SolarKwhTolerance = 2.0,
     [int]$TimeoutSec = 20
 )
@@ -11,9 +12,24 @@ $ErrorActionPreference = "Stop"
 $failures = @()
 $checks = @()
 
+if (-not $AdminToken) {
+    . "$PSScriptRoot/lib/Get-EmicDeployCredential.ps1"
+    $AdminToken = Get-EmicAdminTokenFromRemote
+}
+
+$headers = @{ Authorization = "Bearer $AdminToken" }
+
 function Invoke-EmicApi {
     param([string]$Path)
-    return Invoke-RestMethod -Uri "$BaseUrl$Path" -TimeoutSec $TimeoutSec
+    $params = @{
+        Uri        = "$BaseUrl$Path"
+        TimeoutSec = $TimeoutSec
+        Headers    = $headers
+    }
+    if ($PSVersionTable.PSVersion.Major -ge 7) {
+        return Invoke-RestMethod @params -SkipCertificateCheck
+    }
+    return Invoke-RestMethod @params
 }
 
 function Add-Check {
