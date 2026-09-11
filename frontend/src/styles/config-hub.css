@@ -1,3 +1,25 @@
+.admin-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.admin-auth-dialog {
+  width: min(100%, 28rem);
+  padding: 1.25rem;
+}
+
+.form-error {
+  color: var(--color-danger, #e57373);
+  margin-top: 0.5rem;
+}
+
 .config-hub {
   display: grid;
   gap: var(--space-5);
