@@ -1,6 +1,9 @@
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
-from app.deps import get_db_session, get_reading_repository
+from app.deps import get_app_settings, get_db_session, get_reading_repository
+from app.site_access import filter_sites_for_principal, get_site_for_principal, require_site_with_permission
+from app.user_auth import require_authenticated, require_permission
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.readings import HistoricalEnergyMonth, HistoricalEnergyYearResponse, HistoricalEnergyYearUpdate
 from app.schemas.sites import ReadingResponse, SiteCreateRequest, SiteEnergyConfigResponse, SiteEnergyConfigUpdateRequest, SiteResponse, SiteUpdateRequest
@@ -53,10 +56,10 @@ async def update_historical_energy(
     year: int,
     payload: HistoricalEnergyYearUpdate,
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_permission("sites.manage")),
 ) -> HistoricalEnergyYearResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "sites.manage")
     if not 2000 <= year <= 2100:
         raise HTTPException(status_code=422, detail="Year must be between 2000 and 2100")
     if {month.month for month in payload.months} != set(range(1, 13)):
@@ -103,10 +106,10 @@ async def get_historical_energy(
     slug: str,
     year: int,
     session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> HistoricalEnergyYearResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     records = [
         record
         for record in await HistoricalEnergyRepository(
@@ -142,12 +145,21 @@ async def get_historical_energy(
 @router.get("/sites", response_model=list[SiteResponse])
 async def list_sites(
     repo: EnergyReadingRepository = Depends(get_reading_repository),
+    session: AsyncSession = Depends(get_db_session),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> list[SiteResponse]:
+    if settings.emic_user_auth_enabled and not principal.has_permission("sites.read"):
+        if not principal.has_permission("dashboard.read"):
+            from fastapi import HTTPException, status
+
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
     sites = await repo.list_sites_with_latest()
-    return [
-        _site_response(site, site.latest_reading)
-        for site in sites
-    ]
+    if settings.emic_user_auth_enabled:
+        allowed_ids = principal.site_ids if principal.permissions != frozenset({"*"}) else None
+        if allowed_ids is not None and "*" not in principal.permissions:
+            sites = [s for s in sites if s.id in allowed_ids]
+    return [_site_response(site, site.latest_reading) for site in sites]
 
 
 @router.post("/sites", response_model=SiteResponse, status_code=status.HTTP_201_CREATED)
@@ -155,7 +167,7 @@ async def create_site(
     payload: SiteCreateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("sites.manage")),
 ) -> SiteResponse:
     repo = SiteRepository(session)
     try:
@@ -197,7 +209,7 @@ async def update_site(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("sites.manage")),
 ) -> SiteResponse:
     repo = SiteRepository(session)
     updates = payload.model_dump(exclude_unset=True)
@@ -243,7 +255,7 @@ async def update_site_energy_config(
     payload: SiteEnergyConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("sites.manage")),
 ) -> SiteEnergyConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -280,7 +292,7 @@ async def delete_site(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("sites.manage")),
 ) -> None:
     repo = SiteRepository(session)
     try:

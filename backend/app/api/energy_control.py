@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session, get_site_repository
 
 from app.schemas.energy_control import EnergyControlActionResponse, EnergyControlPreviewRequest, EnergyControlRecentResponse, EnergyControlResultResponse, EnergyControlSettingsUpdateRequest, EnergyControlStatusResponse
@@ -96,7 +96,7 @@ async def update_energy_control_settings(
     request: Request,
     site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("battery.control")),
 ) -> EnergyControlStatusResponse:
     site = await site_repo.get_by_slug(slug)
     if site is None:
@@ -159,7 +159,7 @@ async def apply_energy_control_action(
     request: Request,
     site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("battery.control")),
 ) -> EnergyControlResultResponse:
     site = await site_repo.get_by_slug(slug)
     if site is None:

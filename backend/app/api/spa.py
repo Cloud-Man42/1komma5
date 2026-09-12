@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 
 from app.schemas.spa import SpaCleaningWindowResponse, SpaConfigResponse, SpaConfigUpdateRequest, SpaConnectionTestResponse, SpaControlConfigResponse, SpaControlConfigUpdateRequest, SpaEconomicsResponse, SpaEnergyBreakdownResponse, SpaEnergyBreakdownRow, SpaEnergyEventResponse, SpaEnergyPeriodResponse, SpaEventsResponse, SpaHealthResponse, SpaHistoryPoint, SpaHistoryResponse, SpaPlanBlockResponse, SpaPlanResponse, SpaRunCleaningResponse, SpaShadowDayResponse, SpaShadowResponse, SpaStatusResponse, SpaTimelineEntry, SpaTimelineResponse
@@ -497,7 +497,7 @@ async def update_spa_config(
     payload: SpaConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("spa.control")),
 ) -> SpaConfigResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     repo = ConsumerRepository(session)
@@ -529,7 +529,7 @@ async def test_spa_connection(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("spa.control")),
 ) -> SpaConnectionTestResponse:
     site, consumer, config = await _get_spa_context(session, slug)
     repo = ConsumerRepository(session)
@@ -615,7 +615,7 @@ async def update_spa_control_config(
     payload: SpaControlConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("spa.control")),
 ) -> SpaControlConfigResponse:
     _site, consumer, _config = await _get_spa_context(session, slug)
     if payload.strategy is not None and payload.strategy not in VALID_STRATEGIES:
@@ -983,7 +983,7 @@ async def run_spa_cleaning_now(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("spa.control")),
 ) -> SpaRunCleaningResponse:
     _site, consumer, _config = await _get_spa_context(session, slug)
     control_repo = SpaControlConfigRepository(session)

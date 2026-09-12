@@ -5,6 +5,12 @@ import { AdminAuthPrompt } from "@/components/AdminAuthPrompt";
 import { getAdminToken, setAdminToken } from "@/lib/adminAuth";
 
 describe("AdminAuthPrompt", () => {
+  it("shows invalid-token guidance", () => {
+    render(<AdminAuthPrompt issue="invalid" />);
+    expect(screen.getByText(/Admin-token ogiltig/i)).toBeInTheDocument();
+    expect(screen.getByText(/matchar inte serverns/i)).toBeInTheDocument();
+  });
+
   it("reloads after saving token", () => {
     sessionStorage.clear();
     const reload = vi.fn();

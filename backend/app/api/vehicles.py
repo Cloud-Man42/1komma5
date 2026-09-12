@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 
 from app.schemas.ev import EvEnergySourcesResponse
@@ -282,7 +282,7 @@ async def sync_vehicles(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleSyncResponse:
     site = await _site_or_404(session, slug)
     service = VehicleSyncService(session, is_sqlite=get_settings().is_sqlite)
@@ -349,7 +349,7 @@ async def update_vehicle(
     payload: VehicleUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleDetailResponse:
     site = await _site_or_404(session, slug)
     vehicle = await VehicleRepository(session).get(vehicle_id)
@@ -463,7 +463,7 @@ async def update_integration_config(
     payload: VehicleIntegrationConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationConfigResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session)
@@ -505,7 +505,7 @@ async def login_integration(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationLoginResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session)
@@ -693,7 +693,7 @@ async def run_integration_action(
     action: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationActionResponse:
     site = await _site_or_404(session, slug)
     repo = VehicleProviderRepository(session, secret_box=SecretBox.from_settings())
@@ -875,7 +875,7 @@ async def patch_vehicle_charge_session(
     payload: VehicleChargeSessionPatchRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleChargeSessionResponse:
     site = await _site_or_404(session, slug)
     vehicle = await VehicleRepository(session).get(vehicle_id)
@@ -1000,7 +1000,7 @@ async def set_vehicle_target_soc(
     payload: VehicleSetTargetSocRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)
@@ -1039,7 +1039,7 @@ async def start_vehicle_charging(
     vehicle_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)
@@ -1073,7 +1073,7 @@ async def stop_vehicle_charging(
     vehicle_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
     site = await _site_or_404(session, slug)
     service = VehicleCommandService(session)

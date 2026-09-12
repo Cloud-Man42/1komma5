@@ -2,7 +2,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.api.energy_balance_helpers import snapshot_to_response
 from app.deps import get_db_session
 
@@ -250,7 +250,7 @@ async def create_ev_charger(
     payload: EvChargerCreateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -330,7 +330,7 @@ async def test_ev_charger_connection_draft(
     slug: str,
     payload: EvChargerConnectionTestRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -367,7 +367,7 @@ async def test_ev_charger_connection(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -390,7 +390,7 @@ async def update_ev_charger(
     payload: EvChargerUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -469,7 +469,7 @@ async def delete_ev_charger(
     charger_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> None:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -498,9 +498,10 @@ async def sync_ev_chargers_from_heartbeat(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> list[EvChargerResponse]:
-    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
+    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client_for_site
+    from energy_core.integrations.heartbeat.gridx_client import GridXClient
 
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -512,11 +513,16 @@ async def sync_ev_chargers_from_heartbeat(
             detail="Anläggningen saknar HeartBeat system-ID.",
         )
 
-    client = await create_heartbeat_client(session)
+    client = await create_heartbeat_client_for_site(session, site)
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="HeartBeat är inte konfigurerat (kräver molntjänst/lokal gateway med token).",
+        )
+    if isinstance(client, GridXClient):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="EV-synk stöds inte för denna Heartbeat-backend.",
         )
 
     try:
@@ -585,7 +591,7 @@ async def control_ev_charger(
     charger_id: int,
     payload: EvChargerControlRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)
@@ -620,7 +626,7 @@ async def set_ev_charger_override(
     charger_id: int,
     payload: EvChargerOverrideRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
     site = await repo.get_site_by_slug(slug)

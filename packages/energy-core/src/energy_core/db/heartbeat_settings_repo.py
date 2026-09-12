@@ -6,9 +6,10 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from energy_core.db.models import HeartbeatSettingsModel, SiteModel
+from energy_core.db.models import HeartbeatAccountModel, HeartbeatSettingsModel, SiteModel
 from energy_core.integrations.heartbeat.auth import HeartbeatAuthError, refresh_bearer_token, token_needs_refresh
 from energy_core.integrations.heartbeat.connection import (
     CLOUD_HOST,
@@ -102,6 +103,7 @@ class HeartbeatSettingsRepository:
             row.api_token = self._credentials.encrypt(api_token)
         row.updated_at = datetime.now(UTC)
         await self._session.flush()
+        await self._sync_default_account(row, password=password, api_token=api_token)
         return self._to_record(row)
 
     async def list_site_mappings(self) -> list[SiteHeartbeatMapping]:
@@ -165,6 +167,17 @@ class HeartbeatSettingsRepository:
 
     async def ensure_api_token(self, *, force: bool = False) -> str:
         """Return a usable Bearer token, refreshing from password when needed."""
+        from energy_core.db.heartbeat_account_repo import DEFAULT_ACCOUNT_SLUG, HeartbeatAccountRepository
+
+        account = await self._session.scalar(
+            select(HeartbeatAccountModel).where(HeartbeatAccountModel.slug == DEFAULT_ACCOUNT_SLUG)
+        )
+        if account is not None:
+            return await HeartbeatAccountRepository(self._session, credential_cipher=self._credentials).ensure_api_token(
+                account.id,
+                force=force,
+            )
+
         row = await self.get_or_create()
         if row.connection_type == HeartbeatConnectionType.MOCK.value:
             return self._credentials.decrypt(row.api_token)
@@ -188,3 +201,43 @@ class HeartbeatSettingsRepository:
         await self._session.flush()
         logger.info("HeartBeat Bearer token refreshed for user %s", row.username)
         return refreshed
+
+    async def _sync_default_account(
+        self,
+        row: HeartbeatSettingsModel,
+        *,
+        password: str | None,
+        api_token: str | None,
+    ) -> None:
+        from energy_core.db.heartbeat_account_repo import DEFAULT_ACCOUNT_SLUG
+
+        account = await self._session.scalar(
+            select(HeartbeatAccountModel).where(HeartbeatAccountModel.slug == DEFAULT_ACCOUNT_SLUG)
+        )
+        if account is None:
+            account = HeartbeatAccountModel(
+                slug=DEFAULT_ACCOUNT_SLUG,
+                name="Default Heartbeat Account",
+                connection_type=row.connection_type,
+                host=row.host,
+                port=row.port,
+                use_tls=row.use_tls,
+                api_path=row.api_path,
+                username=row.username,
+                password=row.password,
+                api_token=row.api_token,
+            )
+            self._session.add(account)
+        else:
+            account.connection_type = row.connection_type
+            account.host = row.host
+            account.port = row.port
+            account.use_tls = row.use_tls
+            account.api_path = row.api_path
+            account.username = row.username
+            if password is not None:
+                account.password = self._credentials.encrypt(password)
+            if api_token is not None:
+                account.api_token = self._credentials.encrypt(api_token)
+            account.updated_at = datetime.now(UTC)
+        await self._session.flush()

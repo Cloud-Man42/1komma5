@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 from energy_core.climate.external_config import ExternalModuleConfigService
 from energy_core.db.repositories import SiteRepository
@@ -31,7 +31,7 @@ class ExternalModuleConfigResponse(BaseModel):
 async def get_external_module_config(
     slug: str,
     module_id: str,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ExternalModuleConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)
@@ -71,7 +71,7 @@ async def upsert_external_module_config(
     slug: str,
     module_id: str,
     body: ExternalModuleConfigRequest,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ExternalModuleConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)

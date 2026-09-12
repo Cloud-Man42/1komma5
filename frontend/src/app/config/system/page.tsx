@@ -1,8 +1,8 @@
 "use client";
 
+import { HeartbeatAccountsPanel } from "@/components/config/HeartbeatAccountsPanel";
 import {
   ChargeAmpsReadinessSection,
-  HeartbeatConfigPanel,
   HeartbeatStatusCard,
 } from "@/components/config/HeartbeatConfigPanel";
 import { SiteModulesPanel } from "@/components/config/SiteModulesPanel";
@@ -18,7 +18,7 @@ export default function ConfigSystemPage() {
           <a href="/config/modules-devices?site=akarp">Öppna Moduler &amp; enheter →</a>
         </p>
       </header>
-      <HeartbeatConfigPanel />
+      <HeartbeatAccountsPanel />
       <SiteModulesPanel siteSlug="akarp" />
       <ChargeAmpsReadinessSection />
       <HeartbeatStatusCard />

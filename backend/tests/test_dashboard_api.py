@@ -34,6 +34,63 @@ async def test_dashboard_returns_site_overview(client):
 
 
 @pytest.mark.asyncio
+async def test_dashboard_cache_hit_refreshes_freshness(client):
+    from unittest.mock import AsyncMock, patch
+
+    from energy_core.cache.service import reset_cache_service
+
+    ac, session_factory, settings = client
+    await seed_recent_readings(
+        session_factory,
+        settings,
+        "akarp",
+        [(3000, 1700, 0, 900, 82)],
+    )
+    reset_cache_service()
+    stale_cached_payload = {
+        "site": {"slug": "akarp", "name": "Akarp", "timezone": "Europe/Stockholm"},
+        "freshness": {
+            "updated_at": (datetime.now(UTC) - timedelta(minutes=20)).isoformat().replace("+00:00", "Z"),
+            "data_age_seconds": 1200,
+            "stale": True,
+        },
+        "live": {
+            "solar_production_w": 1000,
+            "consumption_w": 1700,
+            "grid_import_w": 0,
+            "grid_export_w": 900,
+            "battery_soc_pct": 82,
+            "battery_power_w": 0,
+            "battery_direction": "idle",
+            "ev_power_w": None,
+        },
+        "today": {"produced_kwh": 1.0, "consumed_kwh": 1.0, "imported_kwh": 0.0, "exported_kwh": 0.0},
+        "ev": {"available": False},
+        "vehicle": {"available": False},
+        "solar": {"unavailable_reason": "test"},
+        "price": {"unavailable_reason": "test"},
+        "optimization": {"strategy_sv": "test", "reasoning_steps": []},
+        "alerts": [{"severity": "warning", "message_sv": "Mätdata har inte uppdaterats på 1200 sek."}],
+        "spa_integration_enabled": False,
+        "vehicle_integration_enabled": False,
+    }
+    cache = AsyncMock()
+    cache.get = AsyncMock(return_value=stale_cached_payload)
+    cache.get_or_set = AsyncMock()
+
+    with patch("app.api.dashboard.get_cache_service", return_value=cache):
+        response = await ac.get("/api/sites/akarp/dashboard")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["freshness"]["stale"] is False
+    assert body["freshness"]["data_age_seconds"] < 120
+    assert body["alerts"] == []
+    assert body["live"]["solar_production_w"] == 3000
+    cache.get_or_set.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_uses_redis_cache_on_second_request(client):
     from unittest.mock import AsyncMock, patch
 

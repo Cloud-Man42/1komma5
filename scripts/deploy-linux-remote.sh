@@ -81,6 +81,29 @@ fi
 if ! grep -q '^EMIC_ADMIN_TOKEN=.\+' .env 2>/dev/null; then
   echo "EMIC_ADMIN_TOKEN=$(openssl rand -hex 24)" >> .env
 fi
+
+# EMIC user authentication (cookie sessions + RBAC)
+if grep -q '^EMIC_USER_AUTH_ENABLED=' .env 2>/dev/null; then
+  sed -i 's/^EMIC_USER_AUTH_ENABLED=.*/EMIC_USER_AUTH_ENABLED=true/' .env
+else
+  echo EMIC_USER_AUTH_ENABLED=true >> .env
+fi
+grep -q '^EMIC_CORS_ORIGINS=' .env 2>/dev/null || echo EMIC_CORS_ORIGINS=https://emic.inacloud.se >> .env
+grep -q '^EMIC_COOKIE_SECURE=' .env 2>/dev/null || echo EMIC_COOKIE_SECURE=true >> .env
+grep -q '^EMIC_SESSION_TTL_HOURS=' .env 2>/dev/null || echo EMIC_SESSION_TTL_HOURS=8 >> .env
+grep -q '^EMIC_LOGIN_MAX_ATTEMPTS=' .env 2>/dev/null || echo EMIC_LOGIN_MAX_ATTEMPTS=5 >> .env
+grep -q '^EMIC_LOGIN_LOCKOUT_MINUTES=' .env 2>/dev/null || echo EMIC_LOGIN_LOCKOUT_MINUTES=15 >> .env
+if grep -q '^NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED=' .env 2>/dev/null; then
+  sed -i 's/^NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED=.*/NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED=true/' .env
+else
+  echo NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED=true >> .env
+fi
+if ! grep -q '^EMIC_BOOTSTRAP_ADMIN_EMAIL=.\+' .env 2>/dev/null; then
+  echo "EMIC_BOOTSTRAP_ADMIN_EMAIL=admin@emic.inacloud.se" >> .env
+fi
+if ! grep -q '^EMIC_BOOTSTRAP_ADMIN_PASSWORD=.\+' .env 2>/dev/null; then
+  echo "EMIC_BOOTSTRAP_ADMIN_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 24)" >> .env
+fi
 grep -q '^MARKETPLACE_METADATA_ENABLED=' .env 2>/dev/null || echo MARKETPLACE_METADATA_ENABLED=true >> .env
 grep -q '^MARKETPLACE_INTERNAL_CIDRS=' .env 2>/dev/null || echo 'MARKETPLACE_INTERNAL_CIDRS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12' >> .env
 grep -q '^MARKETPLACE_STAGING_PATH=' .env 2>/dev/null || echo MARKETPLACE_STAGING_PATH=/var/lib/emic/marketplace/staging >> .env

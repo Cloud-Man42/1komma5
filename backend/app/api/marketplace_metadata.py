@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import Settings
 from energy_core.platform.modules.marketplace.sync_service import MarketplaceSyncService
@@ -48,7 +48,7 @@ class MarketplaceSyncResponse(BaseModel):
 
 @router.get("/status", response_model=MarketplaceStatusResponse)
 async def marketplace_status(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> MarketplaceStatusResponse:
@@ -79,7 +79,7 @@ async def marketplace_status(
 @router.post("/sync", response_model=MarketplaceSyncResponse)
 async def marketplace_sync(
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> MarketplaceSyncResponse:

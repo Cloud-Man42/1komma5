@@ -20,6 +20,7 @@ async def admin_modules_client(tmp_path):
         APP_ENV="test",
         DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
         EMIC_ADMIN_TOKEN="admin-secret",
+        emic_user_auth_enabled=False,
     )
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)

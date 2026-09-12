@@ -3,6 +3,10 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.deps import get_app_settings, get_db_session, get_reading_repository, get_site_repository
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.readings import AggregatedReadingResponse, FinancialStatResponse, FinancialStatsResponse, ForecastValuesResponse, HistoryResponse, MonthlyForecastResponse, PeakReadingResponse, PeaksResponse, YearForecastResponse
 from app.schemas.sites import ReadingResponse
@@ -42,10 +46,10 @@ async def get_site_forecast(
     session: AsyncSession = Depends(get_db_session),
     site_repo: SiteRepository = Depends(get_site_repository),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> YearForecastResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     try:
         zone = ZoneInfo(site.timezone)
     except ZoneInfoNotFoundError as exc:
@@ -118,13 +122,13 @@ async def get_site_financial_stats(
     slug: str,
     period: Literal["day", "month", "year"] = Query(default="day"),
     year: int | None = Query(default=None, ge=2000, le=2100),
+    session: AsyncSession = Depends(get_db_session),
     site_repo: SiteRepository = Depends(get_site_repository),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
-    settings=Depends(get_app_settings),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> FinancialStatsResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     try:
         zone = ZoneInfo(site.timezone)
     except ZoneInfoNotFoundError as exc:
@@ -197,12 +201,13 @@ async def get_site_peaks(
     year: int | None = Query(default=None, ge=2000, le=2100),
     from_time: datetime | None = Query(default=None, alias="from"),
     to_time: datetime | None = Query(default=None, alias="to"),
+    session: AsyncSession = Depends(get_db_session),
     site_repo: SiteRepository = Depends(get_site_repository),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> PeaksResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     if from_time is not None and to_time is not None and from_time >= to_time:
         raise HTTPException(status_code=422, detail="'from' must be earlier than 'to'")
     if year is not None and (from_time is not None or to_time is not None):
@@ -245,12 +250,13 @@ async def get_site_readings(
     from_time: datetime | None = Query(default=None, alias="from"),
     to_time: datetime | None = Query(default=None, alias="to"),
     bucket: int | None = Query(default=None, ge=1, le=1440),
+    session: AsyncSession = Depends(get_db_session),
     site_repo: SiteRepository = Depends(get_site_repository),
     reading_repo: EnergyReadingRepository = Depends(get_reading_repository),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> HistoryResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     if from_time is None:
         from_time = datetime.now(UTC) - timedelta(hours=24)

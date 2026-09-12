@@ -15,6 +15,15 @@ class SiteModel(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     external_system_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("heartbeat_accounts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    heartbeat_site_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_system_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_asset_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_device_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_gateway_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     fallback_purchase_price_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=2.0)
     export_compensation_sek_kwh: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
     energy_economics_country: Mapped[str] = mapped_column(String(8), nullable=False, default="SE")
@@ -30,6 +39,7 @@ class SiteModel(Base):
     price_area: Mapped[str] = mapped_column(String(8), nullable=False, default="SE4")
     optimization_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="MONITOR_ONLY")
     energy_control_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    battery_usable_capacity_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     readings: Mapped[list["EnergyReadingModel"]] = relationship(back_populates="site")
     market_prices: Mapped[list["MarketPriceModel"]] = relationship(

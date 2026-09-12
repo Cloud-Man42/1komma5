@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import Settings
 from energy_core.platform.modules.distribution.artifact_repository import ArtifactRepository
@@ -82,7 +82,7 @@ class FetchResponse(BaseModel):
 
 @router.get("/catalog", response_model=CatalogResponse)
 async def list_catalog_releases(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> CatalogResponse:
@@ -114,7 +114,7 @@ async def list_catalog_releases(
 @router.get("/releases/{module_id}", response_model=CatalogResponse)
 async def list_module_releases(
     module_id: str,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> CatalogResponse:
@@ -128,7 +128,7 @@ async def fetch_release(
     module_id: str,
     version: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> FetchResponse:
@@ -196,7 +196,7 @@ async def fetch_release(
 @router.get("/artifacts/{artifact_id}", response_model=ArtifactSummary)
 async def get_artifact(
     artifact_id: int,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ArtifactSummary:
     repo = ArtifactRepository(session)
@@ -226,7 +226,7 @@ async def get_artifact(
 @router.get("/artifacts/{artifact_id}/security", response_model=ArtifactSecurityResponse)
 async def get_artifact_security(
     artifact_id: int,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> ArtifactSecurityResponse:
     from sqlalchemy import select
@@ -284,7 +284,7 @@ async def get_artifact_security(
 
 @router.get("/quarantine", response_model=list[ArtifactSummary])
 async def list_quarantined_artifacts(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[ArtifactSummary]:
     repo = ArtifactRepository(session)

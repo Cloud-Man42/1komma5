@@ -7,6 +7,43 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from energy_core.db.models.base import Base
 
+class HeartbeatAccountModel(Base):
+    """1Komma5 / Heartbeat account — credentials and connection isolated per account."""
+
+    __tablename__ = "heartbeat_accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="1komma5")
+    connection_type: Mapped[str] = mapped_column(String(16), nullable=False, default="cloud")
+    host: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    port: Mapped[int] = mapped_column(Integer, nullable=False, default=443)
+    use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    api_path: Mapped[str] = mapped_column(String(128), nullable=False, default="/api")
+    username: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    password: Mapped[str] = mapped_column("encrypted_password", Text, nullable=False, default="")
+    api_token: Mapped[str] = mapped_column("encrypted_api_token", Text, nullable=False, default="")
+    refresh_token: Mapped[str] = mapped_column("encrypted_refresh_token", Text, nullable=False, default="")
+    auth_domain: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    auth_realm: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    auth_client_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_authentication_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_successful_authentication_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_api_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_successful_api_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_authentication_error: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class HeartbeatSettingsModel(Base):
     __tablename__ = "heartbeat_settings"
 

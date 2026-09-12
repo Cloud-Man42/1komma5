@@ -6,6 +6,7 @@ import {
   fetchEvSolarChargingPlan,
   fetchHeartbeatConfig,
   fetchMarketPrices,
+  fetchSiteDashboard,
   fetchSites,
   fetchSolarAccuracy,
   fetchSolarConfig,
@@ -19,6 +20,7 @@ import {
   updateSite,
   updateSolarConfig,
 } from "./api";
+import { setAdminToken } from "./adminAuth";
 import { makeEvCharger, makeSite, makeSolarConfig } from "../test/fixtures";
 
 function mockFetch(body: unknown, ok = true, status = 200) {
@@ -83,6 +85,16 @@ describe("site CRUD", () => {
   it("fetchSites throws on failure", async () => {
     vi.stubGlobal("fetch", mockFetch(null, false, 500));
     await expect(fetchSites()).rejects.toThrow("Failed to fetch sites: 500");
+  });
+
+  it("fetchSiteDashboard sends admin authorization header", async () => {
+    setAdminToken("admin-token");
+    const fetchMock = mockFetch({ site: { slug: "akarp", name: "Akarp", timezone: "UTC" } });
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchSiteDashboard("akarp");
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer admin-token");
+    expect(fetchMock.mock.calls[0][1]?.credentials).toBe("include");
   });
 
   it("createSite posts payload", async () => {

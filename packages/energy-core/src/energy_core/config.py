@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     heartbeat_poll_interval: int = Field(default=30, ge=5, alias="HEARTBEAT_POLL_INTERVAL")
     heartbeat_api_url: str = Field(default="", alias="HEARTBEAT_API_URL")
     heartbeat_api_key: str = Field(default="", alias="HEARTBEAT_API_KEY")
+    heartbeat_account_denmark_username: str = Field(default="", alias="HEARTBEAT_ACCOUNT_DENMARK_USERNAME")
+    heartbeat_account_denmark_password: str = Field(default="", alias="HEARTBEAT_ACCOUNT_DENMARK_PASSWORD")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO", alias="LOG_LEVEL")
     solar_forecast_horizon_hours: int = Field(default=48, ge=12, le=72, alias="SOLAR_FORECAST_HORIZON_HOURS")
     solar_forecast_extended_days: int = Field(default=7, ge=0, le=16, alias="SOLAR_FORECAST_EXTENDED_DAYS")
@@ -132,6 +134,19 @@ class Settings(BaseSettings):
     widget_rate_limit_per_minute: int = Field(default=60, ge=1, alias="WIDGET_RATE_LIMIT_PER_MINUTE")
     enable_timescaledb: bool = Field(default=False, alias="ENABLE_TIMESCALEDB")
     emic_admin_token: str = Field(default="", alias="EMIC_ADMIN_TOKEN")
+    emic_user_auth_enabled: bool = Field(default=True, alias="EMIC_USER_AUTH_ENABLED")
+    emic_bootstrap_admin_email: str = Field(default="", alias="EMIC_BOOTSTRAP_ADMIN_EMAIL")
+    emic_bootstrap_admin_password: str = Field(default="", alias="EMIC_BOOTSTRAP_ADMIN_PASSWORD")
+    emic_session_ttl_hours: int = Field(default=8, ge=1, le=720, alias="EMIC_SESSION_TTL_HOURS")
+    emic_session_slide_minutes: int = Field(default=30, ge=5, le=240, alias="EMIC_SESSION_SLIDE_MINUTES")
+    emic_login_max_attempts: int = Field(default=5, ge=3, le=20, alias="EMIC_LOGIN_MAX_ATTEMPTS")
+    emic_login_lockout_minutes: int = Field(default=15, ge=1, le=1440, alias="EMIC_LOGIN_LOCKOUT_MINUTES")
+    emic_login_rate_limit_per_minute: int = Field(default=20, ge=5, alias="EMIC_LOGIN_RATE_LIMIT_PER_MINUTE")
+    emic_cors_origins: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000",
+        alias="EMIC_CORS_ORIGINS",
+    )
+    emic_cookie_secure: bool = Field(default=False, alias="EMIC_COOKIE_SECURE")
     financial_aggregates_enabled: bool = Field(default=False, alias="FINANCIAL_AGGREGATES_ENABLED")
     redis_url: str = Field(default="", alias="REDIS_URL")
     snapshot_redis_cache_ttl_seconds: float = Field(default=60.0, ge=5.0, alias="SNAPSHOT_REDIS_CACHE_TTL_SECONDS")
@@ -357,11 +372,22 @@ class Settings(BaseSettings):
         return self.app_env == AppEnvironment.PRODUCTION
 
 
-def assert_emic_admin_token_production_safe(*, app_env: str, emic_admin_token: str) -> None:
+def assert_emic_admin_token_production_safe(
+    *,
+    app_env: str,
+    emic_admin_token: str,
+    emic_user_auth_enabled: bool = True,
+) -> None:
     if app_env.lower() != "production":
         return
+    if emic_user_auth_enabled:
+        return
     if not (emic_admin_token or "").strip():
-        raise RuntimeError("EMIC_ADMIN_TOKEN is required in production")
+        raise RuntimeError("EMIC_ADMIN_TOKEN is required in production when EMIC_USER_AUTH_ENABLED=false")
+
+
+def cors_origins_list(settings: Settings) -> list[str]:
+    return [part.strip() for part in settings.emic_cors_origins.split(",") if part.strip()]
 
 
 @lru_cache

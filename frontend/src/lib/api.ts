@@ -928,7 +928,7 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
     }
     recentFetches.set(url, now);
   }
-  return fetch(input, init);
+  return adminFetch(input, init);
 }
 
 export async function readApiError(res: Response): Promise<string> {
@@ -1208,6 +1208,241 @@ export async function fetchPriceEngineToday(slug: string): Promise<{
   });
   if (!res.ok) {
     throw new Error(`Failed to fetch price engine today: ${res.status}`);
+  }
+  return res.json();
+}
+
+export type HeartbeatBackendProvider = "1komma5" | "gridx";
+
+export interface HeartbeatAccount {
+  id: number;
+  slug: string;
+  name: string;
+  provider: HeartbeatBackendProvider | string;
+  connection_type: string;
+  host: string;
+  port: number;
+  use_tls: boolean;
+  api_path: string;
+  auth_domain?: string;
+  auth_realm?: string;
+  auth_client_id?: string;
+  username_masked: string;
+  password_configured: boolean;
+  api_token_configured: boolean;
+  refresh_token_configured?: boolean;
+  api_url: string | null;
+  token_expires_at: string | null;
+  is_enabled: boolean;
+  status: string;
+  linked_sites: string[];
+  last_authentication_at: string | null;
+  last_successful_authentication_at: string | null;
+  last_api_call_at: string | null;
+  last_successful_api_call_at: string | null;
+  last_authentication_error: string | null;
+  updated_at: string | null;
+}
+
+export interface HeartbeatProbeResult {
+  path: string;
+  ok: boolean;
+  status_code?: number | null;
+  detail?: string;
+}
+
+export interface HeartbeatAccountDiagnostics {
+  account_id: number;
+  slug: string;
+  name?: string;
+  status?: string;
+  provider?: string;
+  api_url?: string | null;
+  system_id?: string | null;
+  gateway_id?: string | null;
+  token_ok: boolean;
+  token_expires_at: string | null;
+  last_authentication_error: string | null;
+  linked_sites: string[];
+  probes?: HeartbeatProbeResult[];
+}
+
+export interface HeartbeatAccountTestConnectionResult {
+  account_id: number;
+  slug: string;
+  connected: boolean;
+  provider: string | null;
+  api_url: string | null;
+  probe_path: string | null;
+  visible_installations: number;
+  last_authentication_error: string | null;
+}
+
+export interface HeartbeatInstallation {
+  name: string | null;
+  system_id: string | null;
+  site_id: string | null;
+  asset_id: string | null;
+  device_id: string | null;
+  gateway_id: string | null;
+  serial_number: string | null;
+}
+
+export interface HeartbeatDiscoveryResult {
+  account_id: number;
+  slug: string;
+  provider: string;
+  api_url: string | null;
+  authentication_ok: boolean;
+  installations: HeartbeatInstallation[];
+  serial_matches: Array<{
+    serial: string;
+    found: boolean;
+    resolved_site_id: string | null;
+    resolved_system_id: string | null;
+    resolved_asset_id: string | null;
+    resolved_device_id: string | null;
+  }>;
+  paths_probed: string[];
+}
+
+export async function fetchHeartbeatAccounts(): Promise<HeartbeatAccount[]> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-accounts`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Failed to fetch heartbeat accounts: ${res.status}`);
+  return res.json();
+}
+
+export async function runHeartbeatAccountDiagnostics(accountId: number): Promise<HeartbeatAccountDiagnostics> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}/diagnostics`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Failed to run heartbeat diagnostics: ${res.status}`);
+  return res.json();
+}
+
+export interface HeartbeatAccountCreatePayload {
+  slug: string;
+  name: string;
+  username: string;
+  password: string;
+  is_enabled?: boolean;
+}
+
+export interface HeartbeatAccountUpdatePayload {
+  name?: string;
+  username?: string;
+  password?: string;
+  is_enabled?: boolean;
+}
+
+export interface HeartbeatAccountLinkSitePayload {
+  site_slug: string;
+  heartbeat_serial_number?: string | null;
+  heartbeat_system_id?: string | null;
+  heartbeat_gateway_id?: string | null;
+  heartbeat_site_id?: string | null;
+  heartbeat_asset_id?: string | null;
+  heartbeat_device_id?: string | null;
+}
+
+export async function testHeartbeatAccountConnection(
+  accountId: number,
+): Promise<HeartbeatAccountTestConnectionResult> {
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}/test-connection`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function discoverHeartbeatAccount(
+  accountId: number,
+  serial?: string,
+): Promise<HeartbeatDiscoveryResult> {
+  const query = serial ? `?serial=${encodeURIComponent(serial)}` : "";
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}/discover${query}`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function createHeartbeatAccount(payload: HeartbeatAccountCreatePayload): Promise<HeartbeatAccount> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-accounts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      is_enabled: true,
+      ...payload,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to create heartbeat account: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateHeartbeatAccount(
+  accountId: number,
+  payload: HeartbeatAccountUpdatePayload,
+): Promise<HeartbeatAccount> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to update heartbeat account: ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface HeartbeatAccountLinkSiteResult {
+  site_slug: string;
+  heartbeat_account_id: number;
+  heartbeat_system_id?: string | null;
+  heartbeat_gateway_id?: string | null;
+  heartbeat_serial_number?: string | null;
+  heartbeat_site_id?: string | null;
+  heartbeat_asset_id?: string | null;
+  heartbeat_device_id?: string | null;
+}
+
+export async function discoverHeartbeatSerial(
+  accountId: number,
+  serial: string,
+): Promise<{
+  serial: string;
+  found: boolean;
+  resolved_system_id: string | null;
+}> {
+  const encoded = encodeURIComponent(serial);
+  const res = await adminFetch(
+    `${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}/discover-serial/${encoded}`,
+    { method: "POST" },
+  );
+  if (!res.ok) throw new Error(await readApiError(res));
+  return res.json();
+}
+
+export async function linkHeartbeatAccountSite(
+  accountId: number,
+  payload: HeartbeatAccountLinkSitePayload,
+): Promise<HeartbeatAccountLinkSiteResult> {
+  const res = await adminFetch(`${getApiBaseUrl()}/api/system/heartbeat-accounts/${accountId}/link-site`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(detail || `Failed to link site to heartbeat account: ${res.status}`);
   }
   return res.json();
 }

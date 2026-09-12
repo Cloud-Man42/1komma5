@@ -22,12 +22,13 @@ _lkg_store: Any = None
 _http_clients: dict[float, httpx.AsyncClient] = {}
 
 
-def _breaker_for(api_url: str) -> Any:
+def _breaker_for(api_url: str, *, account_id: int | None = None) -> Any:
     from energy_core.providers.resilience import CircuitBreaker
 
-    if api_url not in _breakers:
-        _breakers[api_url] = CircuitBreaker()
-    return _breakers[api_url]
+    key = f"acct:{account_id}:{api_url}" if account_id is not None else api_url
+    if key not in _breakers:
+        _breakers[key] = CircuitBreaker()
+    return _breakers[key]
 
 
 def _lkg() -> Any:
@@ -76,11 +77,17 @@ class HeartbeatClient:
         timeout: float = 20.0,
         *,
         refresh_token: TokenRefreshCallback | None = None,
+        account_id: int | None = None,
     ) -> None:
         self._credentials = credentials
         self._api_token = credentials.api_token
         self._timeout = timeout
         self._refresh_token = refresh_token
+        self._account_id = account_id
+        self._cache_prefix = f"acct:{account_id}:" if account_id is not None else ""
+
+    def _cache_key(self, key: str) -> str:
+        return f"{self._cache_prefix}{key}"
 
     async def _request(
         self,
@@ -126,6 +133,8 @@ class HeartbeatClient:
     ) -> dict[str, Any]:
         from energy_core.providers.resilience import resilient_call
 
+        cache_key = self._cache_key(key)
+
         async def call() -> dict[str, Any]:
             data = await fetch()
             if not isinstance(data, dict) or not data:
@@ -134,15 +143,15 @@ class HeartbeatClient:
 
         try:
             return await resilient_call(
-                breaker=_breaker_for(self._credentials.api_url),
+                breaker=_breaker_for(self._credentials.api_url, account_id=self._account_id),
                 lkg=_lkg(),
-                key=key,
+                key=cache_key,
                 call=call,
                 max_age_seconds=max_age_seconds,
                 should_cache=lambda payload: isinstance(payload, dict) and bool(payload),
             )
         except Exception:
-            cached = _lkg().get(key, max_age_seconds=max_age_seconds)
+            cached = _lkg().get(cache_key, max_age_seconds=max_age_seconds)
             return cached if isinstance(cached, dict) else {}
 
     async def list_evs(self, system_id: str) -> list[dict[str, Any]]:
@@ -156,15 +165,15 @@ class HeartbeatClient:
 
         try:
             return await resilient_call(
-                breaker=_breaker_for(self._credentials.api_url),
+                breaker=_breaker_for(self._credentials.api_url, account_id=self._account_id),
                 lkg=_lkg(),
-                key=key,
+                key=self._cache_key(key),
                 call=call,
                 max_age_seconds=120.0,
                 should_cache=lambda payload: isinstance(payload, list),
             )
         except Exception:
-            cached = _lkg().get(key, max_age_seconds=120.0)
+            cached = _lkg().get(self._cache_key(key), max_age_seconds=120.0)
             return cached if isinstance(cached, list) else []
 
     async def list_wallboxes(self, system_id: str) -> list[dict[str, Any]]:
@@ -208,9 +217,9 @@ class HeartbeatClient:
             return data
 
         return await resilient_call(
-            breaker=_breaker_for(self._credentials.api_url),
+            breaker=_breaker_for(self._credentials.api_url, account_id=self._account_id),
             lkg=_lkg(),
-            key=key,
+            key=self._cache_key(key),
             call=call,
             max_age_seconds=120.0,
             should_cache=lambda payload: isinstance(payload, dict) and bool(payload),
@@ -294,6 +303,7 @@ def build_heartbeat_client(
     username: str = "",
     password: str = "",
     refresh_token: TokenRefreshCallback | None = None,
+    account_id: int | None = None,
 ) -> HeartbeatClient | None:
     if connection_type == HeartbeatConnectionType.MOCK.value:
         return None
@@ -316,6 +326,7 @@ def build_heartbeat_client(
             password=password,
         ),
         refresh_token=refresh_token,
+        account_id=account_id,
     )
 
 

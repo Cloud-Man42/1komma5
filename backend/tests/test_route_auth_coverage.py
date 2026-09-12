@@ -59,6 +59,7 @@ async def secured_app_client(tmp_path):
         APP_ENV="test",
         DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
         EMIC_ADMIN_TOKEN="admin-secret",
+        emic_user_auth_enabled=True,
     )
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
@@ -66,6 +67,9 @@ async def secured_app_client(tmp_path):
         await conn.run_sync(Base.metadata.create_all)
     async with session_factory() as session:
         await seed_sites(session)
+        from energy_core.auth.seed_rbac import ensure_rbac_seed
+
+        await ensure_rbac_seed(session)
         await session.commit()
 
     app = create_app(settings)

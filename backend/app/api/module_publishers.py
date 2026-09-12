@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 from energy_core.db.models.module_publisher_key import ModulePublisherKeyModel
 from energy_core.platform.modules.packages.errors import PackageError, SIGNATURE_INVALID
@@ -37,7 +37,7 @@ class PublisherKeyCreateRequest(BaseModel):
 @router.get("", response_model=list[PublisherKeyItem])
 async def list_publisher_keys(
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> list[PublisherKeyItem]:
     rows = (await session.scalars(select(ModulePublisherKeyModel).order_by(ModulePublisherKeyModel.publisher_id))).all()
     return [
@@ -71,7 +71,7 @@ async def add_publisher_key(
     body: PublisherKeyCreateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PublisherKeyItem:
     _validate_public_key_hex(body.public_key_hex)
     if body.status not in {PublisherKeyStatus.TRUSTED, PublisherKeyStatus.REVOKED, PublisherKeyStatus.DISABLED}:
@@ -138,7 +138,7 @@ async def revoke_publisher_key(
     key_id: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PublisherKeyItem:
     row = await session.scalar(
         select(ModulePublisherKeyModel).where(

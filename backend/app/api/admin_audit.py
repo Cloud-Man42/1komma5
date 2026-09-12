@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 from app.schemas.energy_control import AdminAuditEntryResponse, AdminAuditLogResponse
 from energy_core.admin_audit.repo import AdminAuditRepository
@@ -18,7 +18,7 @@ async def list_admin_audit_log(
     limit: int = Query(default=50, ge=1, le=200),
     site_slug: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("audit.read")),
 ) -> AdminAuditLogResponse:
     rows = await AdminAuditRepository(session).list_recent(limit=limit, site_slug=site_slug)
     return AdminAuditLogResponse(

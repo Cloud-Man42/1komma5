@@ -49,6 +49,10 @@ class AdminAuditLogModel(Base):
     resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     summary_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    actor_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("emic_users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    actor_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class FlexibleLoadPlanModel(Base):

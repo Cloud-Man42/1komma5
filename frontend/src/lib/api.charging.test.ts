@@ -30,11 +30,17 @@ describe("updateSite", () => {
       }),
     ).resolves.toEqual(response);
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/sites/akarp", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ main_fuse_a: 25, safety_margin_a: 2 }),
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sites/akarp",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: expect.any(Headers),
+        body: JSON.stringify({ main_fuse_a: 25, safety_margin_a: 2 }),
+      }),
+    );
+    const headers = fetchMock.mock.calls[0][1]?.headers as Headers;
+    expect(headers.get("Content-Type")).toBe("application/json");
   });
 });
 
@@ -59,15 +65,19 @@ describe("controlEvCharger", () => {
       }),
     ).resolves.toEqual(response);
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/sites/akarp/ev-chargers/1/control", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        charging_mode: "SMART_CHARGE",
-        target_soc_pct: 90,
-        deadline_at: "2026-08-19T05:00:00.000Z",
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sites/akarp/ev-chargers/1/control",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: expect.any(Headers),
+        body: JSON.stringify({
+          charging_mode: "SMART_CHARGE",
+          target_soc_pct: 90,
+          deadline_at: "2026-08-19T05:00:00.000Z",
+        }),
       }),
-    });
+    );
   });
 
   it("can clear deadline via control endpoint", async () => {
@@ -80,10 +90,14 @@ describe("controlEvCharger", () => {
 
     await controlEvCharger("akarp", 1, { clear_deadline_at: true });
 
-    expect(fetchMock).toHaveBeenCalledWith("/api/sites/akarp/ev-chargers/1/control", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clear_deadline_at: true }),
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/sites/akarp/ev-chargers/1/control",
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: expect.any(Headers),
+        body: JSON.stringify({ clear_deadline_at: true }),
+      }),
+    );
   });
 });

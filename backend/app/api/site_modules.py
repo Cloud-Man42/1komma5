@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from app.rate_limits import connection_test_rate_limiter
 from energy_core.config import Settings
@@ -225,7 +225,7 @@ async def update_site_module(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> dict:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -296,7 +296,7 @@ async def get_module_config(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ModuleConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -319,7 +319,7 @@ async def update_module_config(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ModuleConfigResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -382,7 +382,7 @@ async def test_module_connection(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ConnectionTestResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -420,7 +420,7 @@ async def discover_module_devices(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> DiscoveryResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -456,7 +456,7 @@ async def apply_module_configuration(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ModuleApplyResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:
@@ -494,7 +494,7 @@ async def onboard_module_device(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ModuleOnboardResponse:
     site = await SiteRepository(session).get_by_slug(slug)
     if site is None:

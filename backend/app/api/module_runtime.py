@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import Settings
 from energy_core.platform.modules.governance.policy_engine import ModuleInstallPolicyEngine
@@ -114,7 +114,7 @@ def _auth_view(record) -> RuntimeAuthorizationView:
 @router.get("/authorizations", response_model=list[RuntimeAuthorizationView])
 async def list_runtime_authorizations(
     include_revoked: bool = False,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = RuntimeAuthorizationService(session)
@@ -125,7 +125,7 @@ async def list_runtime_authorizations(
 @router.post("/authorizations", response_model=RuntimeAuthorizationView, status_code=status.HTTP_201_CREATED)
 async def grant_runtime_authorization(
     body: GrantAuthorizationRequest,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = RuntimeAuthorizationService(session)
@@ -149,7 +149,7 @@ async def grant_runtime_authorization(
 @router.delete("/authorizations/{auth_id}", response_model=RuntimeAuthorizationView)
 async def revoke_runtime_authorization(
     auth_id: int,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = RuntimeAuthorizationService(session)
@@ -162,7 +162,7 @@ async def revoke_runtime_authorization(
 
 @router.get("", response_model=RuntimeListResponse)
 async def list_runtimes(
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ):
@@ -185,7 +185,7 @@ async def list_runtimes(
 @router.get("/{runtime_instance_id}", response_model=RuntimeSummary)
 async def get_runtime(
     runtime_instance_id: str,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ):
     record = await IsolatedRuntimeRepository(session).get_by_instance_id(runtime_instance_id)
@@ -197,7 +197,7 @@ async def get_runtime(
 @router.get("/{runtime_instance_id}/security", response_model=RuntimeSecurityView)
 async def get_runtime_security(
     runtime_instance_id: str,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ):
@@ -223,7 +223,7 @@ async def get_runtime_security(
 @router.post("/{runtime_instance_id}/stop")
 async def stop_runtime(
     runtime_instance_id: str,
-    _admin=Depends(require_admin_token),
+    _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ):

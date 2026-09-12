@@ -38,6 +38,18 @@ function Invoke-EmicRestMethod {
     return Invoke-RestMethod @RestArgs
 }
 
+function Get-EmicAdminTokenLocal {
+    param([string]$TokenFile = $(Join-Path $env:USERPROFILE ".emic-admin-token"))
+
+    if ($env:EMIC_ADMIN_TOKEN) {
+        return $env:EMIC_ADMIN_TOKEN.Trim()
+    }
+    if (Test-Path $TokenFile) {
+        return (Get-Content -Path $TokenFile -Raw).Trim()
+    }
+    return $null
+}
+
 function Get-EmicAdminTokenFromRemote {
     param(
         [string]$PlinkPath = "C:\Program Files\PuTTY\plink.exe",

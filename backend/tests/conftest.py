@@ -8,8 +8,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from app.deps import set_session_factory
 from app.main import create_app
+from energy_core.auth.passwords import hash_password
+from energy_core.auth.repos.user_repo import RoleRepository, UserRepository
+from energy_core.auth.seed_rbac import ensure_rbac_seed
 from energy_core.config import Settings
 from energy_core.db.models import Base
+from energy_core.db.repositories import SiteRepository
 from energy_core.db.session import create_engine, create_session_factory
 from energy_core.seed import seed_sites
 from energy_core.solar_forecast.types import WeatherForecast, WeatherForecastPoint
@@ -101,6 +105,7 @@ async def client(tmp_path):
         APP_ENV="test",
         DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
         emic_admin_token="",
+        emic_user_auth_enabled=False,
     )
     engine = create_engine(settings)
     session_factory = create_session_factory(engine)
@@ -108,6 +113,9 @@ async def client(tmp_path):
         await conn.run_sync(Base.metadata.create_all)
     async with session_factory() as session:
         await seed_sites(session)
+        from energy_core.auth.seed_rbac import ensure_rbac_seed
+
+        await ensure_rbac_seed(session)
         await session.commit()
 
     app = create_app(settings)
@@ -116,3 +124,75 @@ async def client(tmp_path):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac, session_factory, settings
     await engine.dispose()
+
+
+@pytest.fixture
+async def auth_client(tmp_path):
+    """Authenticated API client with seeded RBAC users (admin, viewer, operator)."""
+    db_file = tmp_path / "auth-test.db"
+    settings = Settings(
+        _env_file=None,
+        APP_ENV="test",
+        DATABASE_URL=f"sqlite+aiosqlite:///{db_file.as_posix()}",
+        emic_admin_token="break-glass-secret",
+        emic_user_auth_enabled=True,
+        emic_cookie_secure=False,
+    )
+    engine = create_engine(settings)
+    session_factory = create_session_factory(engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with session_factory() as session:
+        await seed_sites(session)
+        await ensure_rbac_seed(session)
+        user_repo = UserRepository(session)
+        viewer_role = await RoleRepository(session).get_by_name("VIEWER")
+        operator_role = await RoleRepository(session).get_by_name("OPERATOR")
+        super_role = await RoleRepository(session).get_by_name("SUPER_ADMIN")
+        sites = await SiteRepository(session).list_all()
+        akarp = next(s for s in sites if s.slug == "akarp")
+
+        admin = await user_repo.create_user(
+            username="admin",
+            email="admin@example.com",
+            password_hash=hash_password("AdminPass123!"),
+            display_name="Admin",
+        )
+        await user_repo.set_roles(admin.id, [super_role.id])
+        await user_repo.set_site_access(admin.id, [s.id for s in sites])
+
+        viewer = await user_repo.create_user(
+            username="viewer",
+            email="viewer@example.com",
+            password_hash=hash_password("ViewerPass123!"),
+            display_name="Viewer",
+        )
+        await user_repo.set_roles(viewer.id, [viewer_role.id])
+        await user_repo.set_site_access(viewer.id, [akarp.id])
+
+        operator = await user_repo.create_user(
+            username="operator",
+            email="operator@example.com",
+            password_hash=hash_password("OperatorPass123!"),
+            display_name="Operator",
+        )
+        await user_repo.set_roles(operator.id, [operator_role.id])
+        await user_repo.set_site_access(operator.id, [akarp.id])
+
+        disabled = await user_repo.create_user(
+            username="disabled",
+            email="disabled@example.com",
+            password_hash=hash_password("DisabledPass123!"),
+            display_name="Disabled",
+            must_change_password=False,
+        )
+        disabled.is_active = False
+        await session.commit()
+
+    app = create_app(settings)
+    set_session_factory(session_factory, settings)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac, settings
+    await engine.dispose()
+

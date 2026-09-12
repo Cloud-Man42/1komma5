@@ -28,7 +28,7 @@ export function AdminTokenPanel() {
       <h3 className="config-section-title">Admin-token</h3>
       <p className="muted config-env-intro">
         Krävs när servern har <code>EMIC_ADMIN_TOKEN</code> satt. Alla API-anrop (dashboard, fordon,
-        konfiguration) skickar denna token. Sparas bara i sessionStorage i denna webbläsare.
+        konfiguration) skickar denna token. Sparas i localStorage i denna webbläsare.
       </p>
       <form className="form-grid" onSubmit={onSave}>
         <label className="form-field">

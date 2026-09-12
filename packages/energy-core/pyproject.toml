@@ -21,6 +21,7 @@ dependencies = [
     "redis>=5.0",
     "packaging>=24.0",
     "tuf>=4.0",
+    "pwdlib[argon2]>=0.2",
 ]
 
 [build-system]
