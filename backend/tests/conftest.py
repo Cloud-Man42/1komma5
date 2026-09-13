@@ -61,13 +61,16 @@ def clear_dashboard_cache():
     from app.widget_service import clear_snapshot_cache
     from energy_core.cache.service import reset_cache_service
 
+    from app.login_rate_limit import LOGIN_RATE_LIMITER
     from app.widget_auth import WIDGET_RATE_LIMITER
 
+    LOGIN_RATE_LIMITER._windows.clear()
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
     reset_cache_service()
     clear_snapshot_cache()
     yield
+    LOGIN_RATE_LIMITER._windows.clear()
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
     reset_cache_service()
@@ -187,6 +190,9 @@ async def auth_client(tmp_path):
             must_change_password=False,
         )
         disabled.is_active = False
+        from energy_core.tenancy.sync import sync_tenant_memberships_for_default_tenant
+
+        await sync_tenant_memberships_for_default_tenant(session)
         await session.commit()
 
     app = create_app(settings)

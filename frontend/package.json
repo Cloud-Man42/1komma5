@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/extract-conduit-paths.mjs && next build",
+    "build": "node scripts/extract-conduit-paths.mjs && node scripts/generate-pwa-icons.mjs && next build",
+    "generate-pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "generate-scene": "node scripts/generate-energy-scene.mjs",
     "extract-paths": "node scripts/extract-conduit-paths.mjs",
     "start": "next start",
@@ -31,6 +32,7 @@
     "@vitest/coverage-v8": "^2.1.8",
     "jsdom": "^25.0.1",
     "pngjs": "^7.0.0",
+    "sharp": "^0.35.4",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

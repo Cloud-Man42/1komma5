@@ -42,6 +42,12 @@ class EmicUserModel(Base):
     site_access: Mapped[list[EmicUserSiteAccessModel]] = relationship(
         back_populates="user", lazy="selectin", cascade="all, delete-orphan"
     )
+    tenant_memberships: Mapped[list["TenantUserModel"]] = relationship(
+        back_populates="user", lazy="selectin", cascade="all, delete-orphan"
+    )
+    platform_roles: Mapped[list["PlatformUserRoleModel"]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
 
 
 class EmicRoleModel(Base):
@@ -58,6 +64,9 @@ class EmicRoleModel(Base):
     )
     permissions: Mapped[list[EmicPermissionModel]] = relationship(
         secondary="emic_role_permissions", back_populates="roles", lazy="selectin"
+    )
+    tenant_users: Mapped[list["TenantUserModel"]] = relationship(
+        secondary="tenant_user_roles", back_populates="roles", lazy="selectin"
     )
 
 
@@ -116,6 +125,9 @@ class EmicUserSessionModel(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    active_tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
@@ -133,6 +145,9 @@ class EmicAuthAuditEventModel(Base):
     __tablename__ = "emic_auth_audit_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("emic_users.id", ondelete="SET NULL"), nullable=True, index=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -20,6 +20,7 @@ from energy_core.config import Settings
 
 def test_snapshot_event_channel() -> None:
     assert snapshot_event_channel(7) == "emic:events:snapshot:7"
+    assert snapshot_event_channel(7, tenant_id=3) == "tenant:3:emic:events:snapshot:7"
 
 
 @pytest.mark.asyncio

@@ -25,3 +25,10 @@ def test_peak_protection_none_when_headroom_ok():
 def test_peak_protection_none_without_fuse_or_import():
     assert assess_peak_protection(main_fuse_a=None, grid_import_w=10_000.0) is None
     assert assess_peak_protection(main_fuse_a=25.0, grid_import_w=None) is None
+
+
+def test_denmark_50a_fuse_no_alert_at_typical_import():
+    """Denmark main fuse is 50 A — typical import should not trigger peak protection."""
+    # ~14 A per phase at 3×230 V ≈ 9.7 kW import
+    hint = assess_peak_protection(main_fuse_a=50.0, grid_import_w=9_700.0)
+    assert hint is None

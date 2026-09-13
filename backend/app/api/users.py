@@ -12,13 +12,15 @@ from energy_core.auth.repos.user_repo import RoleRepository, UserRepository
 from energy_core.auth.session_service import SessionService
 from energy_core.config import Settings
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin/users", tags=["users"])
 
 
 class UserCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(min_length=2, max_length=64)
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=128)
@@ -73,23 +75,34 @@ def _user_item(user, site_map: dict[int, str]) -> dict:
 @router.get("/site-options")
 async def list_site_options(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _principal=Depends(require_permission("users.read")),
+    principal=Depends(require_permission("users.read")),
 ) -> dict:
     from energy_core.db.repositories import SiteRepository
 
-    sites = await SiteRepository(session).list_all()
+    site_repo = SiteRepository(session)
+    if principal.tenant_id is not None and not principal.is_platform_admin:
+        sites = await site_repo.list_for_tenant(principal.tenant_id)
+    else:
+        sites = await site_repo.list_all()
     return {"sites": [{"id": s.id, "slug": s.slug, "name": s.name} for s in sites]}
 
 
 @router.get("")
 async def list_users(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _principal=Depends(require_permission("users.read")),
+    principal=Depends(require_permission("users.read")),
 ) -> dict:
     from energy_core.db.repositories import SiteRepository
 
-    users = await UserRepository(session).list_users()
-    site_map = {s.id: s.slug for s in await SiteRepository(session).list_all()}
+    repo = UserRepository(session)
+    site_repo = SiteRepository(session)
+    if principal.tenant_id is not None and not principal.is_platform_admin:
+        users = await repo.list_users_for_tenant(principal.tenant_id)
+        sites = await site_repo.list_for_tenant(principal.tenant_id)
+    else:
+        users = await repo.list_users()
+        sites = await site_repo.list_all()
+    site_map = {s.id: s.slug for s in sites}
     return {"users": [_user_item(u, site_map) for u in users]}
 
 
@@ -124,6 +137,16 @@ async def create_user(
     if body.site_ids:
         await repo.set_site_access(user.id, body.site_ids)
 
+    if principal.tenant_id is not None:
+        from energy_core.tenancy.repo import TenantRepository
+
+        tenant_repo = TenantRepository(session)
+        membership = await tenant_repo.create_membership(principal.tenant_id, user.id)
+        if body.role_ids:
+            await tenant_repo.set_membership_roles(membership.id, body.role_ids)
+        if body.site_ids:
+            await tenant_repo.set_membership_site_access(membership.id, body.site_ids)
+
     await AuthAuditRepository(session).append(
         event_type="USER_CREATED",
         action="create_user",
@@ -138,7 +161,12 @@ async def create_user(
     user = await repo.get_by_id(user.id)
     from energy_core.db.repositories import SiteRepository
 
-    site_map = {s.id: s.slug for s in await SiteRepository(session).list_all()}
+    site_repo = SiteRepository(session)
+    if principal.tenant_id is not None and not principal.is_platform_admin:
+        sites = await site_repo.list_for_tenant(principal.tenant_id)
+    else:
+        sites = await site_repo.list_all()
+    site_map = {s.id: s.slug for s in sites}
     return _user_item(user, site_map)
 
 

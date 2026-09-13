@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="EMIC">
+  <rect width="512" height="512" rx="108" fill="#070c16"/>
+  <path fill="#22d3ee" d="M256 108 392 248h-56v156H176V248h-56z"/>
+  <rect x="208" y="288" width="96" height="116" rx="8" fill="#fbbf24"/>
+  <path fill="none" stroke="#4ade80" stroke-width="16" d="M128 360h256"/>
+</svg>

@@ -7,7 +7,6 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 
 _hasher = PasswordHash((Argon2Hasher(),))
 
-MIN_PASSWORD_LENGTH = 10
 MAX_PASSWORD_LENGTH = 128
 
 
@@ -20,8 +19,6 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def validate_password_policy(password: str) -> str | None:
-    if len(password) < MIN_PASSWORD_LENGTH:
-        return f"Lösenordet måste vara minst {MIN_PASSWORD_LENGTH} tecken."
     if len(password) > MAX_PASSWORD_LENGTH:
         return f"Lösenordet får vara högst {MAX_PASSWORD_LENGTH} tecken."
     if not password.strip():

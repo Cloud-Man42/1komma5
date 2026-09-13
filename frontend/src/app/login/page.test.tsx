@@ -19,6 +19,10 @@ vi.mock("@/lib/authContext", () => ({
   }),
 }));
 
+vi.mock("next/image", () => ({
+  default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => <img alt="" {...props} />,
+}));
+
 function renderLogin() {
   return render(
     <ToastProvider>
@@ -38,6 +42,7 @@ describe("LoginForm", () => {
     expect(screen.getByRole("heading", { name: /Logga in/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/E-post \/ användarnamn/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Lösenord/i)).toBeInTheDocument();
+    expect(screen.getByAltText(/EMIC — Energy Monitor In A Cloud/i)).toBeInTheDocument();
   });
 
   it("shows generic error on failed login", async () => {

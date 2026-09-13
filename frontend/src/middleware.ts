@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/display"];
+const PUBLIC_PREFIXES = ["/login", "/display", "/offline"];
 
 export function middleware(request: NextRequest) {
   if (process.env.NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED !== "true") {
@@ -10,7 +10,13 @@ export function middleware(request: NextRequest) {
   if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
-  if (pathname.startsWith("/_next") || pathname.startsWith("/favicon")) {
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
+    pathname.startsWith("/icons/")
+  ) {
     return NextResponse.next();
   }
   const hasSession = Boolean(request.cookies.get("emic_session")?.value);

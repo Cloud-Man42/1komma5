@@ -19,6 +19,7 @@ import {
 } from "@/components/admin-ui";
 import { fetchAdminRoles, fetchAdminUsers, updateAdminUser, type UserItem } from "@/lib/adminUsersApi";
 import { useAuth } from "@/lib/authContext";
+import { MobileUserCard } from "@/components/mobile/MobileUserCard";
 import {
   formatDateTime,
   isAdminRole,
@@ -27,9 +28,11 @@ import {
   userStatus,
   type UserSortKey,
 } from "@/lib/userAdminUtils";
+import { useMobileShell } from "@/lib/useMobileShell";
 
 export default function AdminUsersPage() {
   const { can } = useAuth();
+  const mobileShell = useMobileShell();
   const router = useRouter();
   const { showToast } = useToast();
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -245,26 +248,30 @@ export default function AdminUsersPage() {
           </div>
 
           <div className="admin-mobile-list">
-            {filtered.map((user) => (
-              <article key={user.id} className="admin-mobile-row">
-                <div className="admin-user-cell">
-                  <UserAvatar name={userDisplayLabel(user)} size="sm" />
-                  <div className="admin-user-meta">
-                    <span className="admin-user-name">{userDisplayLabel(user)}</span>
-                    <span className="admin-user-email">{user.email}</span>
+            {filtered.map((user) =>
+              mobileShell ? (
+                <MobileUserCard key={user.id} user={user} />
+              ) : (
+                <article key={user.id} className="admin-mobile-row">
+                  <div className="admin-user-cell">
+                    <UserAvatar name={userDisplayLabel(user)} size="sm" />
+                    <div className="admin-user-meta">
+                      <span className="admin-user-name">{userDisplayLabel(user)}</span>
+                      <span className="admin-user-email">{user.email}</span>
+                    </div>
                   </div>
-                </div>
-                <p>
-                  <StatusBadge status={userStatus(user)} />
-                </p>
-                <p className="muted">Senaste inloggningsförsök: {formatDateTime(user.lastLoginAt)}</p>
-                {can("users.update") ? (
-                  <Link href={`/admin/users/${user.id}`} className="admin-btn admin-btn-secondary">
-                    Redigera
-                  </Link>
-                ) : null}
-              </article>
-            ))}
+                  <p>
+                    <StatusBadge status={userStatus(user)} />
+                  </p>
+                  <p className="muted">Senaste inloggningsförsök: {formatDateTime(user.lastLoginAt)}</p>
+                  {can("users.update") ? (
+                    <Link href={`/admin/users/${user.id}`} className="admin-btn admin-btn-secondary">
+                      Redigera
+                    </Link>
+                  ) : null}
+                </article>
+              ),
+            )}
           </div>
         </>
       ) : null}

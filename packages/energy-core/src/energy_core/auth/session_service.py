@@ -12,6 +12,7 @@ from energy_core.auth.repos.user_repo import UserRepository
 from energy_core.auth.session_tokens import generate_csrf_token, generate_session_token, hash_token
 from energy_core.config import Settings
 from energy_core.db.models import EmicUserSessionModel
+from energy_core.tenancy.repo import TenantRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -78,18 +79,68 @@ class SessionService:
         else:
             await self._sessions.touch(row)
 
+        tenant_repo = TenantRepository(self._session)
+        platform_roles = await tenant_repo.list_platform_roles(user.id)
+        tenant_id = row.active_tenant_id
+        tenant_user_id: int | None = None
+        roles = frozenset(r.name for r in user.roles)
+        permissions = self._users.resolve_permissions(user)
+        site_ids = self._users.resolve_site_ids(user)
+
+        if tenant_id is not None:
+            membership = await tenant_repo.get_membership(tenant_id, user.id)
+            if membership is not None and membership.is_active:
+                tenant_user_id = membership.id
+                roles = frozenset(r.name for r in membership.roles)
+                permissions = self._resolve_membership_permissions(membership)
+                site_ids = await tenant_repo.resolve_membership_site_ids(membership)
+        else:
+            memberships = await tenant_repo.list_for_user(user.id)
+            if len(memberships) == 1:
+                tenant_id = memberships[0].id
+                membership = await tenant_repo.get_membership(tenant_id, user.id)
+                if membership is not None:
+                    tenant_user_id = membership.id
+                    roles = frozenset(r.name for r in membership.roles)
+                    permissions = self._resolve_membership_permissions(membership)
+                    site_ids = await tenant_repo.resolve_membership_site_ids(membership)
+                    row.active_tenant_id = tenant_id
+                    await self._session.flush()
+
         return Principal(
             user_id=user.id,
             username=user.username,
             email=user.email,
             display_name=user.display_name or user.username,
-            roles=frozenset(r.name for r in user.roles),
-            permissions=self._users.resolve_permissions(user),
-            site_ids=self._users.resolve_site_ids(user),
+            roles=roles,
+            permissions=permissions,
+            site_ids=site_ids,
             auth_method=AuthMethod.SESSION,
             session_id=row.id,
             must_change_password=user.must_change_password,
+            tenant_id=tenant_id,
+            tenant_user_id=tenant_user_id,
+            platform_roles=platform_roles,
         )
+
+    @staticmethod
+    def _resolve_membership_permissions(membership) -> frozenset[str]:
+        perms: set[str] = set()
+        for role in membership.roles:
+            for perm in role.permissions:
+                perms.add(perm.key)
+        return frozenset(perms)
+
+    async def set_active_tenant(self, session_token: str, tenant_id: int) -> bool:
+        row = await self._sessions.get_by_token(session_token)
+        if row is None:
+            return False
+        membership = await TenantRepository(self._session).get_membership(tenant_id, row.user_id)
+        if membership is None or not membership.is_active:
+            return False
+        row.active_tenant_id = tenant_id
+        await self._session.flush()
+        return True
 
     async def verify_csrf(self, session_token: str, csrf_token: str | None) -> bool:
         if not csrf_token:

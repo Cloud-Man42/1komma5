@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from app.deps import get_db_session, get_site_repository
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.intelligence_advisor import BatteryOpportunityResponse
 from app.schemas.pricing import EnergyStrategyCurrentResponse, EvRecommendationResponse, PriceEngineCurrentResponse, PriceEngineDayResponse, PriceEngineRangeResponse, PriceEngineStatusResponse, PricePeriodResponse
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.models import EnergyReadingModel
 from energy_core.db.price_period_repo import PriceEngineStateRepository
-from energy_core.db.repositories import SiteRepository
-from energy_core.config import get_settings
 from energy_core.cache.service import current_price_cache_key, get_cache_service
 from energy_core.energy_optimizer.advisor import build_battery_opportunity_advice
 from energy_core.price_engine.engine import EmicPriceEngine
@@ -64,14 +66,11 @@ async def _latest_reading(session: AsyncSession, site_id: int) -> EnergyReadingM
 @router.get("/sites/{slug}/price-engine/current", response_model=PriceEngineCurrentResponse)
 async def get_price_engine_current(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> PriceEngineCurrentResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
-
-    settings = get_settings()
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     cache = get_cache_service(settings)
     cache_key = current_price_cache_key(site.id)
     ttl_seconds = settings.current_price_redis_cache_ttl_seconds
@@ -96,12 +95,11 @@ async def get_price_engine_current(
 @router.get("/sites/{slug}/price-engine/today", response_model=PriceEngineDayResponse)
 async def get_price_engine_today(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> PriceEngineDayResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     engine = await _engine(session)
     day = local_today(site.timezone)
@@ -117,12 +115,11 @@ async def get_price_engine_today(
 @router.get("/sites/{slug}/price-engine/tomorrow", response_model=PriceEngineDayResponse)
 async def get_price_engine_tomorrow(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> PriceEngineDayResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     engine = await _engine(session)
     day = local_today(site.timezone) + timedelta(days=1)
@@ -140,12 +137,11 @@ async def get_price_engine_range(
     slug: str,
     from_time: datetime = Query(alias="from"),
     to_time: datetime = Query(alias="to"),
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> PriceEngineRangeResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     if from_time.tzinfo is None:
         from_time = from_time.replace(tzinfo=UTC)
@@ -168,12 +164,11 @@ async def get_price_engine_range(
 @router.get("/sites/{slug}/price-engine/status", response_model=PriceEngineStatusResponse)
 async def get_price_engine_status(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> PriceEngineStatusResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     state_repo = PriceEngineStateRepository(session)
     state = await get_engine_status(state_repo, site.id)
@@ -192,12 +187,11 @@ async def get_price_engine_status(
 @router.get("/sites/{slug}/energy-strategy/current", response_model=EnergyStrategyCurrentResponse)
 async def get_energy_strategy_current(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyStrategyCurrentResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     engine = await _engine(session)
     current = await engine.get_current(site.id, site.timezone)
@@ -279,18 +273,16 @@ async def get_energy_strategy_current(
 @router.get("/sites/{slug}/battery-opportunity", response_model=BatteryOpportunityResponse)
 async def get_battery_opportunity(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> BatteryOpportunityResponse:
     from energy_core.price_engine.strategy_service import build_current_strategy_for_slug
 
-    settings = get_settings()
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
     snapshot = await build_current_strategy_for_slug(session, slug, is_sqlite=settings.is_sqlite)
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
-
-    site = await site_repo.get_by_slug(slug)
-    assert site is not None
     advice = build_battery_opportunity_advice(snapshot)
     return BatteryOpportunityResponse(
         slug=slug,

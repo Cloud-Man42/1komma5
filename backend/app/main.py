@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from app.api import admin_audit, auth, auth_audit, apple_devices, chargefinder, chargers_catalog, climate, dashboard, devices, display, energy_control, energy_orchestration, ev_chargers, ev_sessions, external_modules, forecast_learning, heartbeat_accounts, heartbeat_audit, heartbeat_bridge, horizon_optimizer, integration_health, marketplace_distribution, marketplace_metadata, module_governance, module_packages, module_publishers, module_runtime, module_store, multi_site, operations, price_engine, prices, readings, roles, semp, site_modules, sites, snapshot, solar_forecast, solar_intelligence, spa, system, user_preferences, users, vehicles, widget
+from app.api import admin_audit, auth, auth_audit, apple_devices, chargefinder, chargers_catalog, climate, dashboard, devices, display, energy_control, energy_orchestration, ev_chargers, ev_sessions, external_modules, forecast_learning, heartbeat_accounts, heartbeat_audit, heartbeat_bridge, horizon_optimizer, integration_health, marketplace_distribution, marketplace_metadata, mobile, module_governance, module_packages, module_publishers, module_runtime, module_store, multi_site, operations, platform_tenants, price_engine, prices, readings, roles, semp, site_modules, sites, snapshot, solar_forecast, solar_intelligence, spa, system, tenants, user_preferences, users, vehicles, widget
 from app.security_middleware import SecurityHeadersMiddleware
 from app.user_auth import require_authenticated
 from app.deps import set_session_factory
@@ -102,6 +102,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app_deps = [Depends(require_authenticated)]
 
     app.include_router(auth.router, prefix="/api")
+    app.include_router(tenants.router, prefix="/api", dependencies=app_deps)
+    app.include_router(platform_tenants.router, prefix="/api", dependencies=app_deps)
     app.include_router(sites.router, prefix="/api", dependencies=app_deps)
     app.include_router(snapshot.router, prefix="/api", dependencies=app_deps)
     app.include_router(dashboard.router, prefix="/api", dependencies=app_deps)
@@ -145,6 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(roles.router, prefix="/api", dependencies=app_deps)
     app.include_router(auth_audit.router, prefix="/api", dependencies=app_deps)
     app.include_router(multi_site.router, prefix="/api", dependencies=app_deps)
+    app.include_router(mobile.router, prefix="/api", dependencies=app_deps)
     app.include_router(user_preferences.router, prefix="/api", dependencies=app_deps)
     app.include_router(semp.router)
     return app

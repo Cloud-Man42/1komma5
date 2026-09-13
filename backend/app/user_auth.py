@@ -63,7 +63,17 @@ async def get_optional_principal(
     settings: Annotated[Settings, Depends(get_app_settings)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> Principal | None:
-    return await resolve_principal(request, session, settings, credentials)
+    principal = await resolve_principal(request, session, settings, credentials)
+    if principal is not None:
+        from energy_core.tenancy.db_rls import bind_tenant_to_session
+
+        await bind_tenant_to_session(
+            session,
+            settings,
+            tenant_id=principal.tenant_id,
+            platform_bypass=principal.is_platform_admin,
+        )
+    return principal
 
 
 async def require_authenticated(
@@ -74,6 +84,17 @@ async def require_authenticated(
         return principal or legacy_open_principal()
     if principal is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return principal
+
+
+async def require_platform_admin(
+    principal: Annotated[Principal, Depends(require_authenticated)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> Principal:
+    if not settings.emic_user_auth_enabled:
+        return principal
+    if not principal.is_platform_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin required")
     return principal
 
 
@@ -159,7 +180,11 @@ async def build_user_response(session: AsyncSession, principal: Principal) -> di
         if user is not None:
             from energy_core.db.repositories import SiteRepository
 
-            sites = await SiteRepository(session).list_all()
+            site_repo = SiteRepository(session)
+            if principal.tenant_id is not None and not principal.is_platform_admin:
+                sites = await site_repo.list_for_tenant(principal.tenant_id)
+            else:
+                sites = await site_repo.list_all()
             site_map = {s.id: s.slug for s in sites}
             site_slugs = [site_map[sid] for sid in sorted(principal.site_ids) if sid in site_map]
     return {

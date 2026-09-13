@@ -54,4 +54,8 @@ async def ensure_emic_auth_bootstrap(session: AsyncSession, settings: Settings) 
     if sites:
         await user_repo.set_site_access(user.id, [s.id for s in sites])
 
+    from energy_core.tenancy.sync import sync_tenant_memberships_for_default_tenant
+
+    await sync_tenant_memberships_for_default_tenant(session)
+
     logger.info("Bootstrap SUPER_ADMIN created for %s", email)

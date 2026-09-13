@@ -9,7 +9,17 @@
 # remove the "tls internal" line below for automatic Let's Encrypt instead.
 #
 # Trust the internal CA on client machines (optional, removes browser warnings):
-#   docker compose exec caddy cat /data/caddy/pki/ca/root.crt
+#   docker compose exec caddy cat /data/caddy/pki/authorities/local/root.crt
+#   Or from Windows: .\scripts\trust-emic-caddy-ca.ps1
+
+(emic_ca_http) {
+	# Bootstrap trust for iPhone/iPad — plain HTTP only, no redirect.
+	@emic_ca path /emic-ca.crt /emic-ca.mobileconfig /emic-ca.html
+	handle @emic_ca {
+		root * /srv/caddy-trust
+		file_server
+	}
+}
 
 (emic_app) {
 	encode gzip
@@ -41,9 +51,12 @@
 	import emic_app
 }
 
-# Redirect plain HTTP on the FQDN to HTTPS.
+# Plain HTTP on the FQDN — cert bootstrap, then redirect everything else to HTTPS.
 http://{$CADDY_DOMAIN:localhost} {
-	redir https://{host}{uri} permanent
+	import emic_ca_http
+	handle {
+		redir https://{host}{uri} permanent
+	}
 }
 
 # LAN IP — HTTPS for kiosks and operators; plain HTTP redirects to HTTPS.
@@ -52,9 +65,12 @@ https://{$CADDY_LAN_HOST:192.168.50.54} {
 	import emic_app
 }
 
-# Bare IP HTTPS breaks Windows/Schannel (no SNI for IP). Redirect LAN HTTP to the FQDN.
+# LAN IP over HTTP — cert bootstrap, then redirect other paths to HTTPS FQDN.
 http://{$CADDY_LAN_HOST:192.168.50.54} {
-	redir https://{$CADDY_DOMAIN:localhost}{uri} permanent
+	import emic_ca_http
+	handle {
+		redir https://{$CADDY_DOMAIN:localhost}{uri} permanent
+	}
 }
 
 # Internal Docker-only artifact fixture server (no TLS, no redirect).

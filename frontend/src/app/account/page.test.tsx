@@ -39,11 +39,11 @@ describe("AccountPage", () => {
     expect(screen.getByRole("button", { name: /Byt lösenord/i })).toBeInTheDocument();
   });
 
-  it("opens change password modal with validation hints", () => {
+  it("opens change password modal with match validation hint", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /Byt lösenord/i }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText(/Minst 10 tecken/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lösenorden matchar/i)).toBeInTheDocument();
   });
 
   it("shows password mismatch validation", () => {

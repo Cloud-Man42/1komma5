@@ -865,11 +865,25 @@
   z-index: 20;
 }
 
+.idash-topbar-start {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 1;
+}
+
 .idash-topbar-nav {
   display: flex;
   gap: 0.15rem;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.idash-home-btn-active {
+  color: #f8fafc;
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(96, 165, 250, 0.12);
 }
 
 .idash-topbar-link {

@@ -9,6 +9,7 @@ services:
       CADDY_LAN_HOST: ${CADDY_LAN_HOST:-192.168.50.54}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-trust:/srv/caddy-trust:ro
       - ./sprint-b-fixtures:/srv/sprint-b-fixtures:ro
       - caddy_data:/data
       - caddy_config:/config

@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { DashboardShell } from "@/components/intelligence-dashboard/DashboardShell";
 import { SiteDataProvider, useSiteData } from "@/lib/SiteDataProvider";
+import { useMobileShell } from "@/lib/useMobileShell";
 import { SolarLayoutProvider } from "@/lib/SolarLayoutContext";
 import {
   fetchSolarConfig,
@@ -15,6 +16,7 @@ import {
 function SiteLayoutInner({ children }: { children: ReactNode }) {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
+  const mobile = useMobileShell();
   const { dashboard } = useSiteData();
   const [config, setConfig] = useState<SolarSiteConfig | null>(null);
   const [weather, setWeather] = useState<SolarWeather | null>(null);
@@ -44,15 +46,19 @@ function SiteLayoutInner({ children }: { children: ReactNode }) {
 
   return (
     <SolarLayoutProvider config={config} weather={weather}>
-      <DashboardShell
-        slug={slug}
-        dashboard={dashboard}
-        latitude={config?.latitude}
-        longitude={config?.longitude}
-        weather={weather}
-      >
-        {children}
-      </DashboardShell>
+      {mobile ? (
+        <div className="mobile-site-content idash-content">{children}</div>
+      ) : (
+        <DashboardShell
+          slug={slug}
+          dashboard={dashboard}
+          latitude={config?.latitude}
+          longitude={config?.longitude}
+          weather={weather}
+        >
+          {children}
+        </DashboardShell>
+      )}
     </SolarLayoutProvider>
   );
 }

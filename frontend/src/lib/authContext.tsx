@@ -70,6 +70,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (user?.authMethod === "break_glass") {
       setAdminToken("");
       setUser(null);
+      try {
+        sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
       window.location.href = "/login";
       return;
     }
@@ -78,6 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setAdminToken("");
       setUser(null);
+      try {
+        sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
       window.location.href = "/login";
     }
   }, [user?.authMethod]);

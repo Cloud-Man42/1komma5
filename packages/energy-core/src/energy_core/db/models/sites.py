@@ -9,9 +9,11 @@ from energy_core.db.models.base import Base
 
 class SiteModel(Base):
     __tablename__ = "sites"
+    __table_args__ = (UniqueConstraint("tenant_id", "slug", name="uq_sites_tenant_slug"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
     external_system_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -41,6 +43,7 @@ class SiteModel(Base):
     energy_control_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     battery_usable_capacity_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    tenant: Mapped["TenantModel"] = relationship(back_populates="sites")
     readings: Mapped[list["EnergyReadingModel"]] = relationship(back_populates="site")
     market_prices: Mapped[list["MarketPriceModel"]] = relationship(
         back_populates="site",

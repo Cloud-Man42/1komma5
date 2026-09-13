@@ -27,13 +27,13 @@ class UserRepository:
         return int(await self._session.scalar(select(func.count()).select_from(EmicUserModel)) or 0)
 
     async def get_by_id(self, user_id: int) -> EmicUserModel | None:
-        return await self._session.get(
-            EmicUserModel,
-            user_id,
-            options=[
+        return await self._session.scalar(
+            select(EmicUserModel)
+            .options(
                 selectinload(EmicUserModel.roles).selectinload(EmicRoleModel.permissions),
                 selectinload(EmicUserModel.site_access),
-            ],
+            )
+            .where(EmicUserModel.id == user_id)
         )
 
     async def get_by_username_or_email(self, username_or_email: str) -> EmicUserModel | None:
@@ -53,6 +53,21 @@ class UserRepository:
     async def list_users(self) -> tuple[EmicUserModel, ...]:
         rows = await self._session.scalars(
             select(EmicUserModel)
+            .options(
+                selectinload(EmicUserModel.roles),
+                selectinload(EmicUserModel.site_access),
+            )
+            .order_by(EmicUserModel.display_name, EmicUserModel.username)
+        )
+        return tuple(rows.all())
+
+    async def list_users_for_tenant(self, tenant_id: int) -> tuple[EmicUserModel, ...]:
+        from energy_core.db.models import TenantUserModel
+
+        rows = await self._session.scalars(
+            select(EmicUserModel)
+            .join(TenantUserModel, TenantUserModel.user_id == EmicUserModel.id)
+            .where(TenantUserModel.tenant_id == tenant_id, TenantUserModel.is_active.is_(True))
             .options(
                 selectinload(EmicUserModel.roles),
                 selectinload(EmicUserModel.site_access),

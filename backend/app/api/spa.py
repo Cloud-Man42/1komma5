@@ -8,8 +8,10 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.user_auth import require_permission
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
+from app.user_auth import require_authenticated, require_permission
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.spa import SpaCleaningWindowResponse, SpaConfigResponse, SpaConfigUpdateRequest, SpaConnectionTestResponse, SpaControlConfigResponse, SpaControlConfigUpdateRequest, SpaEconomicsResponse, SpaEnergyBreakdownResponse, SpaEnergyBreakdownRow, SpaEnergyEventResponse, SpaEnergyPeriodResponse, SpaEventsResponse, SpaHealthResponse, SpaHistoryPoint, SpaHistoryResponse, SpaPlanBlockResponse, SpaPlanResponse, SpaRunCleaningResponse, SpaShadowDayResponse, SpaShadowResponse, SpaStatusResponse, SpaTimelineEntry, SpaTimelineResponse
 from energy_core.config import get_settings
@@ -181,8 +183,10 @@ async def _ensure_spa_intervals(session: AsyncSession, site, consumer_id: int, p
 
 
 @router.get("/sites/{slug}/spa/status", response_model=SpaStatusResponse)
-async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaStatusResponse:
-    site, consumer, config = await _get_spa_context(session, slug)
+async def get_spa_status(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaStatusResponse:
+    site, consumer, config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     sample_repo = ConsumerSampleRepository(session)
     latest = await sample_repo.get_latest(consumer.id)
     status_payload = {}
@@ -253,8 +257,9 @@ async def get_spa_energy_breakdown(
     slug: str,
     period: str = Query(default="month"),
     session: AsyncSession = Depends(get_db_session),
-) -> SpaEnergyBreakdownResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEnergyBreakdownResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
     interval_repo = ConsumerIntervalRepository(session)
@@ -292,8 +297,9 @@ async def get_spa_energy_period(
     slug: str,
     period: str,
     session: AsyncSession = Depends(get_db_session),
-) -> SpaEnergyPeriodResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEnergyPeriodResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
     totals = await _period_energy_totals(
         session,
@@ -313,7 +319,9 @@ async def get_spa_energy_period(
 
 
 @router.get("/sites/{slug}/spa/energy/today", response_model=SpaEnergyPeriodResponse)
-async def get_spa_energy_today(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaEnergyPeriodResponse:
+async def get_spa_energy_today(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEnergyPeriodResponse:
     return await get_spa_energy_period(slug, "today", session)
 
 
@@ -356,8 +364,9 @@ async def get_spa_history(
     slug: str,
     period: str = Query(default="today"),
     session: AsyncSession = Depends(get_db_session),
-) -> SpaHistoryResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaHistoryResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     period = _normalize_spa_period(period)
     timezone = consumer.timezone or site.timezone
     start, end, _gran = _period_range(period, timezone)
@@ -406,13 +415,16 @@ async def get_spa_cost(
     slug: str,
     period: str = Query(default="today"),
     session: AsyncSession = Depends(get_db_session),
-) -> SpaEnergyPeriodResponse:
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEnergyPeriodResponse:
     return await get_spa_energy_period(slug, period, session)
 
 
 @router.get("/sites/{slug}/spa/health", response_model=SpaHealthResponse)
-async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaHealthResponse:
-    site, consumer, config = await _get_spa_context(session, slug)
+async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaHealthResponse:
+    site, consumer, config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     repo = ConsumerRepository(session)
     sample_repo = ConsumerSampleRepository(session)
     poll = await repo.get_poll_state(consumer.id)
@@ -475,8 +487,10 @@ async def get_spa_health(slug: str, session: AsyncSession = Depends(get_db_sessi
 
 
 @router.get("/sites/{slug}/spa/config", response_model=SpaConfigResponse)
-async def get_spa_config(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaConfigResponse:
-    site, consumer, config = await _get_spa_context(session, slug)
+async def get_spa_config(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaConfigResponse:
+    site, consumer, config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     repo = ConsumerRepository(session)
     return SpaConfigResponse(
         consumer_id=consumer.id,
@@ -498,8 +512,9 @@ async def update_spa_config(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     _: None = Depends(require_permission("spa.control")),
-) -> SpaConfigResponse:
-    site, consumer, config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaConfigResponse:
+    site, consumer, config = await _get_spa_context(session, slug, principal=principal, settings=settings, permission="spa.control")
     repo = ConsumerRepository(session)
     await repo.update_spa_config(
         consumer.id,
@@ -521,7 +536,7 @@ async def update_spa_config(
         summary=payload.model_dump(exclude_unset=True),
     )
     await session.commit()
-    return await get_spa_config(slug, session)
+    return await get_spa_config(slug, session, principal, settings)
 
 
 @router.post("/sites/{slug}/spa/test-connection", response_model=SpaConnectionTestResponse)
@@ -530,8 +545,9 @@ async def test_spa_connection(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     _: None = Depends(require_permission("spa.control")),
-) -> SpaConnectionTestResponse:
-    site, consumer, config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaConnectionTestResponse:
+    site, consumer, config = await _get_spa_context(session, slug, principal=principal, settings=settings, permission="spa.control")
     repo = ConsumerRepository(session)
     cfg = ArcticSpaConfiguration.merge(
         db_enabled=True,
@@ -602,8 +618,10 @@ def _control_config_response(record) -> SpaControlConfigResponse:
 
 
 @router.get("/sites/{slug}/spa/control/config", response_model=SpaControlConfigResponse)
-async def get_spa_control_config(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaControlConfigResponse:
-    _site, consumer, _config = await _get_spa_context(session, slug)
+async def get_spa_control_config(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaControlConfigResponse:
+    _site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     repo = SpaControlConfigRepository(session)
     record = await repo.get_or_create(consumer.id)
     return _control_config_response(record)
@@ -616,8 +634,9 @@ async def update_spa_control_config(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     _: None = Depends(require_permission("spa.control")),
-) -> SpaControlConfigResponse:
-    _site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaControlConfigResponse:
+    _site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings, permission="spa.control")
     if payload.strategy is not None and payload.strategy not in VALID_STRATEGIES:
         raise HTTPException(status_code=422, detail="Invalid strategy")
     repo = SpaControlConfigRepository(session)
@@ -676,8 +695,10 @@ async def update_spa_control_config(
 
 
 @router.get("/sites/{slug}/spa/plan", response_model=SpaPlanResponse)
-async def get_spa_plan(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaPlanResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+async def get_spa_plan(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaPlanResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     control_repo = SpaControlConfigRepository(session)
     control = await control_repo.get_or_create(consumer.id)
     if not control.smart_control_enabled and not control.shadow_mode:
@@ -830,8 +851,10 @@ async def get_spa_plan(slug: str, session: AsyncSession = Depends(get_db_session
 
 
 @router.get("/sites/{slug}/spa/timeline", response_model=SpaTimelineResponse)
-async def get_spa_timeline(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaTimelineResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+async def get_spa_timeline(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaTimelineResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     plan_repo = FlexibleLoadPlanRepository(session)
     plan = await plan_repo.get_latest_for_site(site.id)
     entries: list[SpaTimelineEntry] = []
@@ -862,8 +885,9 @@ async def get_spa_events(
     session: AsyncSession = Depends(get_db_session),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> SpaEventsResponse:
-    _site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEventsResponse:
+    _site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     repo = SpaEnergyEventRepository(session)
     events = await repo.list_for_consumer(consumer.id, limit=limit, offset=offset)
     return SpaEventsResponse(
@@ -901,10 +925,11 @@ async def get_spa_economics(
     slug: str,
     period: str = Query(default="today"),
     session: AsyncSession = Depends(get_db_session),
-) -> SpaEconomicsResponse:
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaEconomicsResponse:
     if period not in VALID_ECONOMICS_PERIODS:
         raise HTTPException(status_code=422, detail="Invalid period")
-    site, consumer, _config = await _get_spa_context(session, slug)
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     start, end, _gran = _period_range(period, consumer.timezone or site.timezone)
     interval_repo = ConsumerIntervalRepository(session)
     totals = await interval_repo.sum_for_period(consumer.id, start=start, end=end)
@@ -929,8 +954,10 @@ async def get_spa_economics(
 
 
 @router.get("/sites/{slug}/spa/shadow", response_model=SpaShadowResponse)
-async def get_spa_shadow(slug: str, session: AsyncSession = Depends(get_db_session)) -> SpaShadowResponse:
-    site, consumer, _config = await _get_spa_context(session, slug)
+async def get_spa_shadow(slug: str, session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaShadowResponse:
+    site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings)
     control_repo = SpaControlConfigRepository(session)
     control = await control_repo.get_or_create(consumer.id)
     now = datetime.now(UTC)
@@ -984,8 +1011,9 @@ async def run_spa_cleaning_now(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     _: None = Depends(require_permission("spa.control")),
-) -> SpaRunCleaningResponse:
-    _site, consumer, _config = await _get_spa_context(session, slug)
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings)) -> SpaRunCleaningResponse:
+    _site, consumer, _config = await _get_spa_context(session, slug, principal=principal, settings=settings, permission="spa.control")
     control_repo = SpaControlConfigRepository(session)
     control = await control_repo.get_or_create(consumer.id)
     if not control.smart_control_enabled:

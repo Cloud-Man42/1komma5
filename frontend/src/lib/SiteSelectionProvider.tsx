@@ -15,6 +15,7 @@ interface SiteSelectionContextValue {
   clearAll: () => void;
   toggleDraft: (slug: string) => void;
   applySelection: (options?: { pathname?: string }) => Promise<void>;
+  navigateToAllSystemsHome: (options?: { mobile?: boolean }) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -64,6 +65,29 @@ export function SiteSelectionProvider({ children }: { children: React.ReactNode 
     setDraftSlugs((prev) => (prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]));
   }, []);
 
+  const navigateToAllSystemsHome = useCallback(
+    async (options?: { mobile?: boolean }) => {
+      const allSlugs = accessibleSites.map((s) => s.slug);
+      if (allSlugs.length === 0) {
+        router.push(options?.mobile ? "/app" : "/");
+        return;
+      }
+      const saved = await patchSiteSelection(allSlugs);
+      setSelectedSlugs(saved.selectedSiteSlugs);
+      setDraftSlugs(saved.selectedSiteSlugs);
+      if (options?.mobile) {
+        router.push("/app");
+        return;
+      }
+      if (saved.selectedSiteSlugs.length <= 1) {
+        router.push(`/sites/${saved.selectedSiteSlugs[0]}`);
+        return;
+      }
+      router.push("/overview");
+    },
+    [accessibleSites, router],
+  );
+
   const applySelection = useCallback(
     async (options?: { pathname?: string }) => {
       const unique = [...new Set(draftSlugs)];
@@ -71,8 +95,14 @@ export function SiteSelectionProvider({ children }: { children: React.ReactNode 
       setSelectedSlugs(saved.selectedSiteSlugs);
       setDraftSlugs(saved.selectedSiteSlugs);
 
+      const onMobileApp = options?.pathname?.startsWith("/app");
+
       if (saved.selectedSiteSlugs.length === 0) {
-        router.push("/");
+        router.push(onMobileApp ? "/app" : "/");
+        return;
+      }
+      if (onMobileApp) {
+        router.push("/app");
         return;
       }
       if (saved.selectedSiteSlugs.length === 1) {
@@ -99,6 +129,7 @@ export function SiteSelectionProvider({ children }: { children: React.ReactNode 
       clearAll,
       toggleDraft,
       applySelection,
+      navigateToAllSystemsHome,
       refresh,
     }),
     [
@@ -110,6 +141,7 @@ export function SiteSelectionProvider({ children }: { children: React.ReactNode 
       clearAll,
       toggleDraft,
       applySelection,
+      navigateToAllSystemsHome,
       refresh,
     ],
   );

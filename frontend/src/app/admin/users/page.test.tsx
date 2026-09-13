@@ -6,6 +6,11 @@ import { ToastProvider } from "@/components/admin-ui";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => "/admin/users",
+}));
+
+vi.mock("@/lib/useMobileShell", () => ({
+  useMobileShell: () => false,
 }));
 
 vi.mock("@/lib/authContext", () => ({

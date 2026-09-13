@@ -145,6 +145,62 @@ async def test_operator_can_read_akarp_dashboard(auth_client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_super_admin_can_create_user(auth_client) -> None:
+    ac, _ = auth_client
+    cookies = await _login(ac, "admin@example.com", "AdminPass123!")
+    csrf = cookies.get("emic_csrf")
+
+    roles = await ac.get("/api/admin/roles", cookies=cookies)
+    assert roles.status_code == 200
+    viewer_role = next(r for r in roles.json()["roles"] if r["name"] == "VIEWER")
+
+    sites = await ac.get("/api/admin/users/site-options", cookies=cookies)
+    assert sites.status_code == 200
+    akarp = next(s for s in sites.json()["sites"] if s["slug"] == "akarp")
+
+    response = await ac.post(
+        "/api/admin/users",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={
+            "username": "newuser",
+            "email": "newuser@example.com",
+            "password": "short",
+            "display_name": "New User",
+            "role_ids": [viewer_role["id"]],
+            "site_ids": [akarp["id"]],
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["email"] == "newuser@example.com"
+    assert body["username"] == "newuser"
+    assert any(r["name"] == "VIEWER" for r in body["roles"])
+    assert "akarp" in body["sites"]
+
+
+@pytest.mark.asyncio
+async def test_create_user_duplicate_returns_409(auth_client) -> None:
+    ac, _ = auth_client
+    cookies = await _login(ac, "admin@example.com", "AdminPass123!")
+    csrf = cookies.get("emic_csrf")
+    response = await ac.post(
+        "/api/admin/users",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={
+            "username": "admin",
+            "email": "other@example.com",
+            "password": "ValidPass123!",
+            "display_name": "Duplicate",
+            "role_ids": [],
+            "site_ids": [],
+        },
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_viewer_cannot_manage_users(auth_client) -> None:
     ac, _ = auth_client
     cookies = await _login(ac, "viewer@example.com", "ViewerPass123!")

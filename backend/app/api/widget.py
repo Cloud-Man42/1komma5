@@ -33,22 +33,47 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter(prefix="/v1/widget", tags=["Apple Widget API"])
 
 
+def _device_allowed_site_slugs(device: AuthenticatedWidgetDevice) -> set[str] | None:
+    """When default_site_slug is set, restrict the device to that site only."""
+    default = (device.record.default_site_slug or "").strip()
+    if default:
+        return {default}
+    return None
+
+
+def _ensure_widget_site_access(device: AuthenticatedWidgetDevice, site_slug: str) -> None:
+    allowed = _device_allowed_site_slugs(device)
+    if allowed is not None and site_slug not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site access denied")
+
+
 async def _resolve_site(
     session: AsyncSession,
     *,
     site_slug: str | None,
     default_site_slug: str | None,
+    device: AuthenticatedWidgetDevice | None = None,
 ):
     site_repo = SiteRepository(session)
+    allowed = _device_allowed_site_slugs(device) if device is not None else None
     if site_slug:
+        if allowed is not None and site_slug not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site access denied")
         site = await site_repo.get_by_slug(site_slug)
         if site is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
         return site
     if default_site_slug:
+        if allowed is not None and default_site_slug not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site access denied")
         site = await site_repo.get_by_slug(default_site_slug)
         if site is not None:
             return site
+    if allowed is not None:
+        site = await site_repo.get_by_slug(next(iter(allowed)))
+        if site is not None:
+            return site
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
     sites = await site_repo.list_all()
     if not sites:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No sites configured")
@@ -69,7 +94,10 @@ async def list_widget_sites(
     started = time.perf_counter()
     service = WidgetSnapshotService(session, settings)
     site_repo = SiteRepository(session)
+    allowed = _device_allowed_site_slugs(device)
     sites = await site_repo.list_all()
+    if allowed is not None:
+        sites = [site for site in sites if site.slug in allowed]
     items: list[WidgetSiteListItem] = []
     for site in sites:
         snapshot = await service.get_snapshot(site)
@@ -109,6 +137,7 @@ async def get_widget_status_default(
         session,
         site_slug=None,
         default_site_slug=device.record.default_site_slug,
+        device=device,
     )
     service = WidgetSnapshotService(session, settings)
     snapshot = await service.get_snapshot(site)
@@ -139,7 +168,7 @@ async def get_widget_status_for_site(
     device: AuthenticatedWidgetDevice = Depends(require_widget_device),
 ) -> WidgetStatusResponse:
     started = time.perf_counter()
-    site = await _resolve_site(session, site_slug=site_id, default_site_slug=None)
+    site = await _resolve_site(session, site_slug=site_id, default_site_slug=None, device=device)
     service = WidgetSnapshotService(session, settings)
     snapshot = await service.get_snapshot(site)
     response = snapshot_to_widget_status(snapshot)
@@ -170,7 +199,10 @@ async def get_widget_summary(
     started = time.perf_counter()
     service = WidgetSnapshotService(session, settings)
     site_repo = SiteRepository(session)
+    allowed = _device_allowed_site_slugs(device)
     sites = await site_repo.list_all()
+    if allowed is not None:
+        sites = [site for site in sites if site.slug in allowed]
     statuses: list[WidgetStatusResponse] = []
     solar_total = 0.0
     house_total = 0.0

@@ -8,9 +8,11 @@ import { SiteSelector } from "@/components/site-selector/SiteSelector";
 import { Site, fetchSites } from "@/lib/api";
 import { useSiteSelection } from "@/lib/SiteSelectionProvider";
 import { useDashboardRefreshSeconds } from "@/lib/useDashboardRefresh";
+import { useMobileShell } from "@/lib/useMobileShell";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const mobileShell = useMobileShell();
   const { loading: selLoading, selectedSlugs } = useSiteSelection();
   const [sites, setSites] = useState<Site[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +21,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (selLoading) return;
+    if (mobileShell) {
+      router.replace("/app");
+      return;
+    }
     if (selectedSlugs.length > 1) {
       router.replace("/overview");
     } else if (selectedSlugs.length === 1) {
       router.replace(`/sites/${selectedSlugs[0]}`);
     }
-  }, [selLoading, selectedSlugs, router]);
+  }, [selLoading, selectedSlugs, router, mobileShell]);
 
   useEffect(() => {
     let active = true;

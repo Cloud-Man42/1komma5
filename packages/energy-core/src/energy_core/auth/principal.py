@@ -26,6 +26,9 @@ class Principal:
     auth_method: AuthMethod
     session_id: int | None = None
     must_change_password: bool = False
+    tenant_id: int | None = None
+    tenant_user_id: int | None = None
+    platform_roles: frozenset[str] = frozenset()
 
     def has_permission(self, permission: str) -> bool:
         return permission_grants(permission, self.permissions)
@@ -37,7 +40,15 @@ class Principal:
 
     @property
     def is_super_admin(self) -> bool:
-        return "SUPER_ADMIN" in self.roles or PERMISSION_ALL in self.permissions
+        return (
+            "SUPER_ADMIN" in self.roles
+            or PERMISSION_ALL in self.permissions
+            or "PLATFORM_SUPER_ADMIN" in self.platform_roles
+        )
+
+    @property
+    def is_platform_admin(self) -> bool:
+        return "PLATFORM_SUPER_ADMIN" in self.platform_roles or self.is_super_admin
 
 
 def break_glass_principal() -> Principal:

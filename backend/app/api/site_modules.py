@@ -8,6 +8,9 @@ from typing import Any
 from app.admin_audit_helpers import audit_admin_mutation
 from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
 from app.rate_limits import connection_test_rate_limiter
 from energy_core.config import Settings
 from energy_core.db.repositories import SiteRepository
@@ -189,10 +192,9 @@ async def list_site_modules(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.read")
     resolver = SiteModuleResolver(session, settings=settings)
     modules = await resolver.list_modules(site.id)
     return {"site_slug": slug, "modules": [_serialize_state(state) for state in modules]}
@@ -204,10 +206,9 @@ async def get_site_module(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.read")
     canonical = resolve_module_id(module_id)
     resolver = SiteModuleResolver(session, settings=settings)
     modules = await resolver.list_modules(site.id)
@@ -226,10 +227,9 @@ async def update_site_module(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     if default_module_registry.get(canonical) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found")
@@ -297,10 +297,9 @@ async def get_module_config(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> ModuleConfigResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     if default_module_registry.get(canonical) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found")
@@ -320,10 +319,9 @@ async def update_module_config(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> ModuleConfigResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     if default_module_registry.get(canonical) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found")
@@ -383,10 +381,9 @@ async def test_module_connection(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> ConnectionTestResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     descriptor = default_module_registry.get(canonical)
     if descriptor is None:
@@ -421,10 +418,9 @@ async def discover_module_devices(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> DiscoveryResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     descriptor = default_module_registry.get(canonical)
     if descriptor is None:
@@ -457,10 +453,9 @@ async def apply_module_configuration(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> ModuleApplyResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     try:
         result = await ModuleApplyService(session, settings=settings).apply_module(site.id, canonical)
@@ -495,10 +490,9 @@ async def onboard_module_device(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     _: None = Depends(require_permission("modules.manage")),
+    principal: Principal = Depends(require_authenticated),
 ) -> ModuleOnboardResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     canonical = resolve_module_id(module_id)
     payload = body.model_dump(exclude_none=True)
     try:

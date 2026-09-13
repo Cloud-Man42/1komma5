@@ -123,12 +123,20 @@ run_docker() {
     docker compose "$@"
     return
   fi
-  sudo docker compose "$@"
+  if [ -f ~/.emic-deploy-sudo ]; then
+    sudo -S docker compose "$@" < ~/.emic-deploy-sudo
+  else
+    sudo docker compose "$@"
+  fi
 }
 
 run_docker build
 run_docker up -d
 run_docker restart caddy
+
+echo "Exporting Caddy trust bundle for LAN clients (iPhone/iPad)..."
+sed -i 's/\r$//' scripts/export-emic-ca-trust.sh
+bash scripts/export-emic-ca-trust.sh .
 
 if grep -q '^FINANCIAL_AGGREGATES_ENABLED=true' .env 2>/dev/null; then
   echo "Backfilling financial_daily aggregates..."

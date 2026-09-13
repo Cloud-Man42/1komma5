@@ -20,6 +20,7 @@ vi.mock("@/lib/SiteSelectionProvider", () => ({
     selectAll: vi.fn(),
     clearAll: vi.fn(),
     applySelection: vi.fn(),
+    navigateToAllSystemsHome: vi.fn(),
   }),
 }));
 

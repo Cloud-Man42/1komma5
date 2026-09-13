@@ -31,6 +31,7 @@ class SiteWithLatestReading:
     fallback_purchase_price_sek_kwh: float
     export_compensation_sek_kwh: float
     latest_reading: "ReadingRecord | None"
+    tenant_id: int | None = None
     main_fuse_a: float | None = None
     safety_margin_a: float = 2.0
 
@@ -182,21 +183,38 @@ class SiteRepository:
         result = await self._session.scalars(select(SiteModel).order_by(SiteModel.name))
         return list(result)
 
-    async def get_by_slug(self, slug: str) -> SiteModel | None:
-        return await self._session.scalar(select(SiteModel).where(SiteModel.slug == slug))
+    async def list_for_tenant(self, tenant_id: int) -> list[SiteModel]:
+        result = await self._session.scalars(
+            select(SiteModel).where(SiteModel.tenant_id == tenant_id).order_by(SiteModel.name)
+        )
+        return list(result)
+
+    async def get_by_slug(self, slug: str, tenant_id: int | None = None) -> SiteModel | None:
+        query = select(SiteModel).where(SiteModel.slug == slug)
+        if tenant_id is not None:
+            query = query.where(SiteModel.tenant_id == tenant_id)
+        return await self._session.scalar(query)
+
+    async def get_by_tenant_slug(self, tenant_id: int, slug: str) -> SiteModel | None:
+        return await self.get_by_slug(slug, tenant_id=tenant_id)
 
     async def upsert_site(
         self,
         slug: str,
         name: str,
         timezone: str,
+        tenant_id: int | None = None,
         external_system_id: str | None = None,
         fallback_purchase_price_sek_kwh: float | None = None,
         export_compensation_sek_kwh: float | None = None,
         main_fuse_a: float | None = None,
         safety_margin_a: float | None = None,
     ) -> SiteModel:
-        existing = await self.get_by_slug(slug)
+        if tenant_id is None:
+            from energy_core.tenancy.bootstrap import ensure_default_tenant
+
+            tenant_id = (await ensure_default_tenant(self._session)).id
+        existing = await self.get_by_slug(slug, tenant_id=tenant_id)
         if existing:
             existing.name = name
             existing.timezone = timezone
@@ -213,6 +231,7 @@ class SiteRepository:
             await self._session.flush()
             return existing
         site = SiteModel(
+            tenant_id=tenant_id,
             slug=slug,
             name=name,
             timezone=timezone,
@@ -244,14 +263,14 @@ class SiteRepository:
         if await self.get_by_slug(slug):
             raise ValueError(f"Site slug already exists: {slug}")
         return await self.upsert_site(
-            slug,
-            name,
-            timezone,
-            external_system_id,
-            fallback_purchase_price_sek_kwh,
-            export_compensation_sek_kwh,
-            main_fuse_a,
-            safety_margin_a,
+            slug=slug,
+            name=name,
+            timezone=timezone,
+            external_system_id=external_system_id,
+            fallback_purchase_price_sek_kwh=fallback_purchase_price_sek_kwh,
+            export_compensation_sek_kwh=export_compensation_sek_kwh,
+            main_fuse_a=main_fuse_a,
+            safety_margin_a=safety_margin_a,
         )
 
     async def update_site(
@@ -622,6 +641,7 @@ class EnergyReadingRepository:
                 external_system_id=site.external_system_id,
                 fallback_purchase_price_sek_kwh=site.fallback_purchase_price_sek_kwh,
                 export_compensation_sek_kwh=site.export_compensation_sek_kwh,
+                tenant_id=site.tenant_id,
                 main_fuse_a=site.main_fuse_a,
                 safety_margin_a=site.safety_margin_a,
                 latest_reading=latest_by_site.get(site.id),

@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AdminAuthPrompt } from "@/components/AdminAuthPrompt";
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { TenantSwitcher } from "@/components/TenantSwitcher";
 import { UserMenu } from "@/components/UserMenu";
 import { useAuth } from "@/lib/authContext";
 import { APP_ACRONYM, APP_NAME } from "@/lib/brand";
@@ -33,6 +35,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const isLogin = pathname.startsWith("/login");
   const isAdminHub = pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles") || pathname.startsWith("/admin/audit");
   const isOverview = pathname.startsWith("/overview");
+  const isMobileApp = pathname.startsWith("/app");
+  const isMobileWrappedSite =
+    pathname.startsWith("/sites/") ||
+    pathname.startsWith("/overview") ||
+    pathname.startsWith("/config") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/account");
   const [authIssue, setAuthIssue] = useState<AdminAuthIssue | null>(null);
   const { user, loading: authLoading } = useAuth();
   const userAuthEnabled = process.env.NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED === "true";
@@ -85,9 +94,18 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  if (isMobileApp) {
+    return (
+      <div className="emic-app emic-mobile-app">
+        {authOverlay}
+        {children}
+      </div>
+    );
+  }
+
   if (isSiteDashboard || isConfigHub || isAdminHub || isOverview) {
     return (
-      <div className="emic-app emic-app-dashboard">
+      <div className={`emic-app emic-app-dashboard${isMobileWrappedSite ? " emic-mobile-app" : ""}`}>
         {authOverlay}
         {children}
       </div>
@@ -104,12 +122,13 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             <span className="brand-full">{APP_NAME}</span>
           </h1>
           <nav className="header-nav">
-            <a href="/">Dashboard</a>
+            <HomeDashboardButton className="header-home-btn" />
             {(!userAuthEnabled || !user || user.roles.includes("SUPER_ADMIN") || user.permissions.includes("*") || user.permissions.some((p) => p.startsWith("sites.") || p.startsWith("integration.") || p.startsWith("system."))) ? (
               <a href="/config">Konfiguration</a>
             ) : null}
             <a href="/calibrate">Kalibrera</a>
             <ThemeToggle />
+            {!authLoading && user ? <TenantSwitcher /> : null}
             {!authLoading && user ? <UserMenu /> : null}
           </nav>
         </div>

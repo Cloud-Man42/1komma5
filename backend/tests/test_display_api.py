@@ -303,7 +303,7 @@ async def test_display_overview_unknown_site_returns_404(client):
         "/api/v1/display/overview/missing",
         headers=_auth_headers(device["token"]),
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -410,6 +410,17 @@ async def test_tablet_device_type_gets_the_display_scope(client):
         headers=_auth_headers(device["token"]),
     )
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_display_denied_other_site_when_default_set(client):
+    ac, _, _ = client
+    device = await _create_pi_device(ac, name="Pi Akarp", default_site_slug="akarp")
+    response = await ac.get(
+        "/api/v1/display/overview/summer-house-denmark",
+        headers=_auth_headers(device["token"]),
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

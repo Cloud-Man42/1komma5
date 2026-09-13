@@ -156,6 +156,8 @@ async def list_sites(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
     sites = await repo.list_sites_with_latest()
     if settings.emic_user_auth_enabled:
+        if principal.tenant_id is not None and not principal.is_platform_admin:
+            sites = [s for s in sites if s.tenant_id == principal.tenant_id]
         allowed_ids = principal.site_ids if principal.permissions != frozenset({"*"}) else None
         if allowed_ids is not None and "*" not in principal.permissions:
             sites = [s for s in sites if s.id in allowed_ids]

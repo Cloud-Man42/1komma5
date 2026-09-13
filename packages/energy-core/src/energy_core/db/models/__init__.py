@@ -30,6 +30,7 @@ from energy_core.db.models.isolated_runtime import *  # noqa: F403
 from energy_core.db.models.runtime_pilot_authorization import *  # noqa: F403
 from energy_core.db.models.climate_device_reading import *  # noqa: F403
 from energy_core.db.models.vehicles import *  # noqa: F403
+from energy_core.db.models.tenants import *  # noqa: F403
 from energy_core.db.models.users import *  # noqa: F403
 
 __all__ = [name for name in dir() if not name.startswith('_')]

@@ -48,6 +48,19 @@ from energy_core.integrations.heartbeat.client_factory import (
 )
 from energy_core.domain import reading_is_actionable
 from energy_core.normalization import normalize_reading
+
+
+async def _list_tenant_scoped_sites(session) -> list:
+    from energy_core.tenancy.repo import TenantRepository
+
+    repo = SiteRepository(session)
+    tenants = await TenantRepository(session).list_active()
+    if not tenants:
+        return list(await repo.list_all())
+    sites: list = []
+    for tenant in tenants:
+        sites.extend(await repo.list_for_tenant(tenant.id))
+    return sites
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
 from energy_core.platform.forecasting import build_solar_forecast_coordinator
@@ -141,7 +154,7 @@ class Collector:
 
     async def _refresh_runtime_heartbeats(self) -> None:
         async with self._session_factory() as session:
-            sites = await SiteRepository(session).list_all()
+            sites = await _list_tenant_scoped_sites(session)
             for site in sites:
                 running = default_module_runtime_registry.active_modules_for_site(site.id)
                 if running:
@@ -226,7 +239,7 @@ class Collector:
         reading_site_ids: set[int] = set()
         async with self._session_factory() as session:
             site_repo = SiteRepository(session)
-            sites = await site_repo.list_all()
+            sites = await _list_tenant_scoped_sites(session)
             if await any_site_module_runtime_active(
                 session, sites, "integration.heartbeat", settings=self._settings
             ):
@@ -262,7 +275,7 @@ class Collector:
                 site_repo = SiteRepository(session)
                 await self._run_lane("fast", "market_prices", self._collect_market_prices(session, site_repo))
                 poll_ctx = SitePollContext.from_clients(await create_heartbeat_clients_by_account(session))
-                sites = await site_repo.list_all()
+                sites = await _list_tenant_scoped_sites(session)
                 live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
                 await self._run_lane(
                     "fast",
@@ -297,7 +310,7 @@ class Collector:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
                 poll_ctx = SitePollContext.from_clients(await create_heartbeat_clients_by_account(session))
-                sites = await site_repo.list_all()
+                sites = await _list_tenant_scoped_sites(session)
                 live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
                 await self._run_lane(
                     "medium",
@@ -332,7 +345,7 @@ class Collector:
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
-                sites = await site_repo.list_all()
+                sites = await _list_tenant_scoped_sites(session)
                 await self._run_lane("slow", "solar_forecast", self._run_solar_forecast(session, site_repo))
                 await self._run_lane("slow", "forecast_learning", self._run_forecast_learning(session, site_repo))
                 await self._run_lane("slow", "energy_control", self._run_energy_control(session, site_repo))
@@ -375,7 +388,7 @@ class Collector:
         engine = EmicPriceEngine(session, is_sqlite=self._settings.is_sqlite)
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.price-engine",
             settings=self._settings,
         )
@@ -416,7 +429,7 @@ class Collector:
 
         service = ForecastLearningService(session, is_sqlite=self._settings.is_sqlite)
         total = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             try:
                 result = await service.sync_site(site.id, timezone=site.timezone)
                 total += sum(result.values())
@@ -455,7 +468,7 @@ class Collector:
         count = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.energy-control",
             settings=self._settings,
         )
@@ -501,7 +514,7 @@ class Collector:
         from energy_core.platform.modules.gating import any_site_module_runtime_active
         from energy_core.db.repositories import SiteRepository
 
-        sites = await SiteRepository(session).list_all()
+        sites = await _list_tenant_scoped_sites(session)
         if not await any_site_module_runtime_active(
             session, sites, "integration.chargefinder", settings=self._settings
         ):
@@ -602,7 +615,7 @@ class Collector:
                 live_overviews=live_overviews,
                 active_cleaning_poll_interval_seconds=self._settings.spa_active_cleaning_poll_interval_seconds,
             )
-            for site in await site_repo.list_all():
+            for site in await _list_tenant_scoped_sites(session):
                 await self._consumer_accounting.rebuild_spa_intervals_for_site(
                     session,
                     site=site,
@@ -639,7 +652,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.smart-charging",
             settings=self._settings,
         )
@@ -662,7 +675,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.vehicles",
             settings=self._settings,
         )
@@ -688,7 +701,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.energy-balance",
             settings=self._settings,
         )
@@ -720,7 +733,7 @@ class Collector:
 
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             if not await is_module_runtime_active(
                 session, site.id, "integration.heartbeat", settings=self._settings
             ):
@@ -807,7 +820,7 @@ class Collector:
 
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             if not await is_module_runtime_active(
                 session, site.id, "feature.energy-control", settings=self._settings
             ):
@@ -880,7 +893,7 @@ class Collector:
         from energy_core.integrations.collector_health import record_provider_outcome
         from energy_core.integrations.health import IntegrationHealthRecorder
 
-        sites = await site_repo.list_all()
+        sites = await _list_tenant_scoped_sites(session)
         if self._settings.module_gate_enabled:
             sites = await filter_sites_for_module(
                 session,

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from app.user_auth import require_permission
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated, require_permission
+from energy_core.auth.principal import Principal
 from energy_core.climate.external_config import ExternalModuleConfigService
-from energy_core.db.repositories import SiteRepository
+from energy_core.config import Settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,10 +35,10 @@ async def get_external_module_config(
     module_id: str,
     _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> ExternalModuleConfigResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     service = ExternalModuleConfigService(session)
     row = await service.get(site_id=site.id, module_id=module_id)
     if row is None:
@@ -73,10 +75,10 @@ async def upsert_external_module_config(
     body: ExternalModuleConfigRequest,
     _admin=Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> ExternalModuleConfigResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "modules.manage")
     service = ExternalModuleConfigService(session)
     row = await service.upsert(
         site_id=site.id,

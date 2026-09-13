@@ -6,10 +6,13 @@ import logging
 from dataclasses import asdict
 from typing import Any
 
-
 from app.admin_audit_helpers import audit_admin_mutation
+from app.deps import get_app_settings, get_db_session
 from app.schemas.heartbeat_bridge import HeartbeatBridgeSettingsResponse, HeartbeatBridgeSettingsUpdateRequest, HeartbeatBridgeStatusResponse, HeartbeatDiscoveryRunDetailResponse, HeartbeatDiscoveryRunResponse, HeartbeatDiscoveryRunResultResponse, HeartbeatEvMappingResponse, HeartbeatEvMappingUpdateRequest, HeartbeatReplayResponse, HeartbeatWriteTestResponse
-from energy_core.db.ev_charger_repo import EvChargerRepository
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 from energy_core.db.heartbeat_discovery_repo import HeartbeatDiscoveryRepository
 from energy_core.integrations.heartbeat.bridge import (
     HeartbeatEvBridgeService,
@@ -19,18 +22,8 @@ from energy_core.integrations.heartbeat.bridge import (
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_db_session
-
 router = APIRouter(tags=["heartbeat-bridge"])
 logger = logging.getLogger(__name__)
-
-
-async def _get_site_or_404(session: AsyncSession, slug: str):
-    repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    return site
 
 
 @router.post("/sites/{slug}/heartbeat/discovery/run", response_model=HeartbeatDiscoveryRunResultResponse)
@@ -38,7 +31,10 @@ async def run_heartbeat_discovery(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatDiscoveryRunResultResponse:
+    await require_site_with_permission(session, principal, settings, slug, "heartbeat.manage")
     service = HeartbeatEvBridgeService(session)
     try:
         result, run_id = await service.run_discovery(slug)
@@ -78,8 +74,10 @@ async def list_heartbeat_discovery_runs(
     slug: str,
     limit: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[HeartbeatDiscoveryRunResponse]:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
     runs = await repo.list_runs(site.id, limit=limit)
     return [
@@ -106,8 +104,10 @@ async def get_heartbeat_discovery_run(
     slug: str,
     run_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatDiscoveryRunDetailResponse:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
     run = await repo.get_run(site.id, run_id)
     if run is None:
@@ -134,7 +134,10 @@ async def get_heartbeat_discovery_run(
 async def get_heartbeat_bridge_status(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatBridgeStatusResponse:
+    await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     service = HeartbeatEvBridgeService(session)
     try:
         data = await service.bridge_status(slug)
@@ -147,8 +150,10 @@ async def get_heartbeat_bridge_status(
 async def list_heartbeat_ev_mappings(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[HeartbeatEvMappingResponse]:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
     mappings = await repo.list_mappings(site.id)
     return [
@@ -174,8 +179,10 @@ async def update_heartbeat_ev_mapping(
     payload: HeartbeatEvMappingUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatEvMappingResponse:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.manage")
     repo = HeartbeatDiscoveryRepository(session)
     mapping = await repo.update_mapping(
         mapping_id,
@@ -213,11 +220,13 @@ async def update_heartbeat_ev_mapping(
 async def get_heartbeat_bridge_settings(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatBridgeSettingsResponse:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
-    settings = await repo.get_or_create_bridge_settings(site.id)
-    return HeartbeatBridgeSettingsResponse(**asdict(settings))
+    bridge_settings = await repo.get_or_create_bridge_settings(site.id)
+    return HeartbeatBridgeSettingsResponse(**asdict(bridge_settings))
 
 
 @router.patch("/sites/{slug}/heartbeat/bridge/settings", response_model=HeartbeatBridgeSettingsResponse)
@@ -226,10 +235,12 @@ async def update_heartbeat_bridge_settings(
     payload: HeartbeatBridgeSettingsUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatBridgeSettingsResponse:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.manage")
     repo = HeartbeatDiscoveryRepository(session)
-    settings = await repo.update_bridge_settings(site.id, **payload.model_dump(exclude_unset=True))
+    bridge_settings = await repo.update_bridge_settings(site.id, **payload.model_dump(exclude_unset=True))
     await audit_admin_mutation(
         request,
         session,
@@ -240,7 +251,7 @@ async def update_heartbeat_bridge_settings(
         summary=payload.model_dump(exclude_unset=True),
     )
     await session.commit()
-    return HeartbeatBridgeSettingsResponse(**asdict(settings))
+    return HeartbeatBridgeSettingsResponse(**asdict(bridge_settings))
 
 
 @router.post("/sites/{slug}/heartbeat/write-test/run", response_model=HeartbeatWriteTestResponse)
@@ -249,7 +260,10 @@ async def run_heartbeat_write_test(
     request: Request,
     dry_run: bool = Query(default=True),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatWriteTestResponse:
+    await require_site_with_permission(session, principal, settings, slug, "heartbeat.manage")
     service = HeartbeatWriteTestService(session)
     try:
         result = await service.run(slug, dry_run=dry_run)
@@ -287,7 +301,10 @@ async def run_heartbeat_replay(
     request: Request,
     hours: int = Query(default=24, ge=1, le=168),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> HeartbeatReplayResponse:
+    await require_site_with_permission(session, principal, settings, slug, "heartbeat.manage")
     service = VirtualChargerReplayService(session)
     try:
         report, report_text = await service.run(slug, hours=hours)
@@ -314,8 +331,10 @@ async def list_virtual_charger_commands(
     slug: str,
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[dict[str, Any]]:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
     return await repo.list_recent_commands(site.id, limit=limit)
 
@@ -325,7 +344,9 @@ async def list_virtual_charger_decisions(
     slug: str,
     limit: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[dict[str, Any]]:
-    site = await _get_site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "heartbeat.read")
     repo = HeartbeatDiscoveryRepository(session)
     return await repo.list_recent_decisions(site.id, limit=limit)

@@ -135,7 +135,7 @@ export default function AccountPage() {
             <Button
               type="submit"
               form="change-password-form"
-              disabled={submitting || !checks.minLength || !checks.match}
+              disabled={submitting || !checks.nonEmpty || !checks.match}
             >
               {submitting ? "Sparar…" : "Spara"}
             </Button>
@@ -165,7 +165,6 @@ export default function AccountPage() {
             required
           />
           <ul className="admin-field-hint muted">
-            <li>{checks.minLength ? "✓" : "○"} Minst 10 tecken</li>
             <li>{checks.match ? "✓" : "○"} Lösenorden matchar</li>
           </ul>
           {error ? <p className="error-text" role="alert">{error}</p> : null}

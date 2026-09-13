@@ -65,6 +65,33 @@ def test_heartbeat_settings_seed_row_gets_a_timestamp(migrated_sqlite_db):
     assert row.updated_at is not None
 
 
+def test_denmark_main_fuse_migration_078(tmp_path, monkeypatch):
+    """Regression: Denmark hovedsikring is 50 A, not 20 A."""
+    db_file = tmp_path / "denmark_fuse.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_file.as_posix()}")
+    config = _alembic_config()
+    command.upgrade(config, "077_user_site_prefs")
+    engine = create_engine(f"sqlite:///{db_file.as_posix()}")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO sites (slug, name, timezone, main_fuse_a) "
+                "VALUES ('summer-house-denmark', 'Danmark', 'Europe/Copenhagen', 20)"
+            )
+        )
+    engine.dispose()
+    command.upgrade(config, "078_denmark_main_fuse_50a")
+    engine = create_engine(f"sqlite:///{db_file.as_posix()}")
+    try:
+        with engine.connect() as conn:
+            fuse = conn.execute(
+                text("SELECT main_fuse_a FROM sites WHERE slug = 'summer-house-denmark'")
+            ).scalar_one()
+        assert fuse == 50
+    finally:
+        engine.dispose()
+
+
 def test_isolated_runtime_tables_exist_after_head(migrated_sqlite_db):
     """Regression: migration 069 creates isolated runtime persistence tables."""
     tables = set(inspect(migrated_sqlite_db).get_table_names())

@@ -87,6 +87,13 @@
   gap: var(--space-4);
 }
 
+.ms-overview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
 .ms-overview-title {
   margin: 0;
   font-size: 1.75rem;

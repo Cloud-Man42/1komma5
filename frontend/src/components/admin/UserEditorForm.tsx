@@ -221,11 +221,9 @@ export function UserEditorForm({
       </FormSection>
 
       {mode === "create" ? (
-        <FormSection title="Lösenord" intro="Minst 10 tecken enligt säkerhetspolicy.">
+        <FormSection title="Lösenord">
           <PasswordField label="Lösenord" value={form.password} onChange={(v) => patch({ password: v })} required />
-          <ul className="admin-field-hint muted">
-            <li>{passwordChecks.minLength ? "✓" : "○"} Minst 10 tecken</li>
-          </ul>
+          {!passwordChecks.nonEmpty ? <p className="admin-field-hint muted">Ange ett lösenord.</p> : null}
           <label className="admin-permission-item">
             <input
               type="checkbox"
@@ -283,28 +281,30 @@ export function UserEditorForm({
         </Button>
       </StickyFormFooter>
 
-      <Modal
-        open={resetOpen}
-        title="Återställ lösenord"
-        onClose={() => setResetOpen(false)}
-        footer={
-          <>
-            <Button variant="secondary" type="button" onClick={() => setResetOpen(false)}>
-              Avbryt
-            </Button>
-            <Button type="button" disabled={resetting || !resetChecks.minLength} onClick={() => void handleResetPassword()}>
-              {resetting ? "Sparar…" : "Återställ"}
-            </Button>
-          </>
-        }
-      >
-        <p className="muted">Nytt lösenord för {userDisplayLabel(user!)}.</p>
-        <PasswordField label="Nytt lösenord" value={resetPassword} onChange={setResetPassword} required />
-        <label className="admin-permission-item">
-          <input type="checkbox" checked={resetMustChange} onChange={(e) => setResetMustChange(e.target.checked)} />
-          <span>Kräv lösenordsbyte vid nästa inloggning</span>
-        </label>
-      </Modal>
+      {mode === "edit" && user ? (
+        <Modal
+          open={resetOpen}
+          title="Återställ lösenord"
+          onClose={() => setResetOpen(false)}
+          footer={
+            <>
+              <Button variant="secondary" type="button" onClick={() => setResetOpen(false)}>
+                Avbryt
+              </Button>
+              <Button type="button" disabled={resetting || !resetChecks.nonEmpty} onClick={() => void handleResetPassword()}>
+                {resetting ? "Sparar…" : "Återställ"}
+              </Button>
+            </>
+          }
+        >
+          <p className="muted">Nytt lösenord för {userDisplayLabel(user)}.</p>
+          <PasswordField label="Nytt lösenord" value={resetPassword} onChange={setResetPassword} required />
+          <label className="admin-permission-item">
+            <input type="checkbox" checked={resetMustChange} onChange={(e) => setResetMustChange(e.target.checked)} />
+            <span>Kräv lösenordsbyte vid nästa inloggning</span>
+          </label>
+        </Modal>
+      ) : null}
     </form>
   );
 }

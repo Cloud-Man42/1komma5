@@ -1,5 +1,6 @@
 "use client";
 
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { SiteSelector } from "@/components/site-selector/SiteSelector";
 import type { MultiSiteOverviewResponse } from "@/lib/multiSiteApi";
 import { formatDateTime } from "@/lib/userAdminUtils";
@@ -37,7 +38,10 @@ export function OverviewHeader({
             Senast uppdaterad: {formatDateTime(data.freshness.freshestAt)}
           </p>
         </div>
-        <SiteSelector compact />
+        <div className="ms-overview-header-actions">
+          <HomeDashboardButton />
+          <SiteSelector compact />
+        </div>
       </div>
       {data.dataQuality.partial ? (
         <p className="ms-kpi-partial" role="status">

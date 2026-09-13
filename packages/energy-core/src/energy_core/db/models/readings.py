@@ -10,6 +10,7 @@ from energy_core.db.models.base import Base
 class EnergyReadingModel(Base):
     __tablename__ = "energy_readings"
 
+    tenant_id: Mapped[int | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True)
     site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
     solar_production_w: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

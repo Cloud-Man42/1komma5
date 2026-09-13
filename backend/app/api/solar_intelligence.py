@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.solar import DmiForecastPointResponse, DmiForecastResponse, SolarHourlyForecastResponse, SolarHourlyPointResponse, SolarIntelligenceForecastResponse, SolarModelMetricsResponse, SolarModelResponse, SolarPerformanceResponse, SolarProviderStatusResponse, SolarRadiationResponse
 from energy_core.db.repositories import EnergyReadingRepository, SiteRepository
@@ -40,13 +44,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 router = APIRouter(tags=["solar-intelligence"])
 
 
-async def _get_site(session: AsyncSession, slug: str):
-    repo = SiteRepository(session)
-    site = await repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail="Site not found")
-    return site
-
 
 async def _require_solar_enabled(session: AsyncSession, site):
     config_repo = SolarSiteConfigRepository(session)
@@ -70,8 +67,10 @@ async def _require_intelligence(session: AsyncSession, site):
 async def get_hourly_forecast(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     points = await SolarHourlyForecastRepository(session).list_for_site(site.id)
     return SolarHourlyForecastResponse(
@@ -94,9 +93,10 @@ async def get_hourly_forecast(
 async def get_performance(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_solar_enabled(session, site)
 
     coordinator = build_solar_forecast_coordinator(settings)
@@ -170,8 +170,10 @@ async def get_performance(
 async def get_radiation(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     record = await _require_intelligence(session, site)
     from sqlalchemy import select
     from energy_core.db.models import SolarRadiationSampleModel
@@ -197,9 +199,10 @@ async def get_radiation(
 async def get_dmi_forecast(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     record = await _require_solar_enabled(session, site)
     domain = _to_domain_config(record)
     country = resolve_country_code(record.country_code, latitude=domain.latitude, longitude=domain.longitude)
@@ -241,8 +244,10 @@ async def get_dmi_forecast(
 async def get_model(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     champion = await SolarModelRepository(session).get_champion(site.id)
     if champion is None:
@@ -260,9 +265,10 @@ async def get_model(
 async def get_model_metrics(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     profile = await SolarForecastModelProfileRepository(session).get(site.id)
     champion = await SolarModelRepository(session).get_champion(site.id)
@@ -294,8 +300,10 @@ async def get_model_metrics(
 async def get_provider_status(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     health = await SolarProviderHealthRepository(session).list_for_site(site.id)
     return SolarProviderStatusResponse(
@@ -317,9 +325,10 @@ async def get_provider_status(
 async def trigger_backfill(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     coord = build_solar_intelligence_coordinator(settings)
     count = await coord.run_backfill(session, site, days=60)
@@ -331,9 +340,10 @@ async def trigger_backfill(
 async def trigger_train(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     coord = build_solar_intelligence_coordinator(settings)
     ok = await coord.train_model(session, site)
@@ -345,9 +355,10 @@ async def trigger_train(
 async def get_intelligence_forecast(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ):
-    site = await _get_site(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
     await _require_intelligence(session, site)
     hourly = await SolarHourlyForecastRepository(session).list_for_site(site.id)
     if not hourly:

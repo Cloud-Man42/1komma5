@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { UserMenu } from "@/components/UserMenu";
 import { useAuth } from "@/lib/authContext";
 import { ConfigSidebar } from "./ConfigSidebar";
@@ -13,9 +13,10 @@ export function ConfigShell({ children }: { children: React.ReactNode }) {
     <div className="config-hub" data-testid="config-shell">
       <header className="config-hub-header">
         <div className="config-hub-header-top">
-          <Link href="/" className="back-link">
-            ← Dashboard
-          </Link>
+          <div className="config-hub-home-row">
+            <HomeDashboardButton />
+            <span className="back-link">Dashboard</span>
+          </div>
           {userAuthEnabled && !authLoading && user ? <UserMenu compact /> : null}
         </div>
         <h1 className="config-hub-title">Konfiguration</h1>

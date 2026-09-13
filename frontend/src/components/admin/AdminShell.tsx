@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { UserMenu } from "@/components/UserMenu";
 import { useAuth } from "@/lib/authContext";
 
@@ -20,9 +21,10 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="admin-hub" data-testid="admin-shell">
       <header className="admin-hub-header">
         <div>
-          <Link href="/" className="back-link">
-            ← Dashboard
-          </Link>
+          <div className="admin-hub-home-row">
+            <HomeDashboardButton />
+            <span className="back-link">Dashboard</span>
+          </div>
           <h1 className="admin-page-title">Administration</h1>
           <p className="muted admin-page-intro">Användare, roller och säkerhetslogg.</p>
         </div>

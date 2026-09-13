@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 
-from app.deps import get_db_session, get_site_repository
+from app.deps import get_app_settings, get_db_session, get_site_repository
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.readings import MarketPricePointResponse, MarketPricesResponse
 
@@ -238,17 +242,11 @@ async def get_site_market_prices(
 
     resolution: str = Query(default="1h", pattern="^(1h|15m)$"),
 
-    site_repo: SiteRepository = Depends(get_site_repository),
-
     session: AsyncSession = Depends(get_db_session),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> MarketPricesResponse:
-
-    site = await site_repo.get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
 
 

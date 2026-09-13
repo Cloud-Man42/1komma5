@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 PUBSUB_POLL_TIMEOUT_SECONDS = 1.0
 
 
-def snapshot_event_channel(site_id: int) -> str:
-    return f"emic:events:snapshot:{site_id}"
+def snapshot_event_channel(site_id: int, tenant_id: int | None = None) -> str:
+    prefix = f"tenant:{tenant_id}:" if tenant_id is not None else ""
+    return f"{prefix}emic:events:snapshot:{site_id}"
+
+
+def tenant_snapshot_channel(tenant_id: int) -> str:
+    return f"tenant:{tenant_id}:emic:events:snapshot"
 
 
 class SnapshotEventPublisher:
