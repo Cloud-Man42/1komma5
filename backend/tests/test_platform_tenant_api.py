@@ -127,3 +127,80 @@ async def test_get_platform_tenant_not_found(auth_client) -> None:
     cookies = await _login(ac, "admin@example.com", "AdminPass123!")
     response = await ac.get("/api/platform/tenants/99999", cookies=cookies)
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_empty_platform_tenant(auth_client) -> None:
+    ac, _ = auth_client
+    cookies = await _login(ac, "admin@example.com", "AdminPass123!")
+    csrf = cookies.get("emic_csrf")
+    created = await ac.post(
+        "/api/platform/tenants",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={"name": "Delete Me", "display_name": "Delete Me", "slug": "delete-me"},
+    )
+    tenant_id = created.json()["tenant"]["id"]
+    response = await ac.delete(
+        f"/api/platform/tenants/{tenant_id}",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+    )
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_default_tenant_returns_409(auth_client) -> None:
+    ac, _ = auth_client
+    cookies = await _login(ac, "admin@example.com", "AdminPass123!")
+    csrf = cookies.get("emic_csrf")
+    tenants = await ac.get("/api/platform/tenants", cookies=cookies)
+    default_id = next(t["id"] for t in tenants.json()["tenants"] if t["slug"] == "henrik-home")
+    response = await ac.delete(
+        f"/api/platform/tenants/{default_id}",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_platform_tenant_membership_lifecycle(auth_client) -> None:
+    ac, _ = auth_client
+    cookies = await _login(ac, "admin@example.com", "AdminPass123!")
+    csrf = cookies.get("emic_csrf")
+    created = await ac.post(
+        "/api/platform/tenants",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={"name": "Members Co", "display_name": "Members Co", "slug": "members-co"},
+    )
+    tenant_id = created.json()["tenant"]["id"]
+
+    add = await ac.post(
+        f"/api/platform/tenants/{tenant_id}/members",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={"email": "viewer@example.com"},
+    )
+    assert add.status_code == 201
+    assert add.json()["member"]["email"] == "viewer@example.com"
+
+    listed = await ac.get(f"/api/platform/tenants/{tenant_id}/members", cookies=cookies)
+    assert listed.status_code == 200
+    assert any(m["email"] == "viewer@example.com" for m in listed.json()["members"])
+
+    duplicate = await ac.post(
+        f"/api/platform/tenants/{tenant_id}/members",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+        json={"email": "viewer@example.com"},
+    )
+    assert duplicate.status_code == 409
+
+    removed = await ac.delete(
+        f"/api/platform/tenants/{tenant_id}/members/{add.json()['member']['userId']}",
+        cookies=cookies,
+        headers={"X-CSRF-Token": csrf or ""},
+    )
+    assert removed.status_code == 204

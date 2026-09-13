@@ -73,6 +73,22 @@ async def get_optional_principal(
             tenant_id=principal.tenant_id,
             platform_bypass=principal.is_platform_admin,
         )
+        if settings.emic_user_auth_enabled and request.url.path.startswith("/api/"):
+            from app.tenant_rate_limit import TENANT_API_RATE_LIMITER
+
+            rate_key = (
+                f"tenant:{principal.tenant_id}"
+                if principal.tenant_id is not None
+                else f"user:{principal.user_id or principal.username}"
+            )
+            if not TENANT_API_RATE_LIMITER.check(
+                rate_key,
+                limit_per_minute=settings.emic_tenant_api_rate_limit_per_minute,
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Tenant rate limit exceeded",
+                )
     return principal
 
 

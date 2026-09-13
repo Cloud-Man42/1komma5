@@ -41,3 +41,23 @@ def test_rls_pool_reset_clears_tenant_binding() -> None:
         cleared = conn.execute(text("SELECT current_setting('app.current_tenant_id', true)")).scalar()
         assert cleared in (None, "")
     engine.dispose()
+
+
+def test_site_scoped_rls_enabled_on_child_tables() -> None:
+    postgres_url = os.environ["TEST_POSTGRES_URL"].replace("+asyncpg", "").replace("+psycopg", "")
+    engine = create_engine(postgres_url)
+    with engine.connect() as conn:
+        enabled = conn.execute(
+            text(
+                """
+                SELECT c.relrowsecurity
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relname = 'ev_chargers'
+                """
+            )
+        ).scalar_one_or_none()
+        if enabled is None:
+            pytest.skip("ev_chargers table missing in test database")
+        assert enabled is True
+    engine.dispose()

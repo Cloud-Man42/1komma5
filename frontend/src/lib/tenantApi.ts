@@ -73,6 +73,54 @@ export async function createPlatformTenant(input: TenantCreateInput): Promise<Te
   return body.tenant;
 }
 
+export type TenantMember = {
+  tenantUserId: number;
+  userId: number;
+  email: string;
+  displayName: string;
+  isActive: boolean;
+  roles: string[];
+};
+
+export async function fetchPlatformTenantMembers(tenantId: number): Promise<TenantMember[]> {
+  const res = await authFetch(`/api/platform/tenants/${tenantId}/members`);
+  if (res.status === 404) throw new Error("Tenant not found");
+  if (!res.ok) throw new Error("Failed to load tenant members");
+  const body = (await res.json()) as { members: TenantMember[] };
+  return body.members;
+}
+
+export async function addPlatformTenantMember(
+  tenantId: number,
+  email: string,
+): Promise<TenantMember> {
+  const res = await authFetch(`/api/platform/tenants/${tenantId}/members`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (res.status === 404) throw new Error("Tenant or user not found");
+  if (res.status === 409) throw new Error("User already in tenant");
+  if (!res.ok) throw new Error("Failed to add tenant member");
+  const body = (await res.json()) as { member: TenantMember };
+  return body.member;
+}
+
+export async function removePlatformTenantMember(tenantId: number, userId: number): Promise<void> {
+  const res = await authFetch(`/api/platform/tenants/${tenantId}/members/${userId}`, {
+    method: "DELETE",
+  });
+  if (res.status === 404) throw new Error("Membership not found");
+  if (!res.ok) throw new Error("Failed to remove tenant member");
+}
+
+export async function deletePlatformTenant(tenantId: number): Promise<void> {
+  const res = await authFetch(`/api/platform/tenants/${tenantId}`, { method: "DELETE" });
+  if (res.status === 409) throw new Error("Tenant cannot be deleted");
+  if (res.status === 404) throw new Error("Tenant not found");
+  if (!res.ok) throw new Error("Failed to delete tenant");
+}
+
 export async function updatePlatformTenant(
   tenantId: number,
   input: TenantUpdateInput,

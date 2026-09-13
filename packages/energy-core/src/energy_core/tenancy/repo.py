@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from energy_core.db.models import (
     EmicRoleModel,
+    EmicUserModel,
     PlatformUserRoleModel,
+    SiteModel,
     TenantModel,
     TenantUserModel,
     TenantUserSiteAccessModel,
@@ -48,6 +50,7 @@ class TenantRepository:
         return await self._session.scalar(
             select(TenantUserModel)
             .options(
+                selectinload(TenantUserModel.user),
                 selectinload(TenantUserModel.roles).selectinload(EmicRoleModel.permissions),
                 selectinload(TenantUserModel.site_access),
             )
@@ -58,6 +61,7 @@ class TenantRepository:
         return await self._session.scalar(
             select(TenantUserModel)
             .options(
+                selectinload(TenantUserModel.user),
                 selectinload(TenantUserModel.roles).selectinload(EmicRoleModel.permissions),
                 selectinload(TenantUserModel.site_access),
             )
@@ -149,3 +153,36 @@ class TenantRepository:
 
     async def resolve_membership_site_ids(self, membership: TenantUserModel) -> frozenset[int]:
         return frozenset(row.site_id for row in membership.site_access)
+
+    async def count_sites_for_tenant(self, tenant_id: int) -> int:
+        count = await self._session.scalar(
+            select(func.count()).select_from(SiteModel).where(SiteModel.tenant_id == tenant_id)
+        )
+        return int(count or 0)
+
+    async def list_memberships(self, tenant_id: int) -> list[TenantUserModel]:
+        rows = await self._session.scalars(
+            select(TenantUserModel)
+            .options(selectinload(TenantUserModel.user), selectinload(TenantUserModel.roles))
+            .where(TenantUserModel.tenant_id == tenant_id)
+            .order_by(TenantUserModel.id)
+        )
+        return list(rows)
+
+    async def delete_membership(self, tenant_id: int, user_id: int) -> bool:
+        membership = await self.get_membership(tenant_id, user_id)
+        if membership is None:
+            return False
+        await self._session.delete(membership)
+        await self._session.flush()
+        return True
+
+    async def delete_tenant(self, tenant: TenantModel) -> None:
+        await self._session.delete(tenant)
+        await self._session.flush()
+
+    async def find_user_by_email(self, email: str) -> EmicUserModel | None:
+        normalized = email.strip().lower()
+        return await self._session.scalar(
+            select(EmicUserModel).where(func.lower(EmicUserModel.email) == normalized)
+        )

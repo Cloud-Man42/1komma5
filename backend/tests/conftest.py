@@ -62,15 +62,18 @@ def clear_dashboard_cache():
     from energy_core.cache.service import reset_cache_service
 
     from app.login_rate_limit import LOGIN_RATE_LIMITER
+    from app.tenant_rate_limit import TENANT_API_RATE_LIMITER
     from app.widget_auth import WIDGET_RATE_LIMITER
 
     LOGIN_RATE_LIMITER._windows.clear()
+    TENANT_API_RATE_LIMITER.clear()
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
     reset_cache_service()
     clear_snapshot_cache()
     yield
     LOGIN_RATE_LIMITER._windows.clear()
+    TENANT_API_RATE_LIMITER.clear()
     WIDGET_RATE_LIMITER._windows.clear()
     _CACHE.clear()
     reset_cache_service()

@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     emic_login_max_attempts: int = Field(default=5, ge=3, le=20, alias="EMIC_LOGIN_MAX_ATTEMPTS")
     emic_login_lockout_minutes: int = Field(default=15, ge=1, le=1440, alias="EMIC_LOGIN_LOCKOUT_MINUTES")
     emic_login_rate_limit_per_minute: int = Field(default=20, ge=5, alias="EMIC_LOGIN_RATE_LIMIT_PER_MINUTE")
+    emic_tenant_api_rate_limit_per_minute: int = Field(
+        default=600, ge=60, alias="EMIC_TENANT_API_RATE_LIMIT_PER_MINUTE"
+    )
     emic_cors_origins: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000",
         alias="EMIC_CORS_ORIGINS",

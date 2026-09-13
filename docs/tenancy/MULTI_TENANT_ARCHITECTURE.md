@@ -328,8 +328,10 @@ Phases 0–8 implemented on branch (2026-09-13):
 
 - Dedicated DB per enterprise tenant (documented in §27, not built)
 - Billing/subscription enforcement
-- Full RLS on all ~111 child tables (site-FK join policies deferred; core tables covered)
-- Platform tenant CRUD API (`GET/POST/PATCH /api/platform/tenants`) — implemented; UI at `/platform/tenants`
+- `energy_readings` RLS may remain disabled on Timescale columnstore (migration 082 attempts best-effort)
+- Platform tenant API: DELETE + membership management at `/api/platform/tenants/{id}/members`
+- Per-tenant API rate limiting via `EMIC_TENANT_API_RATE_LIMIT_PER_MINUTE` (default 600/min)
+- Site-scoped RLS on all tables with `site_id` (migration 081)
 
 ### Regression
 
