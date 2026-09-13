@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 
 from app.schemas.heartbeat import ChargeAmpsConfigResponse, ChargerReadinessIssueResponse, ChargingReadinessResponse, HeartbeatConfigResponse, HeartbeatConfigUpdateRequest, SiteHeartbeatMappingResponse, TimescalePolicyStatusResponse
@@ -16,7 +16,7 @@ from energy_core.db.consumer_repo import ConsumerRepository
 from energy_core.db.vehicle_repo import VehicleProviderRepository
 from energy_core.db.ev_charger_repo import EvChargerRepository
 from energy_core.db.heartbeat_settings_repo import HeartbeatSettingsRepository
-from energy_core.integrations.heartbeat.auth import HeartbeatAuthError
+from energy_core.integrations.heartbeat.auth import HeartbeatAuthError, humanize_auth_error
 from energy_core.integrations.heartbeat.config import build_heartbeat_connection_info
 from energy_core.integrations.heartbeat.connection import HeartbeatConnectionType
 
@@ -87,7 +87,7 @@ async def get_chargeamps_config(session: AsyncSession = Depends(get_db_session))
 async def get_timescale_status(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("system.settings.manage")),
 ) -> TimescalePolicyStatusResponse:
     from energy_core.db.timescale_retention import inspect_timescale_policies
 
@@ -134,7 +134,7 @@ async def update_heartbeat_config(
     payload: HeartbeatConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("system.settings.manage")),
 ) -> HeartbeatConfigResponse:
     if payload.connection_type == HeartbeatConnectionType.LOCAL and not payload.host:
         raise HTTPException(
@@ -179,7 +179,7 @@ async def update_heartbeat_config(
         except HeartbeatAuthError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(exc),
+                detail=humanize_auth_error(str(exc)),
             ) from exc
         record = await repo.get_record()
 

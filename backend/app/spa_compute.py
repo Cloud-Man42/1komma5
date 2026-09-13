@@ -7,16 +7,30 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 from energy_core.consumer_accounting.aggregator import period_bounds
 from energy_core.db.consumer_repo import ConsumerIntervalRepository, ConsumerRepository, ConsumerSampleRepository
 from energy_core.db.repositories import SiteRepository
 
 
-async def get_spa_context(session: AsyncSession, slug: str):
-    site_repo = SiteRepository(session)
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+async def get_spa_context(
+    session: AsyncSession,
+    slug: str,
+    *,
+    principal: Principal | None = None,
+    settings: Settings | None = None,
+    permission: str = "spa.read",
+):
+    if principal is not None and settings is not None:
+        from app.site_access import require_site_with_permission
+
+        site = await require_site_with_permission(session, principal, settings, slug, permission)
+    else:
+        site_repo = SiteRepository(session)
+        site = await site_repo.get_by_slug(slug)
+        if site is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
     repo = ConsumerRepository(session)
     row = await repo.get_spa_by_site_slug(slug)
     if row is None:

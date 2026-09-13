@@ -22,6 +22,8 @@ Thumbs.db
 *.tsbuildinfo
 cookies.txt
 scripts/deploy.local.ps1
+caddy-trust/*
+!caddy-trust/.gitkeep
 emic-secret.key
 tmp-*.json
 docs/performance/baseline-results.json

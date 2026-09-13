@@ -8,7 +8,7 @@ from dataclasses import asdict
 from typing import Any
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import Settings
 from energy_core.db.installed_package_repo import InstalledPackageRepository
@@ -241,7 +241,7 @@ def _card_response(card) -> StorePackageCardResponse:
 @router.get("", response_model=list[PackageListItem])
 async def list_installed_packages(
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> list[PackageListItem]:
     repo = InstalledPackageRepository(session)
     return [
@@ -265,7 +265,7 @@ async def list_installed_packages(
 async def store_overview(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> StoreOverviewResponse:
     overview = await PackageStoreService(session, settings).build_overview()
 
@@ -294,7 +294,7 @@ async def store_package_detail(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> StorePackageCardResponse:
     card = await PackageStoreService(session, settings).get_package_card(module_id)
     if card is None:
@@ -307,7 +307,7 @@ async def package_site_activations(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> list[PackageSiteActivationResponse]:
     activations = await PackageStoreService(session, settings).site_activations(module_id)
     return [
@@ -327,7 +327,7 @@ async def validate_catalog_entry(
     entry_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ValidationResponse:
     archive = resolve_catalog_package(settings, entry_id)
     if archive is None:
@@ -343,7 +343,7 @@ async def catalog_entry_impact(
     entry_id: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ImpactResponse:
     archive = resolve_catalog_package(settings, entry_id)
     if archive is None:
@@ -367,7 +367,7 @@ async def install_catalog_entry(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageMutationResponse:
     archive = resolve_catalog_package(settings, entry_id)
     if archive is None:
@@ -391,7 +391,7 @@ async def install_catalog_entry(
 async def get_installed_package(
     module_id: str,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageDetailResponse:
     repo = InstalledPackageRepository(session)
     row = await repo.get(module_id)
@@ -423,7 +423,7 @@ async def validate_package(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     upload: UploadFile = File(...),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ValidationResponse:
     path = await _save_upload(upload)
     try:
@@ -451,7 +451,7 @@ async def install_package(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     upload: UploadFile = File(...),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageMutationResponse:
     path = await _save_upload(upload)
     try:
@@ -479,7 +479,7 @@ async def update_package(
     settings: Settings = Depends(get_app_settings),
     upload: UploadFile = File(...),
     allow_downgrade: bool = Query(default=False),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageMutationResponse:
     path = await _save_upload(upload)
     try:
@@ -505,7 +505,7 @@ async def rollback_package(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageMutationResponse:
     try:
         result = await PackageRollbackService(session, settings).rollback(module_id)
@@ -528,7 +528,7 @@ async def remove_package(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> PackageMutationResponse:
     try:
         result = await PackageRemover(session, settings).remove(module_id)
@@ -550,7 +550,7 @@ async def analyze_package_impact(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
     upload: UploadFile | None = File(default=None),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> ImpactResponse:
     analyzer = PackageImpactAnalyzer(session, settings)
     if upload is not None:

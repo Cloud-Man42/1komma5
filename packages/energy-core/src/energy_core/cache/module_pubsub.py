@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 MODULE_EVENTS_CHANNEL = "emic:events:modules"
 
 
+def module_events_channel(tenant_id: int | None = None) -> str:
+    if tenant_id is None:
+        return MODULE_EVENTS_CHANNEL
+    return f"tenant:{tenant_id}:emic:events:modules"
+
+
 class ModuleEventPublisher:
     def __init__(self, redis_url: str) -> None:
         self._redis_url = redis_url.strip()

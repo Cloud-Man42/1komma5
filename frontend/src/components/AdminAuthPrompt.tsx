@@ -5,10 +5,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { getAdminToken, setAdminToken } from "@/lib/adminAuth";
 
 type AdminAuthPromptProps = {
+  issue?: "required" | "invalid";
   onDismiss?: () => void;
 };
 
-export function AdminAuthPrompt({ onDismiss }: AdminAuthPromptProps) {
+export function AdminAuthPrompt({ issue = "required", onDismiss }: AdminAuthPromptProps) {
   const [token, setToken] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -31,11 +32,20 @@ export function AdminAuthPrompt({ onDismiss }: AdminAuthPromptProps) {
     <div className="admin-auth-overlay" role="dialog" aria-labelledby="admin-auth-title">
       <div className="admin-auth-dialog card">
         <h2 id="admin-auth-title" className="config-section-title">
-          Admin-token krävs
+          {issue === "invalid" ? "Admin-token ogiltig" : "Admin-token krävs"}
         </h2>
         <p className="muted config-env-intro">
-          Dashboard och API kräver Bearer-token när <code>EMIC_ADMIN_TOKEN</code> är satt på servern.
-          Hämta värdet från <code>~/energy-monitoring/.env</code> på servern.
+          {issue === "invalid" ? (
+            <>
+              Sparad token matchar inte serverns <code>EMIC_ADMIN_TOKEN</code>. Hämta aktuellt värde
+              från <code>~/energy-monitoring/.env</code> och spara igen.
+            </>
+          ) : (
+            <>
+              Dashboard och API kräver Bearer-token när <code>EMIC_ADMIN_TOKEN</code> är satt på servern.
+              Hämta värdet från <code>~/energy-monitoring/.env</code> på servern.
+            </>
+          )}
         </p>
         <form className="form-grid" onSubmit={onSave}>
           <label className="form-field">

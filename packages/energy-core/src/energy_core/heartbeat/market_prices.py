@@ -58,9 +58,49 @@ def _legacy_points(data: dict[str, Any]) -> tuple[float | None, tuple[MarketPric
     return current_price, tuple(points)
 
 
+def _gridx_tariff_points(data: dict[str, Any]) -> tuple[MarketPricePoint, ...]:
+    """Parse GridX GET /systems/{id}/tariff/prices response."""
+    periods = data.get("periods")
+    if not isinstance(periods, list):
+        return ()
+
+    points: list[MarketPricePoint] = []
+    for period in periods:
+        if not isinstance(period, dict):
+            continue
+        ts = _parse_dt(str(period.get("from") or period.get("start") or ""))
+        offtake = period.get("offtakePrice", period.get("offtake_price"))
+        if ts is None or not isinstance(offtake, (int, float)):
+            continue
+        spot = float(offtake)
+        points.append(
+            MarketPricePoint(
+                timestamp=ts,
+                spot_eur_kwh=spot,
+                all_in_eur_kwh=spot,
+            )
+        )
+    points.sort(key=lambda item: item.timestamp)
+    return tuple(points)
+
+
 def parse_market_prices(data: dict[str, Any] | None) -> ParsedMarketPrices:
     if not data:
         return ParsedMarketPrices(None, None, None, None, ())
+
+    if "periods" in data:
+        points = list(_gridx_tariff_points(data))
+        if points:
+            now = datetime.now(UTC)
+            current = _closest_price(points, now)
+            values = [point.all_in_eur_kwh or point.spot_eur_kwh for point in points]
+            return ParsedMarketPrices(
+                current_price_eur_kwh=current,
+                average_all_in_eur_kwh=(sum(values) / len(values)) if values else None,
+                highest_all_in_eur_kwh=max(values) if values else None,
+                lowest_all_in_eur_kwh=min(values) if values else None,
+                points=tuple(points),
+            )
 
     if "timeseries" in data and "energyMarket" in data:
         parsed = MarketPrices.from_dict(data)

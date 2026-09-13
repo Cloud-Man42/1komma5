@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
-from app.deps import get_db_session, get_site_repository
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated, require_permission
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.energy_control import EnergyControlActionResponse, EnergyControlPreviewRequest, EnergyControlRecentResponse, EnergyControlResultResponse, EnergyControlSettingsUpdateRequest, EnergyControlStatusResponse
-from energy_core.db.repositories import SiteRepository
 from energy_core.energy_control.service import EnergyControlService
 from energy_core.energy_control.types import ControlTarget, OptimizationAction
 from energy_core.energy_optimizer.types import EnergyAction
@@ -68,12 +70,11 @@ def _parse_target(value: str) -> ControlTarget:
 @router.get("/sites/{slug}/energy-control/status", response_model=EnergyControlStatusResponse)
 async def get_energy_control_status(
     slug: str,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyControlStatusResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     service = EnergyControlService(session)
     status = await service.status(site)
@@ -94,13 +95,12 @@ async def update_energy_control_settings(
     slug: str,
     payload: EnergyControlSettingsUpdateRequest,
     request: Request,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("battery.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyControlStatusResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "battery.control")
 
     mode = _parse_mode(payload.optimization_mode) if payload.optimization_mode is not None else None
     service = EnergyControlService(session)
@@ -135,12 +135,11 @@ async def update_energy_control_settings(
 async def preview_energy_control_action(
     slug: str,
     payload: EnergyControlPreviewRequest,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyControlResultResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     service = EnergyControlService(session)
     result = await service.preview(
@@ -157,13 +156,12 @@ async def apply_energy_control_action(
     slug: str,
     payload: EnergyControlPreviewRequest,
     request: Request,
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("battery.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyControlResultResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "battery.control")
 
     service = EnergyControlService(session)
     result = await service.apply(
@@ -188,12 +186,11 @@ async def apply_energy_control_action(
 async def get_energy_control_recent(
     slug: str,
     limit: int = Query(default=20, ge=1, le=100),
-    site_repo: SiteRepository = Depends(get_site_repository),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyControlRecentResponse:
-    site = await site_repo.get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail=f"Site '{slug}' not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "energy.read")
 
     service = EnergyControlService(session)
     actions = await service.recent(site.id, limit=limit)

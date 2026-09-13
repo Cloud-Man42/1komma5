@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EMIC — Lita på HTTPS (iPhone)</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #070c16;
+        color: #e2e8f0;
+        margin: 0;
+        padding: 1.25rem;
+        line-height: 1.5;
+      }
+      main {
+        max-width: 34rem;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 1.35rem;
+      }
+      .card {
+        background: #111827;
+        border: 1px solid #1f2937;
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+        margin: 1rem 0;
+      }
+      a.btn {
+        display: block;
+        text-align: center;
+        margin: 0.75rem 0;
+        padding: 0.85rem 1rem;
+        border-radius: 10px;
+        background: #2563eb;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a.btn.secondary {
+        background: #334155;
+      }
+      ol {
+        padding-left: 1.2rem;
+      }
+      .muted {
+        color: #94a3b8;
+        font-size: 0.92rem;
+      }
+      code {
+        background: #0f172a;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>EMIC på iPhone / iPad</h1>
+      <p class="muted">
+        EMIC använder ett lokalt HTTPS-certifikat. Du måste lita på certifikatet en gång innan
+        <code>https://emic.inacloud.se</code> fungerar.
+      </p>
+
+      <div class="card">
+        <p><strong>Krav:</strong> samma WiFi som EMIC-servern (hemnätverket).</p>
+        <a class="btn" href="/emic-ca.mobileconfig">1. Installera certifikatprofil</a>
+        <p class="muted">Alternativ: <a href="/emic-ca.crt">ladda ner .crt</a></p>
+      </div>
+
+      <div class="card">
+        <ol>
+          <li>Tryck på knappen ovan och tillåt profilen.</li>
+          <li>Gå till <strong>Inställningar → Allmänt → VPN och enhetshantering</strong> och installera profilen <em>EMIC Local HTTPS</em>.</li>
+          <li>Gå till <strong>Inställningar → Allmänt → Om → Certifikatförtroendeinställningar</strong> och slå på fullt förtroende för <em>EMIC Local HTTPS</em>.</li>
+          <li>Öppna <a href="https://emic.inacloud.se/login">https://emic.inacloud.se/login</a> och logga in.</li>
+          <li>Lägg till på hemskärmen via Safari → Dela → <em>Lägg till på hemskärman</em>.</li>
+        </ol>
+      </div>
+
+      <p class="muted">
+        Fungerar inte namnet? Prova <code>http://192.168.50.54/emic-ca.html</code> på samma WiFi.
+      </p>
+    </main>
+  </body>
+</html>

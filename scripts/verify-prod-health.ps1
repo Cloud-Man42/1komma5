@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Post-deploy health check for Mercedes EQE + Charge Amps Halo stack.
 param(
-    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://192.168.50.54" }),
+    [string]$BaseUrl = $(if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL } else { "https://emic.inacloud.se" }),
     [string]$SiteSlug = "akarp",
     [string]$AdminToken = $env:EMIC_ADMIN_TOKEN,
     [double]$SolarKwhTolerance = 2.0,
@@ -14,22 +14,69 @@ $checks = @()
 
 if (-not $AdminToken) {
     . "$PSScriptRoot/lib/Get-EmicDeployCredential.ps1"
-    $AdminToken = Get-EmicAdminTokenFromRemote
+    $AdminToken = Get-EmicAdminTokenLocal
+    if (-not $AdminToken) {
+        $AdminToken = Get-EmicAdminTokenFromRemote
+    }
 }
 
 $headers = @{ Authorization = "Bearer $AdminToken" }
+$useRemoteCheck = $false
+
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    if (-not ([System.Management.Automation.PSTypeName]'TrustAllCerts').Type) {
+        Add-Type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCerts : ICertificatePolicy {
+    public bool CheckValidationResult(ServicePoint s, X509Certificate c, WebRequest r, int p) { return true; }
+}
+"@
+    }
+    [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCerts
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+}
 
 function Invoke-EmicApi {
     param([string]$Path)
+    if ($useRemoteCheck) {
+        return Invoke-EmicApiRemote -Path $Path
+    }
     $params = @{
         Uri        = "$BaseUrl$Path"
         TimeoutSec = $TimeoutSec
         Headers    = $headers
     }
-    if ($PSVersionTable.PSVersion.Major -ge 7) {
-        return Invoke-RestMethod @params -SkipCertificateCheck
+    try {
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            return Invoke-RestMethod @params -SkipCertificateCheck
+        }
+        return Invoke-RestMethod @params
+    } catch {
+        if ($_.Exception.Message -match 'SSL/TLS secure channel') {
+            $script:useRemoteCheck = $true
+            Write-Host "Local HTTPS failed (Windows TLS/Caddy CA) - checking via SSH on server..."
+            return Invoke-EmicApiRemote -Path $Path
+        }
+        throw
     }
-    return Invoke-RestMethod @params
+}
+
+function Invoke-EmicApiRemote {
+    param([string]$Path)
+    . "$PSScriptRoot/lib/Get-EmicDeployCredential.ps1"
+    $plink = "C:\Program Files\PuTTY\plink.exe"
+    if (-not (Test-Path $plink)) { throw "plink not found for remote health check" }
+    $authArgs = Get-EmicDeployAuthArgs
+    $server = if ($env:EMIC_DEPLOY_SERVER) { $env:EMIC_DEPLOY_SERVER } else { "192.168.50.54" }
+    $user = if ($env:EMIC_DEPLOY_USER) { $env:EMIC_DEPLOY_USER } else { "hm" }
+    $remotePath = $Path -replace '"', '\"'
+    $remoteToken = $AdminToken -replace '"', '\"'
+    $hostHeader = ([uri]$BaseUrl).Host
+    $cmd = "curl -sk -H `"Authorization: Bearer $remoteToken`" -H `"Host: $hostHeader`" https://127.0.0.1$remotePath"
+    $raw = (& $plink @authArgs "${user}@${server}" $cmd 2>$null)
+    if (-not $raw) { throw "Empty response from remote curl $Path" }
+    return $raw | ConvertFrom-Json
 }
 
 function Add-Check {
@@ -107,7 +154,7 @@ foreach ($check in $checks) {
 
 if ($failures.Count -gt 0) {
     Write-Host ""
-    Write-Host "Health check failed ($($failures.Count) issue(s))."
+    Write-Host "Health check failed: $($failures.Count) issues."
     exit 1
 }
 

@@ -30,6 +30,20 @@
   gap: var(--space-2);
 }
 
+.config-hub-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.config-hub-home-row,
+.admin-hub-home-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .config-hub-title {
   margin: 0;
   font-size: 1.75rem;

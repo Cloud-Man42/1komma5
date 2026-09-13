@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import Settings
 from energy_core.platform.modules.distribution.artifact_repository import ArtifactRepository
@@ -70,7 +70,7 @@ class InstallResponse(BaseModel):
 
 @router.get("/status")
 async def store_status(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -93,7 +93,7 @@ async def list_store_modules(
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
     sort: str = Query("recommended"),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -117,7 +117,7 @@ async def list_store_modules(
 
 @router.get("/security")
 async def store_security_center(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -127,7 +127,7 @@ async def store_security_center(
 
 @router.get("/publishers")
 async def list_store_publishers(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> list[dict[str, Any]]:
@@ -138,7 +138,7 @@ async def list_store_publishers(
 @router.get("/publishers/{publisher_id}")
 async def get_store_publisher(
     publisher_id: str,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -153,7 +153,7 @@ async def get_store_publisher(
 async def get_store_module(
     module_id: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -176,7 +176,7 @@ async def get_store_module(
 @router.get("/{module_id}/releases")
 async def list_store_releases(
     module_id: str,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> list[dict[str, Any]]:
@@ -196,7 +196,7 @@ async def store_preflight(
     version: str,
     body: PreflightRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> dict[str, Any]:
@@ -226,7 +226,7 @@ async def store_install(
     version: str,
     body: InstallRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> InstallResponse:

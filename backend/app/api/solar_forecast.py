@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
 from app.schemas.solar import (
     SolarAccuracyResponse,
     SolarDiagnosticsResponse,
@@ -269,14 +272,12 @@ async def get_solar_config(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 
 ) -> SolarSiteConfigResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
     row = await SolarSiteConfigRepository(session).get(site.id, timezone=site.timezone)
 
@@ -341,16 +342,11 @@ async def update_solar_config(
     payload: SolarSiteConfigUpdate,
 
     session: AsyncSession = Depends(get_db_session),
-
-    settings=Depends(get_app_settings),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarSiteConfigResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
 
 
@@ -458,7 +454,7 @@ async def update_solar_config(
 
 
 
-    return await get_solar_config(slug, session)
+    return await get_solar_config(slug, session, principal, settings)
 
 
 
@@ -471,16 +467,11 @@ async def get_solar_forecast(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
-
+    principal: Principal = Depends(require_authenticated),
     settings: Settings = Depends(get_app_settings),
-
 ) -> SolarForecastResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
     cache = get_cache_service(settings)
 
@@ -526,12 +517,10 @@ async def get_solar_forecast_today(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
-
-    settings=Depends(get_app_settings),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarForecastResponse:
-
-    return await get_solar_forecast(slug, session, settings)
+    return await get_solar_forecast(slug, session, principal, settings)
 
 
 
@@ -544,16 +533,11 @@ async def get_solar_forecast_tomorrow(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
-
-    settings=Depends(get_app_settings),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarForecastResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
     forecast = await _resolve_forecast(session, site, settings)
 
@@ -570,16 +554,11 @@ async def get_solar_accuracy(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
-
-    settings=Depends(get_app_settings),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarAccuracyResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
     profile_repo = SolarForecastModelProfileRepository(session)
 
@@ -668,16 +647,14 @@ async def get_solar_diagnostics(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 
     limit: int = 60,
 
 ) -> SolarDiagnosticsResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
 
 
@@ -738,16 +715,11 @@ async def get_solar_energy_budget(
     slug: str,
 
     session: AsyncSession = Depends(get_db_session),
-
-    settings=Depends(get_app_settings),
-
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarEnergyBudgetResponse:
 
-    site = await SiteRepository(session).get_by_slug(slug)
-
-    if site is None:
-
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
 
 
@@ -804,11 +776,10 @@ async def get_solar_energy_budget(
 async def get_solar_weather(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarWeatherResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "solar.read")
 
     config_repo = SolarSiteConfigRepository(session)
     config = await config_repo.get(site.id, timezone=site.timezone)

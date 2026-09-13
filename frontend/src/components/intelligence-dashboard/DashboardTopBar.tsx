@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { UserMenu } from "@/components/UserMenu";
+import { SiteSelector } from "@/components/site-selector/SiteSelector";
+import { useAuth } from "@/lib/authContext";
 import { navigateEconomySection } from "@/components/economy-dashboard/economySection";
 import { navigateEnergySection } from "@/components/energy-dashboard/energySection";
 import { navigateEvSection } from "@/components/ev-dashboard/evSection";
@@ -20,6 +24,8 @@ export function DashboardTopBar({
   vehicleEnabled?: boolean;
 }) {
   const pathname = usePathname();
+  const { user, loading: authLoading } = useAuth();
+  const userAuthEnabled = process.env.NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED === "true";
   const items = visibleNavItems(spaEnabled, vehicleEnabled);
   const isEnergyRoute = pathname.includes(`/sites/${slug}/energy`);
   const isSolarRoute = pathname.includes(`/sites/${slug}/solar`) && !pathname.includes("/intelligence");
@@ -29,7 +35,9 @@ export function DashboardTopBar({
 
   return (
     <header className="idash-topbar">
-      <nav className="idash-topbar-nav" aria-label="Sidnavigering">
+      <div className="idash-topbar-start">
+        <HomeDashboardButton />
+        <nav className="idash-topbar-nav" aria-label="Sidnavigering">
         {items.map((item) => {
           const active = isNavActive(pathname, slug, item);
           return (
@@ -68,8 +76,10 @@ export function DashboardTopBar({
             </Link>
           );
         })}
-      </nav>
+        </nav>
+      </div>
       <div className="idash-topbar-actions">
+        <SiteSelector compact />
         <button type="button" className="idash-icon-btn" aria-label="Notiser">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path
@@ -82,9 +92,13 @@ export function DashboardTopBar({
           <span className="idash-notify-badge">3</span>
         </button>
         <ThemeToggle />
-        <span className="idash-user-avatar" aria-label="Användare">
-          HM
-        </span>
+        {userAuthEnabled && !authLoading && user ? (
+          <UserMenu compact />
+        ) : (
+          <span className="idash-user-avatar" aria-label="Användare">
+            HM
+          </span>
+        )}
       </div>
     </header>
   );

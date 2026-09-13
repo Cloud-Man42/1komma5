@@ -115,15 +115,16 @@ if ($LASTEXITCODE -ne 0) { throw "Remote deploy failed" }
 Remove-Item $archive -Force -ErrorAction SilentlyContinue
 Write-Host ""
 $scheme = "https"
-Write-Host "Deploy complete. Application should be available at: ${scheme}://${Server}/"
-Write-Host "Config view: ${scheme}://${Server}/config"
-if ($Server -match '^[0-9.]+$') {
-  Write-Host "Tip: trust Caddy internal CA on clients, or set CADDY_DOMAIN=emic.inacloud.se for Let's Encrypt."
+$appUrl = if ($env:EMIC_BASE_URL) { $env:EMIC_BASE_URL.TrimEnd('/') } else { "${scheme}://${Server}" }
+Write-Host "Deploy complete. Application should be available at: ${appUrl}/"
+Write-Host "Config view: ${appUrl}/config"
+if ($Server -match '^[0-9.]+$' -and -not $env:EMIC_BASE_URL) {
+  Write-Host "Tip: use https://emic.inacloud.se on Windows (bare IP HTTPS fails Schannel SNI)."
 }
 
 Write-Host ""
 Write-Host "Running post-deploy prod health check..."
 $healthScript = Join-Path $PSScriptRoot "verify-prod-health.ps1"
 if (-not (Test-Path $healthScript)) { throw "Health script not found: $healthScript" }
-& $healthScript -BaseUrl "${scheme}://${Server}"
+& $healthScript -BaseUrl $appUrl
 if ($LASTEXITCODE -ne 0) { throw "Post-deploy health check failed" }

@@ -10,6 +10,8 @@ from energy_core.db.repositories import (
     SiteRepository,
 )
 from energy_core.providers.mock import MOCK_SITES
+from energy_core.site_defaults import DEFAULT_MAIN_FUSE_A
+from energy_core.tenancy.bootstrap import ensure_default_tenant
 
 DEMO_2025_IMPORT_KWH = [
     2000.0,
@@ -30,6 +32,7 @@ DEMO_2025_IMPORT_COST_SEK = 18000.0
 
 async def seed_sites(session: AsyncSession) -> None:
     """Seed default sites and a demo historical import baseline."""
+    tenant = await ensure_default_tenant(session)
     count = await session.scalar(select(func.count()).select_from(SiteModel))
     repo = SiteRepository(session)
     if not count:
@@ -38,9 +41,16 @@ async def seed_sites(session: AsyncSession) -> None:
                 slug=site.slug,
                 name=site.name,
                 timezone=site.timezone,
+                tenant_id=tenant.id,
                 external_system_id=site.external_system_id,
+                main_fuse_a=DEFAULT_MAIN_FUSE_A.get(site.slug),
             )
         await session.flush()
+
+    for slug, fuse_a in DEFAULT_MAIN_FUSE_A.items():
+        existing = await repo.get_by_slug(slug)
+        if existing is not None and (existing.main_fuse_a is None or existing.main_fuse_a <= 25):
+            await repo.update_site(slug, main_fuse_a=fuse_a)
 
     akarp = await repo.get_by_slug("akarp")
     if akarp is not None:

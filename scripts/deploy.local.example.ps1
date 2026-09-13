@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $env:EMIC_DEPLOY_SERVER = "192.168.50.54"
 $env:EMIC_DEPLOY_USER = "hm"
+$env:EMIC_BASE_URL = "https://emic.inacloud.se"
 
 # Preferred: SSH key
 # $env:EMIC_DEPLOY_KEY = "$env:USERPROFILE\.ssh\emic-deploy.ppk"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_db_session
 from app.widget_auth import WIDGET_METRICS
 from energy_core.auth.device_tokens import generate_device_token
@@ -75,7 +75,7 @@ def _to_response(record, *, token: str | None = None) -> AppleDeviceResponse | A
 @router.get("", response_model=list[AppleDeviceResponse])
 async def list_apple_devices(
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("integration.manage")),
 ) -> list[AppleDeviceResponse]:
     repo = AppleDeviceRepository(session)
     records = await repo.list_all()
@@ -87,7 +87,7 @@ async def create_apple_device(
     payload: AppleDeviceCreateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("integration.manage")),
 ) -> AppleDeviceCreateResponse:
     repo = AppleDeviceRepository(session)
     generated = generate_device_token()
@@ -123,7 +123,7 @@ async def create_apple_device(
 @router.get("/metrics", response_model=AppleDeviceMetricsResponse)
 async def apple_device_metrics(
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("integration.manage")),
 ) -> AppleDeviceMetricsResponse:
     active = await AppleDeviceRepository(session).count_active()
     return AppleDeviceMetricsResponse(metrics=WIDGET_METRICS.to_dict(active))
@@ -134,7 +134,7 @@ async def revoke_apple_device(
     device_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("integration.manage")),
 ) -> AppleDeviceResponse:
     repo = AppleDeviceRepository(session)
     record = await repo.revoke(device_id)
@@ -158,7 +158,7 @@ async def rename_apple_device(
     payload: AppleDeviceRenameRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("integration.manage")),
 ) -> AppleDeviceResponse:
     repo = AppleDeviceRepository(session)
     record = await repo.rename(device_id, device_name=payload.device_name.strip())

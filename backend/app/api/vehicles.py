@@ -6,8 +6,11 @@ import logging
 from datetime import UTC, datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated, require_permission
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.ev import EvEnergySourcesResponse
 from app.schemas.vehicles import StationCandidateResponse, VehicleApiEventResponse, VehicleAttributeObservationResponse, VehicleCapabilitiesResponse, VehicleChargeSessionListResponse, VehicleChargeSessionPatchRequest, VehicleChargeSessionResponse, VehicleChargingStatsResponse, VehicleCommandResponse, VehicleDetailResponse, VehicleHaloCorrelationResponse, VehicleIntegrationActionResponse, VehicleIntegrationConfigResponse, VehicleIntegrationConfigUpdateRequest, VehicleIntegrationDiagnosticsResponse, VehicleIntegrationEventResponse, VehicleIntegrationLoginResponse, VehicleIntegrationStatusResponse, VehicleListItemResponse, VehicleListResponse, VehicleRawAttributesResponse, VehicleSetTargetSocRequest, VehicleSyncResponse, VehicleUpdateRequest, VehicleValueResponse
@@ -42,18 +45,11 @@ from energy_core.db.integration_event_repo import VehicleIntegrationEventReposit
 from energy_core.db.charging_location_repo import ChargingLocationRepository
 from energy_core.db.charging_station_repo import ChargingStationRepository
 from energy_core.db.vehicle_charge_session_repo import VehicleChargeSessionRecord, VehicleChargeSessionRepository
-from energy_core.db.repositories import SiteRepository
 from sqlalchemy import select
 
 router = APIRouter(tags=["vehicles"])
 logger = logging.getLogger(__name__)
 
-
-async def _site_or_404(session: AsyncSession, slug: str):
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
-    return site
 
 
 def _field_is_stale(updated_at: datetime | None) -> bool:
@@ -246,8 +242,13 @@ def _vehicle_item(
 
 
 @router.get("/sites/{slug}/vehicles", response_model=VehicleListResponse)
-async def list_vehicles(slug: str, session: AsyncSession = Depends(get_db_session)) -> VehicleListResponse:
-    site = await _site_or_404(session, slug)
+async def list_vehicles(
+    slug: str,
+    session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+) -> VehicleListResponse:
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicles = await VehicleRepository(session).list_for_site(site.id)
     items: list[VehicleListItemResponse] = []
     session_repo = VehicleChargeSessionRepository(session)
@@ -282,9 +283,11 @@ async def sync_vehicles(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleSyncResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     service = VehicleSyncService(session, is_sqlite=get_settings().is_sqlite)
     try:
         states = await service.sync_site(site.id)
@@ -327,8 +330,10 @@ async def get_vehicle(
     slug: str,
     vehicle_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleDetailResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -349,9 +354,11 @@ async def update_vehicle(
     payload: VehicleUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleDetailResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -386,8 +393,10 @@ async def get_vehicle_halo_correlation(
     slug: str,
     vehicle_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleHaloCorrelationResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -403,8 +412,10 @@ async def get_vehicle_halo_correlation(
 async def get_integration_status(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleIntegrationStatusResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     repo = VehicleProviderRepository(session)
     row = await repo.get_or_create(site.id)
     record = repo.to_record(row)
@@ -441,8 +452,10 @@ async def get_integration_status(
 async def get_integration_config(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleIntegrationConfigResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     repo = VehicleProviderRepository(session)
     row = await repo.get_or_create(site.id)
     record = repo.to_record(row)
@@ -463,9 +476,11 @@ async def update_integration_config(
     payload: VehicleIntegrationConfigUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationConfigResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     repo = VehicleProviderRepository(session)
     row = await repo.get_or_create(site.id)
     try:
@@ -505,9 +520,11 @@ async def login_integration(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationLoginResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     repo = VehicleProviderRepository(session)
     row = await repo.get_or_create(site.id)
     if not row.username or not row.encrypted_password:
@@ -553,8 +570,10 @@ async def get_raw_attributes(
     slug: str,
     vehicle_id: int | None = None,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleRawAttributesResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     settings = get_settings()
     repo = VehicleAttributeObservationRepository(session, is_sqlite=settings.is_sqlite)
     if vehicle_id is not None:
@@ -600,8 +619,10 @@ async def get_raw_attributes(
 async def get_integration_diagnostics(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleIntegrationDiagnosticsResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     repo = VehicleProviderRepository(session)
     row = await repo.get_or_create(site.id)
     record = repo.to_record(row)
@@ -669,8 +690,10 @@ async def list_integration_events(
     slug: str,
     limit: int = 100,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[VehicleIntegrationEventResponse]:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     capped = max(1, min(limit, 200))
     events = await VehicleIntegrationEventRepository(session).list_recent(site_id=site.id, limit=capped)
     return [
@@ -693,9 +716,11 @@ async def run_integration_action(
     action: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleIntegrationActionResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     repo = VehicleProviderRepository(session, secret_box=SecretBox.from_settings())
     row = await repo.get_or_create(site.id)
     if action == "reset":
@@ -817,8 +842,10 @@ async def list_vehicle_charge_sessions(
     slug: str,
     vehicle_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleChargeSessionListResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -845,8 +872,10 @@ async def get_current_vehicle_charge_session(
     slug: str,
     vehicle_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleChargeSessionResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -875,9 +904,11 @@ async def patch_vehicle_charge_session(
     payload: VehicleChargeSessionPatchRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleChargeSessionResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -945,10 +976,12 @@ async def get_vehicle_charging_stats(
     vehicle_id: int,
     period: str = "month",
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VehicleChargingStatsResponse:
     if period not in {"day", "week", "month", "year"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid period")
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.read")
     vehicle = await VehicleRepository(session).get(vehicle_id)
     if vehicle is None or vehicle.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehicle not found")
@@ -1000,9 +1033,11 @@ async def set_vehicle_target_soc(
     payload: VehicleSetTargetSocRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     service = VehicleCommandService(session)
     try:
         result = await service.set_target_soc(
@@ -1039,9 +1074,11 @@ async def start_vehicle_charging(
     vehicle_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     service = VehicleCommandService(session)
     try:
         result = await service.start_charging(site_id=site.id, vehicle_id=vehicle_id)
@@ -1073,9 +1110,11 @@ async def stop_vehicle_charging(
     vehicle_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+    _: None = Depends(require_permission("vehicle.control")),
 ) -> VehicleCommandResponse:
-    site = await _site_or_404(session, slug)
+    site = await require_site_with_permission(session, principal, settings, slug, "vehicle.control")
     service = VehicleCommandService(session)
     try:
         result = await service.stop_charging(site_id=site.id, vehicle_id=vehicle_id)

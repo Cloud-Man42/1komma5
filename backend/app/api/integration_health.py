@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 from energy_core.contracts.health import HealthStatus, aggregate_health_status
 from energy_core.db.repositories import SiteRepository
 from energy_core.platform.health.aggregator import HealthAggregator
@@ -36,11 +40,10 @@ class IntegrationHealthResponse(BaseModel):
 async def get_integration_health(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
-    settings=Depends(get_app_settings),
+    settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> IntegrationHealthResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "system.health.read")
     aggregator = HealthAggregator(session, is_sqlite=settings.is_sqlite)
     records = await aggregator.list_for_site(site.id)
     legacy_rows = await aggregator.recorder.list_for_site(site.id)

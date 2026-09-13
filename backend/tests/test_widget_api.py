@@ -80,7 +80,7 @@ async def test_widget_status_unknown_site_returns_404(client):
         "/api/v1/widget/status/missing",
         headers=_auth_headers(device["token"]),
     )
-    assert response.status_code == 404
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -117,7 +117,7 @@ async def test_widget_forbidden_without_scope(client):
 
 
 @pytest.mark.asyncio
-async def test_widget_summary_lists_both_sites(client):
+async def test_widget_summary_lists_only_default_site(client):
     ac, session_factory, settings = client
     device = await _create_device(ac)
     await seed_recent_readings(session_factory, settings, "akarp", [(3000, 1500, 0, 500, 80)])
@@ -130,8 +130,20 @@ async def test_widget_summary_lists_both_sites(client):
     response = await ac.get("/api/v1/widget/summary", headers=_auth_headers(device["token"]))
     assert response.status_code == 200
     body = response.json()
-    assert len(body["sites"]) == 2
+    assert len(body["sites"]) == 1
+    assert body["sites"][0]["site"]["id"] == "akarp"
     assert body["totals"]["solarPowerKw"] is not None
+
+
+@pytest.mark.asyncio
+async def test_widget_denied_other_site_when_default_set(client):
+    ac, _, _ = client
+    device = await _create_device(ac)
+    response = await ac.get(
+        "/api/v1/widget/status/summer-house-denmark",
+        headers=_auth_headers(device["token"]),
+    )
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

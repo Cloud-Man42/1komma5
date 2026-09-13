@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_permission
 from app.deps import get_app_settings, get_db_session
 from energy_core.config import AppEnvironment, Settings
 from energy_core.platform.modules.governance.break_glass import get_break_glass_store
@@ -231,7 +231,7 @@ def _governance_http(exc: Exception) -> HTTPException:
 
 @router.get("/publishers", response_model=list[PublisherResponse])
 async def list_publishers(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[PublisherResponse]:
     publishers = PublisherRepository(session)
@@ -247,7 +247,7 @@ async def list_publishers(
 async def create_publisher(
     body: PublisherCreateRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -277,7 +277,7 @@ async def create_publisher(
 @router.get("/publishers/{publisher_id}", response_model=PublisherResponse)
 async def get_publisher(
     publisher_id: str,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -294,7 +294,7 @@ async def update_publisher(
     publisher_id: str,
     body: PublisherUpdateRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -324,7 +324,7 @@ async def update_publisher(
 async def verify_publisher(
     publisher_id: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -350,7 +350,7 @@ async def verify_publisher(
 async def suspend_publisher(
     publisher_id: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -373,7 +373,7 @@ async def suspend_publisher(
 async def reactivate_publisher(
     publisher_id: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -396,7 +396,7 @@ async def reactivate_publisher(
 async def revoke_publisher(
     publisher_id: str,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PublisherResponse:
     repo = PublisherRepository(session)
@@ -417,7 +417,7 @@ async def revoke_publisher(
 
 @router.get("/policy", response_model=PolicyResponse)
 async def get_policy(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PolicyResponse:
     repo = PolicyRepository(session)
@@ -429,7 +429,7 @@ async def get_policy(
 async def update_policy(
     body: PolicyUpdateRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PolicyResponse:
     repo = PolicyRepository(session)
@@ -462,7 +462,7 @@ async def update_policy(
 
 @router.get("/policy/history", response_model=list[PolicyHistoryItem])
 async def policy_history(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[PolicyHistoryItem]:
     rows = await PolicyRepository(session).list_history()
@@ -481,7 +481,7 @@ async def policy_history(
 
 @router.get("/policy/impact", response_model=PolicyImpactResponse)
 async def policy_impact(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> PolicyImpactResponse:
     summary = await PolicyRepository(session).impact_summary()
@@ -491,7 +491,7 @@ async def policy_impact(
 @router.get("/ownership", response_model=list[OwnershipResponse])
 async def list_ownership(
     publisher_id: str | None = None,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[OwnershipResponse]:
     repo = OwnershipRepository(session)
@@ -506,7 +506,7 @@ async def list_ownership(
 async def request_transfer(
     body: TransferRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TransferResponse:
     repo = TransferRepository(session)
@@ -535,7 +535,7 @@ async def request_transfer(
 async def approve_transfer(
     transfer_id: int,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TransferResponse:
     repo = TransferRepository(session)
@@ -558,7 +558,7 @@ async def approve_transfer(
 async def reject_transfer(
     transfer_id: int,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TransferResponse:
     repo = TransferRepository(session)
@@ -581,7 +581,7 @@ async def reject_transfer(
 async def complete_transfer(
     transfer_id: int,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> TransferResponse:
     repo = TransferRepository(session)
@@ -605,7 +605,7 @@ async def complete_transfer(
 async def evaluate_policy(
     body: EvaluateRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> EvaluateResponse:
@@ -649,7 +649,7 @@ async def evaluate_policy(
 async def activate_break_glass(
     body: BreakGlassActivateRequest,
     request: Request,
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
     session: AsyncSession = Depends(get_db_session),
 ) -> BreakGlassStatusResponse:
     policy = await PolicyRepository(session).get_or_create()
@@ -677,7 +677,7 @@ async def activate_break_glass(
 
 @router.get("/break-glass/status", response_model=BreakGlassStatusResponse)
 async def break_glass_status(
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("modules.manage")),
 ) -> BreakGlassStatusResponse:
     current = get_break_glass_store().current()
     if current is None:

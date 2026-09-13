@@ -219,26 +219,30 @@ async def cache_service_status_async(settings: Settings | None = None) -> dict[s
     return status
 
 
-def site_snapshot_cache_key(site_id: int) -> str:
-    return f"emic:site:{site_id}:snapshot"
+def _tenant_cache_prefix(tenant_id: int | None) -> str:
+    return f"tenant:{tenant_id}:" if tenant_id is not None else ""
 
 
-def site_dashboard_cache_key(site_id: int) -> str:
-    return f"emic:site:{site_id}:dashboard"
+def site_snapshot_cache_key(site_id: int, tenant_id: int | None = None) -> str:
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:snapshot"
 
 
-def financial_stats_cache_key(site_id: int, period: str, year: int | None) -> str:
+def site_dashboard_cache_key(site_id: int, tenant_id: int | None = None) -> str:
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:dashboard"
+
+
+def financial_stats_cache_key(site_id: int, period: str, year: int | None, tenant_id: int | None = None) -> str:
     year_part = str(year) if year is not None else "all"
-    return f"emic:site:{site_id}:financial:{period}:{year_part}"
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:financial:{period}:{year_part}"
 
 
-def solar_forecast_cache_key(site_id: int) -> str:
-    return f"emic:site:{site_id}:solar:forecast"
+def solar_forecast_cache_key(site_id: int, tenant_id: int | None = None) -> str:
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:solar:forecast"
 
 
-def current_price_cache_key(site_id: int) -> str:
-    return f"emic:site:{site_id}:prices:current"
+def current_price_cache_key(site_id: int, tenant_id: int | None = None) -> str:
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:prices:current"
 
 
-def horizon_optimizer_cache_key(site_id: int) -> str:
-    return f"emic:site:{site_id}:horizon-optimizer"
+def horizon_optimizer_cache_key(site_id: int, tenant_id: int | None = None) -> str:
+    return f"{_tenant_cache_prefix(tenant_id)}emic:site:{site_id}:horizon-optimizer"

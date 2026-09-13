@@ -7,6 +7,9 @@ import json
 from typing import Any
 
 from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
 from energy_core.cache.service import get_cache_service, site_snapshot_cache_key
 from energy_core.cache.snapshot_pubsub import listen_snapshot_events, snapshot_pubsub_available
 from energy_core.config import Settings
@@ -105,10 +108,9 @@ async def get_site_snapshot(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict[str, Any]:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "dashboard.read")
     ctx = get_performance_context()
     if ctx is not None:
         ctx.site_id = site.id
@@ -120,10 +122,9 @@ async def get_site_snapshot_summary(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict[str, Any]:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "dashboard.read")
     payload = await _load_snapshot(session, site, settings)
     return _summary_from_snapshot(payload)
 
@@ -134,10 +135,9 @@ async def site_live_stream(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> StreamingResponse:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "dashboard.read")
 
     async def event_generator():
         async for chunk in _snapshot_sse_generator(request, session, site, settings):
@@ -151,8 +151,9 @@ async def kiosk_snapshot(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> dict[str, Any]:
-    payload = await get_site_snapshot(slug, session, settings)
+    payload = await get_site_snapshot(slug, session, settings, principal)
     return _summary_from_snapshot(payload)
 
 
@@ -162,5 +163,6 @@ async def kiosk_stream(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
+    principal: Principal = Depends(require_authenticated),
 ) -> StreamingResponse:
-    return await site_live_stream(slug, request, session, settings)
+    return await site_live_stream(slug, request, session, settings, principal)

@@ -23,7 +23,13 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     if _session_factory is None:
         raise RuntimeError("Session factory not initialized")
     async with _session_factory() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            if _settings is not None:
+                from energy_core.tenancy.db_rls import reset_rls_session
+
+                await reset_rls_session(session, _settings)
 
 
 def get_app_settings() -> Settings:

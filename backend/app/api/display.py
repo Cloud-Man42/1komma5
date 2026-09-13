@@ -26,13 +26,20 @@ router = APIRouter(prefix="/v1/display", tags=["display"])
 _SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
+def _ensure_display_site_access(device, slug: str) -> None:
+    default = (device.record.default_site_slug or "").strip()
+    if default and slug != default:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Site access denied")
+
+
 @router.get("/overview/{slug}", response_model=DisplayOverviewResponse)
 async def get_display_overview(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _device=Depends(require_display_device),
+    device=Depends(require_display_device),
 ) -> DisplayOverviewResponse:
+    _ensure_display_site_access(device, slug)
     overview = await DisplayOverviewService(session, settings).build(slug)
     if overview is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
@@ -93,8 +100,9 @@ async def stream_display_overview(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
-    _device=Depends(require_display_device),
+    device=Depends(require_display_device),
 ) -> StreamingResponse:
+    _ensure_display_site_access(device, slug)
     service = DisplayOverviewService(session, settings)
 
     async def event_generator():

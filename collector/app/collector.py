@@ -41,9 +41,26 @@ from energy_core.integrations.arctic_spa.factory import build_arctic_spa_polling
 from energy_core.spa_energy.service import SmartSpaEnergyService
 from energy_core.energy_balance.coordinator import EnergyBalanceCoordinator
 from energy_core.integrations.heartbeat.bridge import BridgeConstraints, VirtualChargerDecisionEngine
-from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
+from energy_core.db.heartbeat_account_repo import HeartbeatAccountRepository
+from energy_core.integrations.heartbeat.client_factory import (
+    create_heartbeat_client_for_site,
+    create_heartbeat_clients_by_account,
+)
 from energy_core.domain import reading_is_actionable
 from energy_core.normalization import normalize_reading
+
+
+async def _list_tenant_scoped_sites(session) -> list:
+    from energy_core.tenancy.repo import TenantRepository
+
+    repo = SiteRepository(session)
+    tenants = await TenantRepository(session).list_active()
+    if not tenants:
+        return list(await repo.list_all())
+    sites: list = []
+    for tenant in tenants:
+        sites.extend(await repo.list_for_tenant(tenant.id))
+    return sites
 from energy_core.providers import create_heartbeat_provider_from_db
 from energy_core.seed import seed_sites
 from energy_core.platform.forecasting import build_solar_forecast_coordinator
@@ -94,6 +111,9 @@ class Collector:
         )
         async with self._session_factory() as session:
             await seed_sites(session)
+            from energy_core.integrations.heartbeat.account_bootstrap import ensure_env_heartbeat_accounts
+
+            await ensure_env_heartbeat_accounts(session, self._settings)
             await self._ev_accounting.setup(session)
             await self._vehicle_charge_sessions.setup(session)
             self._orchestrator = ModuleOrchestrator(
@@ -134,7 +154,7 @@ class Collector:
 
     async def _refresh_runtime_heartbeats(self) -> None:
         async with self._session_factory() as session:
-            sites = await SiteRepository(session).list_all()
+            sites = await _list_tenant_scoped_sites(session)
             for site in sites:
                 running = default_module_runtime_registry.active_modules_for_site(site.id)
                 if running:
@@ -219,7 +239,7 @@ class Collector:
         reading_site_ids: set[int] = set()
         async with self._session_factory() as session:
             site_repo = SiteRepository(session)
-            sites = await site_repo.list_all()
+            sites = await _list_tenant_scoped_sites(session)
             if await any_site_module_runtime_active(
                 session, sites, "integration.heartbeat", settings=self._settings
             ):
@@ -254,8 +274,8 @@ class Collector:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
                 await self._run_lane("fast", "market_prices", self._collect_market_prices(session, site_repo))
-                poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
-                sites = await site_repo.list_all()
+                poll_ctx = SitePollContext.from_clients(await create_heartbeat_clients_by_account(session))
+                sites = await _list_tenant_scoped_sites(session)
                 live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
                 await self._run_lane(
                     "fast",
@@ -289,8 +309,8 @@ class Collector:
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
-                poll_ctx = SitePollContext(client=await create_heartbeat_client(session))
-                sites = await site_repo.list_all()
+                poll_ctx = SitePollContext.from_clients(await create_heartbeat_clients_by_account(session))
+                sites = await _list_tenant_scoped_sites(session)
                 live_overviews = await self._prefetch_live_overviews(session, sites, poll_ctx)
                 await self._run_lane(
                     "medium",
@@ -325,7 +345,7 @@ class Collector:
         try:
             async with self._session_factory() as session:
                 site_repo = SiteRepository(session)
-                sites = await site_repo.list_all()
+                sites = await _list_tenant_scoped_sites(session)
                 await self._run_lane("slow", "solar_forecast", self._run_solar_forecast(session, site_repo))
                 await self._run_lane("slow", "forecast_learning", self._run_forecast_learning(session, site_repo))
                 await self._run_lane("slow", "energy_control", self._run_energy_control(session, site_repo))
@@ -361,21 +381,28 @@ class Collector:
         from energy_core.price_engine.observability import log_refresh_result
         import time
 
-        client = await create_heartbeat_client(session)
-        if client is None:
-            return
+        account_repo = HeartbeatAccountRepository(session)
+        client_cache: dict[int, object] = {}
 
         recorder = IntegrationHealthRecorder(session, is_sqlite=self._settings.is_sqlite)
         engine = EmicPriceEngine(session, is_sqlite=self._settings.is_sqlite)
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.price-engine",
             settings=self._settings,
         )
         for site in sites:
-            if not site.external_system_id:
+            if not account_repo.resolve_system_id(site):
                 continue
+            account = await account_repo.resolve_account_for_site(site)
+            account_id = account.id if account is not None else 0
+            if account_id not in client_cache:
+                client = await create_heartbeat_client_for_site(session, site)
+                if client is None:
+                    continue
+                client_cache[account_id] = client
+            client = client_cache[account_id]
             started = time.perf_counter()
             error: str | None = None
             error_class: str | None = None
@@ -402,7 +429,7 @@ class Collector:
 
         service = ForecastLearningService(session, is_sqlite=self._settings.is_sqlite)
         total = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             try:
                 result = await service.sync_site(site.id, timezone=site.timezone)
                 total += sum(result.values())
@@ -441,7 +468,7 @@ class Collector:
         count = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.energy-control",
             settings=self._settings,
         )
@@ -487,7 +514,7 @@ class Collector:
         from energy_core.platform.modules.gating import any_site_module_runtime_active
         from energy_core.db.repositories import SiteRepository
 
-        sites = await SiteRepository(session).list_all()
+        sites = await _list_tenant_scoped_sites(session)
         if not await any_site_module_runtime_active(
             session, sites, "integration.chargefinder", settings=self._settings
         ):
@@ -588,7 +615,7 @@ class Collector:
                 live_overviews=live_overviews,
                 active_cleaning_poll_interval_seconds=self._settings.spa_active_cleaning_poll_interval_seconds,
             )
-            for site in await site_repo.list_all():
+            for site in await _list_tenant_scoped_sites(session):
                 await self._consumer_accounting.rebuild_spa_intervals_for_site(
                     session,
                     site=site,
@@ -625,7 +652,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.smart-charging",
             settings=self._settings,
         )
@@ -648,7 +675,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.vehicles",
             settings=self._settings,
         )
@@ -674,7 +701,7 @@ class Collector:
         total = 0
         sites = await filter_sites_for_module(
             session,
-            await site_repo.list_all(),
+            await _list_tenant_scoped_sites(session),
             "feature.energy-balance",
             settings=self._settings,
         )
@@ -701,13 +728,12 @@ class Collector:
         site_repo = SiteRepository(session)
         charger_repo = EvChargerRepository(session)
         bridge_repo = HeartbeatDiscoveryRepository(session)
-        client = await create_heartbeat_client(session)
-        if client is None:
-            return
+        account_repo = HeartbeatAccountRepository(session)
+        client_cache: dict[int, object] = {}
 
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             if not await is_module_runtime_active(
                 session, site.id, "integration.heartbeat", settings=self._settings
             ):
@@ -716,8 +742,17 @@ class Collector:
                 session, site.id, "feature.smart-charging", settings=self._settings
             ):
                 continue
-            if not site.external_system_id:
+            system_id = account_repo.resolve_system_id(site)
+            if not system_id:
                 continue
+            account = await account_repo.resolve_account_for_site(site)
+            account_id = account.id if account is not None else 0
+            if account_id not in client_cache:
+                client = await create_heartbeat_client_for_site(session, site)
+                if client is None:
+                    continue
+                client_cache[account_id] = client
+            client = client_cache[account_id]
             settings = await bridge_repo.get_or_create_bridge_settings(site.id)
             if not settings.virtual_bridge_enabled:
                 continue
@@ -726,11 +761,11 @@ class Collector:
             if not enabled:
                 continue
             try:
-                evs = await client.list_evs(site.external_system_id)
-                ems = await client.fetch_ems_settings(site.external_system_id)
+                evs = await client.list_evs(system_id)
+                ems = await client.fetch_ems_settings(system_id)
                 now = datetime.now(UTC)
                 opts = await client.fetch_optimizations(
-                    site.external_system_id,
+                    system_id,
                     from_iso=(now - timedelta(minutes=30)).isoformat(),
                     to_iso=now.isoformat(),
                 )
@@ -780,19 +815,27 @@ class Collector:
         site_repo = SiteRepository(session)
         charger_repo = EvChargerRepository(session)
         bridge_repo = HeartbeatDiscoveryRepository(session)
-        client = await create_heartbeat_client(session)
-        if client is None:
-            return
+        account_repo = HeartbeatAccountRepository(session)
+        client_cache: dict[int, object] = {}
 
         engine = VirtualChargerDecisionEngine(session)
         processed = 0
-        for site in await site_repo.list_all():
+        for site in await _list_tenant_scoped_sites(session):
             if not await is_module_runtime_active(
                 session, site.id, "feature.energy-control", settings=self._settings
             ):
                 continue
-            if not site.external_system_id:
+            system_id = account_repo.resolve_system_id(site)
+            if not system_id:
                 continue
+            account = await account_repo.resolve_account_for_site(site)
+            account_id = account.id if account is not None else 0
+            if account_id not in client_cache:
+                client = await create_heartbeat_client_for_site(session, site)
+                if client is None:
+                    continue
+                client_cache[account_id] = client
+            client = client_cache[account_id]
             settings = await bridge_repo.get_or_create_bridge_settings(site.id)
             if not settings.simulation_mode:
                 continue
@@ -803,10 +846,10 @@ class Collector:
             if not chargers:
                 continue
             try:
-                ems = await client.fetch_ems_settings(site.external_system_id)
+                ems = await client.fetch_ems_settings(system_id)
                 now = datetime.now(UTC)
                 opts = await client.fetch_optimizations(
-                    site.external_system_id,
+                    system_id,
                     from_iso=(now - timedelta(minutes=30)).isoformat(),
                     to_iso=now.isoformat(),
                 )
@@ -850,7 +893,7 @@ class Collector:
         from energy_core.integrations.collector_health import record_provider_outcome
         from energy_core.integrations.health import IntegrationHealthRecorder
 
-        sites = await site_repo.list_all()
+        sites = await _list_tenant_scoped_sites(session)
         if self._settings.module_gate_enabled:
             sites = await filter_sites_for_module(
                 session,

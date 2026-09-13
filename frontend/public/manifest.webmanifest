@@ -1,0 +1,33 @@
+{
+  "name": "EMIC — Energy Monitor In a Cloud",
+  "short_name": "EMIC",
+  "description": "Monitor, control and optimize your energy systems",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#050810",
+  "theme_color": "#050810",
+  "lang": "sv",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/emic-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/emic-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/emic-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
 from energy_core.climate.repository import ClimateStateRepository
-from energy_core.db.repositories import SiteRepository
+from energy_core.config import Settings
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,10 +15,13 @@ router = APIRouter(prefix="/sites", tags=["climate"])
 
 
 @router.get("/{slug}/climate/devices")
-async def list_climate_devices(slug: str, session: AsyncSession = Depends(get_db_session)) -> dict:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail="Site not found")
+async def list_climate_devices(
+    slug: str,
+    session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+) -> dict:
+    site = await require_site_with_permission(session, principal, settings, slug, "integration.read")
     readings = await ClimateStateRepository(session).list_for_site(site.id)
     return {
         "site_slug": slug,
@@ -38,10 +44,14 @@ async def list_climate_devices(slug: str, session: AsyncSession = Depends(get_db
 
 
 @router.get("/{slug}/climate/devices/{device_id}")
-async def get_climate_device(slug: str, device_id: str, session: AsyncSession = Depends(get_db_session)) -> dict:
-    site = await SiteRepository(session).get_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=404, detail="Site not found")
+async def get_climate_device(
+    slug: str,
+    device_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
+) -> dict:
+    site = await require_site_with_permission(session, principal, settings, slug, "integration.read")
     readings = await ClimateStateRepository(session).list_for_site(site.id)
     for reading in readings:
         if reading.device_id == device_id:

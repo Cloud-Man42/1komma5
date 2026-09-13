@@ -16,8 +16,43 @@ jobs:
           enable-cache: true
       - name: Install Python dependencies
         run: uv sync --all-packages --group dev
-      - name: Run pytest
-        run: uv run --all-packages pytest -m "not integration"
+      - name: Run energy-core pytest
+        run: uv run --all-packages pytest -m "not integration" packages/energy-core/tests
+      - name: Run backend pytest
+        run: uv run --all-packages pytest -m "not integration" backend/tests
+      - name: Run collector pytest
+        run: uv run --all-packages pytest -m "not integration" collector/tests
+
+  postgres-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: emic_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --all-packages --group dev
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/emic_test
+        run: uv run alembic upgrade head
+      - name: Run PostgreSQL RLS tests
+        env:
+          TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/emic_test
+        run: uv run pytest backend/tests/test_tenant_rls.py packages/energy-core/tests/tenancy/test_rls_tables.py -m ""
 
   frontend:
     runs-on: ubuntu-latest

@@ -3,17 +3,27 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AdminAuthPrompt } from "@/components/AdminAuthPrompt";
+import { HomeDashboardButton } from "@/components/HomeDashboardButton";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { TenantSwitcher } from "@/components/TenantSwitcher";
+import { UserMenu } from "@/components/UserMenu";
+import { useAuth } from "@/lib/authContext";
 import { APP_ACRONYM, APP_NAME } from "@/lib/brand";
-import { getAdminToken } from "@/lib/adminAuth";
+import { adminAuthHeaders, applySetupTokenFromUrl } from "@/lib/adminAuth";
 
-async function probeAdminAuthRequired(): Promise<boolean> {
-  if (getAdminToken()) return false;
+type AdminAuthIssue = "required" | "invalid";
+
+async function probeAdminAuthIssue(): Promise<AdminAuthIssue | null> {
   try {
-    const res = await fetch("/api/sites", { cache: "no-store" });
-    return res.status === 401;
+    const res = await fetch("/api/sites", {
+      cache: "no-store",
+      headers: adminAuthHeaders(),
+    });
+    if (res.status === 401) return "required";
+    if (res.status === 403) return "invalid";
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -22,35 +32,80 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
   const isSiteDashboard = pathname.startsWith("/sites/");
   const isPiDisplay = pathname.startsWith("/display/");
   const isConfigHub = pathname.startsWith("/config");
-  const [authRequired, setAuthRequired] = useState(false);
+  const isLogin = pathname.startsWith("/login");
+  const isAdminHub = pathname.startsWith("/admin/users") || pathname.startsWith("/admin/roles") || pathname.startsWith("/admin/audit");
+  const isOverview = pathname.startsWith("/overview");
+  const isMobileApp = pathname.startsWith("/app");
+  const isMobileWrappedSite =
+    pathname.startsWith("/sites/") ||
+    pathname.startsWith("/overview") ||
+    pathname.startsWith("/config") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/account");
+  const [authIssue, setAuthIssue] = useState<AdminAuthIssue | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const userAuthEnabled = process.env.NEXT_PUBLIC_EMIC_USER_AUTH_ENABLED === "true";
 
   useEffect(() => {
     if (isPiDisplay) return;
+    if (userAuthEnabled) return;
 
-    const onAuthRequired = () => setAuthRequired(true);
+    if (applySetupTokenFromUrl()) {
+      window.location.reload();
+      return;
+    }
+
+    const onAuthRequired = () => setAuthIssue("required");
+    const onAuthInvalid = () => setAuthIssue("invalid");
     window.addEventListener("emic:admin-auth-required", onAuthRequired);
+    window.addEventListener("emic:admin-auth-invalid", onAuthInvalid);
 
     let active = true;
-    probeAdminAuthRequired().then((required) => {
-      if (active && required) setAuthRequired(true);
+    probeAdminAuthIssue().then((issue) => {
+      if (active && issue) setAuthIssue(issue);
     });
 
     return () => {
       active = false;
       window.removeEventListener("emic:admin-auth-required", onAuthRequired);
+      window.removeEventListener("emic:admin-auth-invalid", onAuthInvalid);
     };
-  }, [isPiDisplay, pathname]);
+  }, [isPiDisplay, pathname, userAuthEnabled]);
+
+  useEffect(() => {
+    if (!userAuthEnabled) return;
+    const onRequired = () => {
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    };
+    window.addEventListener("emic:auth-required", onRequired);
+    return () => window.removeEventListener("emic:auth-required", onRequired);
+  }, [userAuthEnabled]);
 
   // The kiosk display owns the whole viewport and must not inherit app chrome.
   if (isPiDisplay) {
     return <>{children}</>;
   }
 
-  const authOverlay = authRequired && !getAdminToken() ? <AdminAuthPrompt /> : null;
+  const authOverlay = authIssue ? <AdminAuthPrompt issue={authIssue} /> : null;
 
-  if (isSiteDashboard || isConfigHub) {
+  if (isLogin) {
+    return <>{children}</>;
+  }
+
+  if (isMobileApp) {
     return (
-      <div className="emic-app emic-app-dashboard">
+      <div className="emic-app emic-mobile-app">
+        {authOverlay}
+        {children}
+      </div>
+    );
+  }
+
+  if (isSiteDashboard || isConfigHub || isAdminHub || isOverview) {
+    return (
+      <div className={`emic-app emic-app-dashboard${isMobileWrappedSite ? " emic-mobile-app" : ""}`}>
         {authOverlay}
         {children}
       </div>
@@ -67,10 +122,14 @@ export function AppChrome({ children }: { children: React.ReactNode }) {
             <span className="brand-full">{APP_NAME}</span>
           </h1>
           <nav className="header-nav">
-            <a href="/">Dashboard</a>
-            <a href="/config">Konfiguration</a>
+            <HomeDashboardButton className="header-home-btn" />
+            {(!userAuthEnabled || !user || user.roles.includes("SUPER_ADMIN") || user.permissions.includes("*") || user.permissions.some((p) => p.startsWith("sites.") || p.startsWith("integration.") || p.startsWith("system."))) ? (
+              <a href="/config">Konfiguration</a>
+            ) : null}
             <a href="/calibrate">Kalibrera</a>
             <ThemeToggle />
+            {!authLoading && user ? <TenantSwitcher /> : null}
+            {!authLoading && user ? <UserMenu /> : null}
           </nav>
         </div>
       </header>

@@ -2,9 +2,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from app.admin_audit_helpers import audit_admin_mutation
-from app.admin_auth import require_admin_token
+from app.user_auth import require_authenticated, require_permission
 from app.api.energy_balance_helpers import snapshot_to_response
-from app.deps import get_db_session
+from app.deps import get_app_settings, get_db_session
+from app.site_access import require_site_with_permission
+from app.user_auth import require_authenticated
+from energy_core.auth.principal import Principal
+from energy_core.config import Settings
 
 from app.schemas.chargers_catalog import ChargerConnectionTestResponse
 from app.schemas.ev import EnergyBalanceHistoryResponse, EnergyBalanceResponse, EnergyReasoningResponse, EvBridgeStatusResponse, EvChargerConnectionTestRequest, EvChargerControlRequest, EvChargerCreateRequest, EvChargerOverrideRequest, EvChargerResponse, EvChargerUpdateRequest, EvChargingSavingsResponse, SolarChargingPlanResponse, VirtualEvseStatusResponse
@@ -234,11 +238,11 @@ async def _apply_connection_test_result(charger, result, session: AsyncSession) 
 async def list_ev_chargers(
     slug: str,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[EvChargerResponse]:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.read")
 
     chargers = await repo.list_for_site(site.id)
     return [await _enrich_charger(session, charger, slug, include_power=True) for charger in chargers]
@@ -250,12 +254,12 @@ async def create_ev_charger(
     payload: EvChargerCreateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     framework = _framework_defaults(payload)
     control_source = framework.get("control_source", payload.control_source)
@@ -330,12 +334,12 @@ async def test_ev_charger_connection_draft(
     slug: str,
     payload: EvChargerConnectionTestRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     external_id = payload.external_charger_id or payload.chargeamp_charger_id
     config = ChargerConfiguration(
@@ -367,12 +371,12 @@ async def test_ev_charger_connection(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> ChargerConnectionTestResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EV charger not found")
@@ -390,12 +394,12 @@ async def update_ev_charger(
     payload: EvChargerUpdateRequest,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -469,12 +473,12 @@ async def delete_ev_charger(
     charger_id: int,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> None:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -498,25 +502,31 @@ async def sync_ev_chargers_from_heartbeat(
     slug: str,
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> list[EvChargerResponse]:
-    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client
+    from energy_core.integrations.heartbeat.client_factory import create_heartbeat_client_for_site
+    from energy_core.integrations.heartbeat.gridx_client import GridXClient
 
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
     if not site.external_system_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Anläggningen saknar HeartBeat system-ID.",
         )
 
-    client = await create_heartbeat_client(session)
+    client = await create_heartbeat_client_for_site(session, site)
     if client is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="HeartBeat är inte konfigurerat (kräver molntjänst/lokal gateway med token).",
+        )
+    if isinstance(client, GridXClient):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="EV-synk stöds inte för denna Heartbeat-backend.",
         )
 
     try:
@@ -585,12 +595,12 @@ async def control_ev_charger(
     charger_id: int,
     payload: EvChargerControlRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -620,12 +630,12 @@ async def set_ev_charger_override(
     charger_id: int,
     payload: EvChargerOverrideRequest,
     session: AsyncSession = Depends(get_db_session),
-    _: None = Depends(require_admin_token),
+    _: None = Depends(require_permission("charging.control")),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvChargerResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.control")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -661,17 +671,16 @@ async def get_ev_charger_bridge_status(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvBridgeStatusResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.read")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EV charger not found")
 
-    settings = get_settings()
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=charger_id)
     balance = snapshot_to_response(latest, charger_id=charger_id) if latest else None
@@ -733,11 +742,11 @@ async def get_ev_charger_solar_charging_plan(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> SolarChargingPlanResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.read")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -777,11 +786,11 @@ async def get_ev_charger_savings(
     charger_id: int,
     days: int = Query(default=30, ge=1, le=365),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EvChargingSavingsResponse:
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    site = await require_site_with_permission(session, principal, settings, slug, "charging.read")
 
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
@@ -814,11 +823,17 @@ async def get_ev_charger_savings(
     )
 
 
-async def _get_site_charger(session: AsyncSession, slug: str, charger_id: int):
+async def _get_site_charger(
+    session: AsyncSession,
+    slug: str,
+    charger_id: int,
+    *,
+    principal: Principal,
+    settings: Settings,
+    permission: str = "charging.read",
+):
+    site = await require_site_with_permission(session, principal, settings, slug, permission)
     repo = EvChargerRepository(session)
-    site = await repo.get_site_by_slug(slug)
-    if site is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
     charger = await repo.get_by_id(charger_id)
     if charger is None or charger.site_id != site.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EV charger not found")
@@ -833,8 +848,10 @@ async def get_energy_reasoning(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyReasoningResponse:
-    site, charger = await _get_site_charger(session, slug, charger_id)
+    site, charger = await _get_site_charger(session, slug, charger_id, principal=principal, settings=settings)
     snapshot = await load_energy_reasoning_for_charger(session, site, charger)
     payload = snapshot.to_dict()
     payload["charger_id"] = charger_id
@@ -849,9 +866,10 @@ async def get_energy_balance(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyBalanceResponse:
-    site, _charger = await _get_site_charger(session, slug, charger_id)
-    settings = get_settings()
+    site, _charger = await _get_site_charger(session, slug, charger_id, principal=principal, settings=settings)
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=charger_id)
     return snapshot_to_response(latest, charger_id=charger_id)
@@ -867,9 +885,10 @@ async def get_energy_balance_history(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> EnergyBalanceHistoryResponse:
-    site, _charger = await _get_site_charger(session, slug, charger_id)
-    settings = get_settings()
+    site, _charger = await _get_site_charger(session, slug, charger_id, principal=principal, settings=settings)
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     rows = await balance_repo.list_history(
         site_id=site.id,
@@ -889,11 +908,12 @@ async def get_virtual_evse_status(
     slug: str,
     charger_id: int,
     session: AsyncSession = Depends(get_db_session),
+    principal: Principal = Depends(require_authenticated),
+    settings: Settings = Depends(get_app_settings),
 ) -> VirtualEvseStatusResponse:
-    site, charger = await _get_site_charger(session, slug, charger_id)
+    site, charger = await _get_site_charger(session, slug, charger_id, principal=principal, settings=settings)
     config_repo = SiteEnergyConfigRepository(session)
     site_config = await config_repo.get_or_create(site.id)
-    settings = get_settings()
     balance_repo = EnergyBalanceRepository(session, is_sqlite=settings.is_sqlite)
     latest = await balance_repo.get_latest(site_id=site.id, charger_id=charger_id)
     balance = snapshot_to_response(latest, charger_id=charger_id) if latest else None

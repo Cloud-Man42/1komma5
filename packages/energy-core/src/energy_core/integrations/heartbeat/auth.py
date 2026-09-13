@@ -18,6 +18,34 @@ class HeartbeatAuthError(Exception):
     """HeartBeat authentication or token refresh failed."""
 
 
+def humanize_auth_error(message: str) -> str:
+    """Turn raw Auth0/HTML login failures into short user-facing text."""
+    text = message.strip()
+    if text.startswith("HeartBeat login failed:"):
+        text = text.split(":", 1)[1].strip()
+    if "Login failed:" in text:
+        text = text.split("Login failed:", 1)[1].strip()
+    if "GridX login failed:" in text or "GridX token refresh failed:" in text:
+        detail = text.split(":", 1)[-1].strip() if ":" in text else text
+        return f"GridX-inloggning misslyckades: {detail[:200]}"
+    if "Wrong email or password" in text:
+        return (
+            "Fel e-post eller lösenord för 1Komma5 Heartbeat. "
+            "Testa samma uppgifter på https://my.1komma5.io först."
+        )
+    if "Log in to 1KOMMA5" in text or "Welcome" in text and "Heartbeat" in text:
+        return (
+            "1Komma5-inloggning misslyckades. Kontrollera e-post och lösenord "
+            "(samma konto som på my.1komma5.io)."
+        )
+    if "<html" in text.lower() or "<!doctype" in text.lower():
+        return (
+            "1Komma5-inloggning misslyckades. Kontrollera e-post och lösenord "
+            "(samma konto som på my.1komma5.io)."
+        )
+    return text[:512] if len(text) > 512 else text
+
+
 def fetch_bearer_token(username: str, password: str) -> str:
     """Obtain a Bearer token from 1Komma5 using email/password."""
     try:
